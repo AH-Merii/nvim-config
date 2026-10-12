@@ -1,0 +1,35 @@
+# <glob, relative to the nvim config dir>  <areas...>   (suite.sh --changed)
+# A changed file matching no line runs every area. startup and smoke always run under --changed.
+init.lua                          startup
+lazy-lock.json                    startup installer lsp format lint treesitter git completion which-key ui editing
+lua/core/lazy.lua                 startup installer
+lua/core/lsp.lua                  lsp
+after/lsp/*                       lsp
+after/ftplugin/*                  lsp format editing
+lua/plugins/mason.lua             installer lsp format lint
+lua/plugins/conform.lua           format
+lua/plugins/nvim-lint.lua         lint
+lua/plugins/nvim-treesitter.lua   treesitter
+lua/plugins/git.lua               git
+lua/plugins/blink.lua             completion
+lua/plugins/which-key.lua         which-key keys
+lua/plugins/auto-pairs-tags-comments.lua editing
+lua/plugins/trouble.lua           ui lsp
+lua/plugins/tiny-inline-diagnostic.lua ui lsp
+lua/plugins/noice.lua             ui
+lua/plugins/snacks.lua            ui keys
+lua/plugins/lualine.lua           ui
+lua/plugins/colorschemes.lua      ui
+lua/plugins/flash.lua             keys editing
+lua/plugins/extras.lua            ui editing keys
+lua/plugins/laravel.lua           lsp
+lua/plugins/dap.lua               keys
+lua/config/keymaps.lua            keys which-key
+lua/config/options.lua            editing ui
+lua/config/autocmds.lua           editing ui
+lua/config/helpers.lua            keys lsp
+lua/config/utils.lua              keys lsp
+.luarc.json                       smoke
+.luacheckrc                       smoke
+stylua.toml                       smoke
+.editorconfig                     smoke

@@ -1,0 +1,8 @@
+# the regression suite's caches, sandboxes and results
+tests/regress/data/
+tests/regress/run/
+tests/regress/last/
+tests/regress/state/
+tests/regress/bin/
+tests/regress/cache-seed/
+tests/regress/shared-cache/

@@ -1,0 +1,141 @@
+return {
+
+  -- Neovim notifications and LSP progress messages
+  {
+    "j-hui/fidget.nvim",
+  },
+
+  -- Heuristically set buffer options
+  -- {
+  -- 	"tpope/vim-sleuth",
+  -- },
+
+  {
+    "folke/lazydev.nvim",
+    ft = "lua",
+    opts = {},
+  },
+
+  {
+    "nvim-mini/mini.icons",
+    -- VeryLazy, not lazy = true: snacks never requires mini.icons, it only reads the MiniIcons global that setup() sets
+    event = "VeryLazy",
+    opts = {},
+  },
+
+  {
+    "nvim-tree/nvim-web-devicons",
+  },
+
+  {
+    "christoomey/vim-tmux-navigator",
+    cmd = {
+      "TmuxNavigateLeft",
+      "TmuxNavigateDown",
+      "TmuxNavigateUp",
+      "TmuxNavigateRight",
+      "TmuxNavigatePrevious",
+      "TmuxNavigatorProcessList",
+    },
+    init = function()
+      vim.g.tmux_navigator_no_wrap = 1
+
+      -- Reusable function to register keymaps in different contexts
+      local function set_keymaps()
+        vim.keymap.set({ "n", "t" }, "<C-h>", "<cmd>TmuxNavigateLeft<cr>")
+        vim.keymap.set({ "n", "t" }, "<C-j>", "<cmd>TmuxNavigateDown<cr>")
+        vim.keymap.set({ "n", "t" }, "<C-k>", "<cmd>TmuxNavigateUp<cr>")
+        vim.keymap.set({ "n", "t" }, "<C-l>", "<cmd>TmuxNavigateRight<cr>")
+      end
+
+      -- Register once globally
+      set_keymaps()
+
+      -- Re-register for terminal buffers to prevent literal command injection
+      vim.api.nvim_create_autocmd("TermOpen", {
+        callback = set_keymaps,
+      })
+    end,
+  },
+
+  -- Better folding
+  {
+    "chrisgrieser/nvim-origami",
+    dependencies = { "nvim-treesitter/nvim-treesitter" },
+    event = { "BufReadPre", "BufWinEnter" },
+    init = function()
+      vim.opt.foldlevel = 99
+      vim.opt.foldlevelstart = 99
+
+      vim.opt.fillchars = {
+        fold = " ",
+        foldopen = "",
+        foldclose = "",
+        foldsep = " ",
+      }
+    end,
+    opts = {
+      foldtext = {
+        lineCount = {
+          template = "󰘖 %d", -- `%d` is replaced with the number of folded lines
+        },
+      },
+    },
+  },
+  {
+    "folke/todo-comments.nvim",
+    dependencies = { "nvim-lua/plenary.nvim" },
+    opts = {},
+  },
+  {
+    "brenoprata10/nvim-highlight-colors",
+    opts = {
+      render = "virtual",
+      virtual_symbol = "",
+      ---Set virtual symbol suffix (defaults to '')
+      virtual_symbol_prefix = " ",
+
+      ---Set virtual symbol suffix (defaults to ' ')
+      virtual_symbol_suffix = "",
+      ---Set virtual symbol position()
+      ---@usage 'inline'|'eol'|'eow'
+      ---inline mimics VS Code style
+      ---eol stands for `end of column` - Recommended to set `virtual_symbol_suffix = ''` when used.
+      ---eow stands for `end of word` - Recommended to set `virtual_symbol_prefix = ' ' and virtual_symbol_suffix = ''` when used.
+      virtual_symbol_position = "eol",
+    },
+  },
+  {
+    "AH-Merii/github-pr-reviewer.nvim",
+    cmd = { "PRReviewMenu", "PRSuggestChange" },
+    opts = {
+      pr_list_limit = 250,
+    },
+    init = function()
+      -- PR review works on the repo of the cwd, so map it while that repo has a GitHub remote
+      local function map_pr_keys()
+        local cwd = vim.fn.getcwd()
+        vim.system({ "git", "-C", cwd, "remote", "-v" }, { text = true }, function(out)
+          local github = out.code == 0 and out.stdout:find("github.com", 1, true) ~= nil
+          vim.schedule(function()
+            if vim.fn.getcwd() ~= cwd then
+              return
+            end
+            if github then
+              vim.keymap.set("n", "<leader>p", "<cmd>PRReviewMenu<cr>", { desc = "PR Review Menu" })
+              vim.keymap.set("x", "<leader>p", ":<C-u>'<,'>PRSuggestChange<CR>", { desc = "Suggest change" })
+            else
+              pcall(vim.keymap.del, "n", "<leader>p")
+              pcall(vim.keymap.del, "x", "<leader>p")
+            end
+          end)
+        end)
+      end
+      vim.api.nvim_create_autocmd("DirChanged", {
+        group = vim.api.nvim_create_augroup("PRReviewKeys", { clear = true }),
+        callback = map_pr_keys,
+      })
+      map_pr_keys()
+    end,
+  },
+}

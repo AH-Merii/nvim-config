@@ -1,0 +1,348 @@
+#!/usr/bin/env bash
+# usage: suite.sh [-v] [--refresh] [--refresh-dry-run] [--list] [--selftest] [--area a,b] [--changed <git-range>] [--work <feature>]
+#                 [stable|nightly|both] [name-filter]
+# See README.md.
+set -u
+S=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+export S
+# no check reaches the user's clipboard: wl-copy/xclip need a display, the tmux provider the user's tmux
+unset WAYLAND_DISPLAY DISPLAY TMUX
+# shellcheck source=lib.sh
+. "$S/lib.sh"
+export CFG
+
+VERS= FILTER= AREAS= RANGE= WORK= REFRESH=0 DRY=0 LIST=0 SELFTEST=0 VERBOSE=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --refresh) REFRESH=1 ;;
+    --refresh-dry-run) REFRESH=1 DRY=1 ;;
+    --list) LIST=1 ;;
+    --selftest) SELFTEST=1 ;;
+    -v|--verbose) VERBOSE=1 ;;
+    --area) AREAS=${2//,/ }; shift ;;
+    --changed) RANGE=$2; shift ;;
+    --work) WORK=$2; shift ;;
+    -h|--help) sed -n '2,4p' "$0"; exit 0 ;;
+    stable|nightly|both) VERS=$1 ;;
+    -*) echo "unknown option $1" >&2; exit 2 ;;
+    *) FILTER=$1 ;;
+  esac
+  shift
+done
+[ -f "$CFG/init.lua" ] || { echo "CFG=$CFG has no init.lua" >&2; exit 2; }
+ITER=0; [ -n "$AREAS$RANGE$WORK" ] && ITER=1
+
+# ---- select checks -----------------------------------------------------------------------------
+if [ $SELFTEST = 1 ]; then
+  CDIR=$S/selftest; VERS=${VERS:-stable}
+elif [ -n "$WORK" ]; then
+  CDIR=$S/work/$WORK
+  [ -d "$CDIR" ] || { echo "no work dir $CDIR" >&2; exit 2; }
+else
+  CDIR=$S/checks
+fi
+if [ -n "$RANGE" ]; then
+  changed=$(git -c core.fsmonitor=false -C "$CFG" diff --name-only --relative "$RANGE" -- . 2>&1) ||
+    { echo "git diff $RANGE failed: $changed" >&2; exit 2; }
+  AREAS="startup smoke"
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    hit=
+    while read -r glob areas; do
+      case "$glob" in ''|'#'*) continue ;; esac
+      # shellcheck disable=SC2053
+      if [[ $f == $glob ]]; then hit=1; AREAS="$AREAS $areas"; fi
+    done <"$S/areas.map"
+    [ -n "$hit" ] || { echo "unmapped change $f: running every area" >&2; AREAS=ALL; break; }
+  done <<<"$changed"
+  echo "changed since $RANGE: $(echo "$changed" | wc -w) files -> areas: $AREAS"
+fi
+
+# plan lines: <version> <file>
+PLAN=()
+shopt -s nullglob
+for f in "$CDIR"/*.lua "$CDIR"/*.sh; do
+  name=$(basename "$f"); name=${name%.*}
+  [ -n "$FILTER" ] && ! [[ $name =~ $FILTER ]] && continue
+  fareas=" $(header "$f" areas) "
+  if [ -n "$AREAS" ] && [ "$AREAS" != ALL ]; then
+    match=
+    for a in $AREAS; do [[ $fareas == *" $a "* ]] && match=1; done
+    [ -n "$match" ] || continue
+  fi
+  allowed=$(header "$f" versions); allowed=${allowed:-stable nightly}
+  if [ "$VERS" = both ] || { [ -z "$VERS" ] && [ $ITER = 0 ]; }; then want="stable nightly"
+  elif [ -n "$VERS" ]; then want=$VERS
+  else
+    want=stable
+    has_header "$f" version-sensitive && want="stable nightly"
+    [[ " $allowed " == *" stable "* ]] || want=nightly
+  fi
+  for v in $want; do [[ " $allowed " == *" $v "* ]] && PLAN+=("$v $f"); done
+done
+if [ ${#PLAN[@]} = 0 ]; then echo "no checks selected" >&2; exit 2; fi
+if [ $LIST = 1 ]; then
+  for p in "${PLAN[@]}"; do
+    f=${p#* }
+    printf '%-8s %-28s %4ss  %s\n' "${p%% *}" "$(basename "$f")" "$(header "$f" budget)" "$(header "$f" areas)"
+  done
+  exit 0
+fi
+
+# ---- run setup ---------------------------------------------------------------------------------
+RUNID=$(date +%Y%m%d-%H%M%S)-$$
+RUNROOT=$S/run/$RUNID
+mkdir -p "$RUNROOT"
+touch "$RUNROOT/stamp"
+T0=$EPOCHREALTIME
+cleanup() {
+  local pids
+  pids=$(tagged_pids "$RUNID/")
+  # shellcheck disable=SC2086
+  [ -n "$pids" ] && kill_pids KILL $pids
+  rm -rf "$RUNROOT"
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
+base_inotify=$(inotify_holders | sort -u | tr '\n' ' ')
+base_inotify_n=$(inotify_holders | wc -l)
+base_fsmon=" $(pgrep -f 'fsmonitor--daemon' | tr '\n' ' ') "
+
+if [ $REFRESH = 1 ]; then
+  H=$RUNROOT/refresh; make_home "$H"
+  data=$S/data log=$S/last/refresh.log
+  if [ $DRY = 1 ]; then
+    echo "refresh dry run: Mason keep, install and remove sets for $S/data and $CFG, nothing changed"
+    data=$H/data log=$S/last/refresh-dry-run.log
+    cp -a --reflink=auto "$S/data" "$data"
+  else
+    echo "refresh: lazy, Mason and parsers in $S/data for $CFG"
+  fi
+  ( cd "$H" && exec env NVR_HOME="$H" NVR_DATA="$data" NVR_REFRESH_DRY=$DRY NVIM_REGRESS_TAG="$RUNID/refresh/" \
+      timeout 1200 setsid "$S/nv.sh" stable --headless -c "luafile $S/refresh.lua" ) >"$log" 2>&1
+  rc=$?
+  sed "s/\x1b\[[0-9;]*m//g" "$log" | grep -E "^(lazy|mason|parsers):|FAIL|REFRESH"
+  pids=$(tagged_pids "$RUNID/refresh/")
+  # shellcheck disable=SC2086
+  [ -n "$pids" ] && { echo "refresh left: $(describe_pids $pids)"; kill_pids KILL $pids; }
+  [ $DRY = 1 ] && exit $rc
+  repoint_data
+  [ $rc = 0 ] || { echo "refresh failed (exit $rc), see last/refresh.log" >&2; exit 1; }
+fi
+
+refs=$(foreign_refs)
+if [ -n "$refs" ]; then
+  echo "ABORT: files or symlinks in data/ reach outside the sandbox (run --refresh to repoint):" >&2
+  echo "$refs" | head >&2
+  exit 1
+fi
+
+# ---- one check ---------------------------------------------------------------------------------
+# run_check <version> <file>: appends "<ver>\t<name>\t<PASS|FAIL>\t<secs>\t<budget>\t<areas>\t<reasons>" to results
+run_check() {
+  local v=$1 f=$2 name budget fixture args fdir fix st data out err tag pid t0 secs over=0 rc reasons=() pids leftover allow
+  name=$(basename "$f"); name=${name%.*}
+  budget=$(header "$f" budget)
+  local areas; areas=$(header "$f" areas)
+  out=$H/out-$name.txt; err=$H/err-$name.txt
+  # per check, not per version dir: parallel runs of other checks keep their results
+  rm -f "$S/last/$v/$name.out" "$S/last/$v/$name.err"
+  : >"$out"
+  if ! [[ $budget =~ ^[0-9]+$ ]]; then
+    printf '%s\t%s\tFAIL\t0\t-\t%s\t%s\n' "$v" "$name" "$areas" "no @budget" >>"$H/results"
+    return
+  fi
+  local missing=
+  for p in $(header "$f" needs); do [ -d "$H/data/nvim/mason/packages/$p" ] || missing="$missing $p"; done
+  if [ -n "$missing" ]; then
+    printf '%s\t%s\tFAIL\t0\t%s\t%s\t%s\n' "$v" "$name" "$budget" "$areas" "Mason lacks$missing (run --refresh)" >>"$H/results"
+    return
+  fi
+  fixture=$(header "$f" fixture); fixture=${fixture:-default}
+  fdir=$(dirname "$f")/fixtures/$fixture; [ -d "$fdir" ] || fdir=$S/fixtures/$fixture
+  fix=$H/fix-$name; st=$H/state-$name
+  rm -rf "$fix" "$st"; cp -a --reflink=auto "$fdir" "$fix"; seed_state "$st"
+  # git cannot track a nested .git, so fixtures store it as dot-git
+  [ -d "$fix/dot-git" ] && mv "$fix/dot-git" "$fix/.git"
+  data=$H/data
+  if has_header "$f" fresh; then data=$H/data-$name; rm -rf "$data"; mkdir -p "$data"; fi
+  args=$(header "$f" args)
+  tag="$RUNID/$v/$name/"
+  local -a cmd
+  if [[ $f == *.lua ]]; then
+    # shellcheck disable=SC2206
+    cmd=("$S/nv.sh" "$v" --headless -c "luafile $S/harness.lua" $args)
+  else
+    cmd=(bash "$f")
+  fi
+  t0=$EPOCHREALTIME
+  ( cd "$fix" && exec env NVR_HOME="$H" NVR_STATE="$st" NVR_DATA="$data" NVR_VERSION="$v" \
+      NVIM_REGRESS_TAG="$tag" CHECK="$f" CHECK_OUT="$out" NV="$S/nv.sh" V="$v" FIX="$fix" \
+      setsid "${cmd[@]}" ) </dev/null >"$err" 2>&1 &
+  pid=$!
+  local stat deadline=$(( ${t0/./} + budget * 1000000 ))
+  while :; do
+    stat=
+    { read -r _ _ stat _ <"/proc/$pid/stat"; } 2>/dev/null
+    [ -z "$stat" ] || [ "$stat" = Z ] && break
+    if [ "${EPOCHREALTIME/./}" -gt "$deadline" ]; then
+      over=1
+      kill -TERM -- "-$pid" 2>/dev/null
+      read -rt 1 -u "$TICK"
+      kill -KILL -- "-$pid" 2>/dev/null
+      break
+    fi
+    read -rt 0.05 -u "$TICK"
+  done
+  wait "$pid"; rc=$?
+  secs=$(awk -v a="$t0" -v b="$EPOCHREALTIME" 'BEGIN{printf "%.1f", b-a}')
+
+  # leaks: tagged processes that outlive the check by 3s
+  local i
+  for i in $(seq 60); do
+    pids=$(tagged_pids "$tag")
+    [ -z "$pids" ] && break
+    read -rt 0.05 -u "$TICK"
+  done
+  if [ -n "$pids" ]; then
+    leftover=
+    for p in $pids; do
+      local comm; comm=$(cat "/proc/$p/comm" 2>/dev/null) || continue
+      allow=
+      while read -r re _; do [ -n "$re" ] && [[ $comm =~ ^($re)$ ]] && allow=1; done < <(header_all "$f" allow-leak)
+      [ -n "$allow" ] && echo "allowed leak: $comm($p)" >>"$out" || leftover="$leftover $comm($p)"
+    done
+    [ -n "$leftover" ] && reasons+=("leaked:$leftover")
+    kill -TERM -- "-$pid" 2>/dev/null
+    # shellcheck disable=SC2086
+    kill_pids TERM $pids
+    read -rt 0.5 -u "$TICK"
+    # shellcheck disable=SC2086
+    kill_pids KILL $(tagged_pids "$tag")
+  fi
+
+  [ $over = 1 ] && reasons+=("over budget: killed at ${budget}s")
+  if ! grep -q '^DONE' "$out"; then
+    reasons+=("did not finish (exit $rc)$(tail -n 2 "$err" | tr '\n' ' ' | sed 's/^/: /;s/ *$//' | cut -c1-200)")
+  fi
+  grep -q '^PASS' "$out" || reasons+=("no PASS recorded")
+  while IFS= read -r l; do reasons+=("$l"); done < <(grep -E '^(FAIL|MSG|NOTIFY) ' "$out" | cut -c1-400)
+  while IFS= read -r l; do reasons+=("stderr: $l"); done < <(grep -aE 'E[0-9]+:|Error|stack traceback' "$err" | head -3 | cut -c1-300)
+
+  local status=PASS
+  [ ${#reasons[@]} -gt 0 ] && status=FAIL
+  local joined; joined=$(printf '%s\x1f' "${reasons[@]}")
+  if [ $SELFTEST = 1 ]; then
+    local expect; expect=$(header "$f" expect-fail)
+    if [ $status = FAIL ] && [[ $joined =~ $expect ]]; then status=PASS; reasons=("failed as expected: /$expect/")
+    else status=FAIL; reasons=("expected a failure matching /$expect/, got: ${reasons[*]:-PASS}"); fi
+    joined=$(printf '%s\x1f' "${reasons[@]}")
+  fi
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$v" "$name" "$status" "$secs" "$budget" "$areas" "$joined" >>"$H/results"
+  printf '%-4s %-7s %-28s %6ss / %ss\n' "$status" "$v" "$name" "$secs" "$budget"
+  for r in "${reasons[@]}"; do printf '       %s\n' "$r"; done
+  [ $VERBOSE = 1 ] && grep -vE '^(FAIL|MSG|NOTIFY|DONE)' "$out" | cut -c1-300 | sed 's/^/       /'
+  if [ $status = FAIL ]; then cp "$out" "$S/last/$v/$name.out"; cp "$err" "$S/last/$v/$name.err"; fi
+  rm -rf "$fix" "$st"
+  has_header "$f" fresh && rm -rf "$data"
+}
+
+# header_all <file> <key>: every value of a repeatable header
+header_all() { sed -n -E "s/^(--|#) @$2 +(.*)$/\2/p" "$1"; }
+
+# run_version <version>: the version's checks, one after another
+run_version() {
+  local v=$1
+  H=$RUNROOT/$v
+  make_home "$H"
+  rmdir "$H/cache" && cp -a --reflink=auto "$S/cache-seed" "$H/cache"
+  # each version gets its own reflink copy: two nvims refreshing one Mason registry read it half-written
+  cp -a --reflink=auto "$S/data" "$H/data"
+  mkdir -p "$S/last/$v"
+  mkfifo "$H/tick"; exec {TICK}<>"$H/tick"
+  : >"$H/results"
+  local t; t=$EPOCHREALTIME
+  for p in "${PLAN[@]}"; do
+    [ "${p%% *}" = "$v" ] && run_check "$v" "${p#* }"
+  done
+  # shellcheck disable=SC2046
+  kill_pids KILL $(tagged_pids "$RUNID/$v/")
+  awk -v a="$t" -v b="$EPOCHREALTIME" 'BEGIN{printf "%.1f", b-a}' >"$H/wall"
+}
+
+VERSIONS=$(for p in "${PLAN[@]}"; do echo "${p%% *}"; done | sort -u | tr '\n' ' ')
+echo "run $RUNID: $(printf '%s\n' "${PLAN[@]}" | wc -l) check runs on $VERSIONS(CFG=$CFG)"
+for v in $VERSIONS; do run_version "$v" & done
+wait
+
+# ---- report ------------------------------------------------------------------------------------
+fail=0
+echo
+echo "== results"
+cat "$RUNROOT"/*/results 2>/dev/null >"$RUNROOT/all"
+awk -F'\t' '
+  { names[$2]=1; r[$2 "," $1]=sprintf("%s %6.1fs", $3, $4); if ($3=="FAIL") bad=1 }
+  END { printf "%-28s %-14s %-14s\n", "check", "stable", "nightly";
+        n=asorti(names, s); for (i=1;i<=n;i++) printf "%-28s %-14s %-14s\n", s[i], (s[i] ",stable") in r ? r[s[i] ",stable"] : "-", (s[i] ",nightly") in r ? r[s[i] ",nightly"] : "-" }' "$RUNROOT/all"
+grep -q $'\tFAIL\t' "$RUNROOT/all" && fail=1
+
+echo
+echo "== per-area time (sum of check times; a check counts in each of its areas)"
+awk -F'\t' '{ n=split($6, a, " "); for (i=1;i<=n;i++) { t[a[i] "," $1]+=$4; c[a[i] "," $1]++; areas[a[i]]=1 } }
+  END { printf "%-12s %16s %16s\n", "area", "stable", "nightly";
+        n=asorti(areas, s); for (i=1;i<=n;i++) printf "%-12s %10.1fs (%2d) %10.1fs (%2d)\n", s[i], t[s[i] ",stable"], c[s[i] ",stable"], t[s[i] ",nightly"], c[s[i] ",nightly"] }' "$RUNROOT/all"
+
+echo
+echo "== wall time"
+for v in $VERSIONS; do echo "$v: $(cat "$RUNROOT/$v/wall" 2>/dev/null)s"; done
+echo "total: $(awk -v a="$T0" -v b="$EPOCHREALTIME" 'BEGIN{printf "%.1f", b-a}')s"
+
+echo
+echo "== hygiene"
+changed=$(find "$HOME/.config/nvim/" "$HOME/.local/share/nvim/" "$HOME/.local/state/nvim/" "$HOME/.cache/nvim/" \
+  -newer "$RUNROOT/stamp" 2>/dev/null | head -20)
+if [ -n "$changed" ]; then
+  fail=1; echo "FAIL live nvim dirs changed during the run:"; echo "$changed" | sed 's/^/       /'
+  live=$(pgrep -a -x nvim | grep -v -F "$S" | cut -c1-120)
+  [ -n "$live" ] && echo "       (nvim processes outside the sandbox were running: $(echo "$live" | wc -l))"
+else echo "PASS live nvim dirs unchanged"; fi
+
+left=$(tagged_pids "$RUNID/")
+# shellcheck disable=SC2086
+if [ -n "$left" ]; then fail=1; echo "FAIL sandbox processes still alive: $(describe_pids $left)"; kill_pids KILL $left
+else echo "PASS no sandbox process left"; fi
+
+# any suite run's tag counts; a clipboard server whose environ has the live XDG dirs is the user's own
+clip_bad=
+for p in $(pgrep -x 'wl-copy|wl-paste|xclip|xsel'); do
+  /usr/bin/grep -qz '^NVIM_REGRESS_TAG=' "/proc/$p/environ" 2>/dev/null || continue
+  /usr/bin/grep -qzxF "XDG_CONFIG_HOME=$HOME/.config" "/proc/$p/environ" 2>/dev/null && continue
+  clip_bad="$clip_bad $p"
+done
+# shellcheck disable=SC2086
+if [ -n "$clip_bad" ]; then fail=1; echo "FAIL clipboard servers from the suite: $(describe_pids $clip_bad)"; kill_pids KILL $clip_bad
+else echo "PASS no suite clipboard server (wl-copy, xclip, xsel) left"; fi
+
+end_inotify_n=$(inotify_holders | wc -l)
+new_holders=
+for p in $(inotify_holders | sort -u); do [[ " $base_inotify " == *" $p "* ]] || new_holders="$new_holders $p"; done
+sbx_holders=
+for p in $new_holders; do grep -qaF "NVIM_REGRESS_TAG=$RUNID/" "/proc/$p/environ" 2>/dev/null && sbx_holders="$sbx_holders $p"; done
+# shellcheck disable=SC2086
+if [ -n "$sbx_holders" ]; then fail=1; echo "FAIL inotify held by sandbox processes: $(describe_pids $sbx_holders)"
+elif [ "$end_inotify_n" -le "$base_inotify_n" ]; then echo "PASS inotify instances back to baseline ($base_inotify_n -> $end_inotify_n)"
+else echo "PASS inotify: none held by the sandbox; $base_inotify_n -> $end_inotify_n from outside: $(describe_pids $new_holders)"; fi
+
+fsm_bad=
+for p in $(pgrep -f 'fsmonitor--daemon'); do
+  [[ $base_fsmon == *" $p "* ]] && continue
+  if grep -qaF "NVIM_REGRESS_TAG=$RUNID/" "/proc/$p/environ" 2>/dev/null || readlink "/proc/$p/cwd" | grep -qF "$S"; then fsm_bad="$fsm_bad $p"; fi
+done
+ipc=$(find "$S/data" "$S/fixtures" "$RUNROOT" -name 'fsmonitor--daemon.ipc' -newer "$RUNROOT/stamp" 2>/dev/null | head -3)
+if [ -n "$fsm_bad$ipc" ]; then fail=1; echo "FAIL fsmonitor daemon from the sandbox:$fsm_bad $ipc"
+else echo "PASS no fsmonitor daemon from the sandbox"; fi
+
+echo
+[ $fail = 0 ] && echo "SUITE PASS" || echo "SUITE FAIL"
+exit $fail
