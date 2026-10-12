@@ -11,6 +11,7 @@ return {
       },
     },
 
+    -- A dotted filetype with no key of its own uses its most specific part that has one (yaml.docker-compose -> yaml)
     formatters_by_ft = {
       -- Web technologies (Biome for JS/TS/JSON, Prettier for markup/config)
       javascript = { "biome" },
@@ -20,8 +21,6 @@ return {
       json = { "biome" },
       jsonc = { "biome" },
       yaml = { "prettierd" },
-      -- docker-compose in Neovim usually has filetype "yaml.docker-compose"
-      ["yaml.docker-compose"] = { "prettierd" },
       markdown = { "prettierd" },
       html = { "prettierd" },
       css = { "prettierd" },
@@ -36,12 +35,13 @@ return {
       -- Shell
       sh = { "shfmt" },
       bash = { "shfmt" },
+      fish = { "fish_indent" },
 
       -- C/C++
-      c = { "clang_format" },
-      cpp = { "clang_format" },
+      c = { "clang-format" },
+      cpp = { "clang-format" },
 
-      go = { "goimports" },
+      go = { "goimports", "gofumpt" },
       lua = { "stylua" },
       rust = { "rustfmt" },
 
@@ -50,28 +50,10 @@ return {
       ["terraform-vars"] = { "terraform_fmt" },
 
       cmake = { "gersemi" },
-      typst = { "typstyle" },
 
-      -- Another option for below is I could configure a new filetype toml.pyproject
-      -- Maybe down the line I would like to configure yaml.actions etc...
-      -- For future reference help: filetype | filetype-detect | new-filetype
-      -- TOML: use pyproject-fmt for pyproject.toml, taplo otherwise (if available)
-      toml = function(bufnr)
-        local c = require("conform")
-        local filepath = vim.api.nvim_buf_get_name(bufnr)
-        local filename = (filepath ~= "" and vim.fn.fnamemodify(filepath, ":t")) or "<buffer>"
-
-        local py_fmt = c.get_formatter_info("pyproject-fmt", bufnr)
-        local taplo = c.get_formatter_info("taplo", bufnr)
-
-        if py_fmt.available and filename == "pyproject.toml" then
-          return { "pyproject-fmt" }
-        elseif taplo.available then
-          return { "taplo" }
-        else
-          return {}
-        end
-      end,
+      -- pyproject.toml is toml.pyproject (lua/tools/filetypes.lua)
+      toml = { "tombi" },
+      ["toml.pyproject"] = { "pyproject-fmt" },
     },
 
     -- Use LSP if no external formatter is configured
@@ -82,6 +64,27 @@ return {
 
   config = function(_, opts)
     local c = require("conform")
+    local tools = require("tools")
+
+    -- Run each formatter's binary as the resolver finds it for the buffer's project, keeping the built-in args.
+    -- A missing tool gets a command that is not executable, so conform marks it unavailable and LSP formatting takes over.
+    for _, names in pairs(opts.formatters_by_ft) do
+      for _, name in ipairs(names) do
+        local bin = tools.catalog.binary("formatter", name)
+        if bin then
+          opts.formatters[name] = vim.tbl_extend("force", opts.formatters[name] or {}, {
+            command = function(_, ctx)
+              local result = tools.wait(bin, tools.root(ctx.buf))
+              return result and result.path or ("%s (%s)"):format(bin, result and result.reason or "still resolving")
+            end,
+            env = function(_, ctx)
+              local result = tools.get(bin, tools.root(ctx.buf))
+              return result and result.env
+            end,
+          })
+        end
+      end
+    end
     c.setup(opts)
 
     -- use conform for formatexpr

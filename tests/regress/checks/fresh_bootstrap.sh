@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# @desc     a first start from an empty data dir bootstraps lazy, installs every plugin and parser, and in auto install mode the Mason packages of the file opened at launch, without a hit-enter prompt or an error, and that file gets its servers
-# @areas    startup installer treesitter lsp
+# @desc     a first start from an empty data dir bootstraps lazy, installs every plugin and parser, without a hit-enter prompt or an error, and the file opened at launch gets its servers from the suite's tools
+# @areas    startup installer treesitter lsp tools
 # @budget   180
 # @fresh
-# @network  the real first start: lazy.nvim clone, ~47 plugin clones, blink.cmp binary, ~30 parser tarballs, ~30 Mason packages
-#           Measured in the fresh sandbox: VimEnter at 6.5-14s, parsers ~10s after it, Mason done at 36-42s; ~50s wall.
+# @needs    lua-language-server
+# @network  the real first start: lazy.nvim clone, ~30 plugin clones, blink.cmp binary, ~30 parser tarballs
+#           Measured in the fresh sandbox (with Mason, before mise): VimEnter at 6.5-14s, parsers ~10s after it.
 #
 # Same TUI driver as fresh_no_prompt.sh (tmux, private server killed on exit; 3s init-time event loop that
-# forces the first-start prompt race), on an empty data dir, launched with notes.md so the opened buffer
-# must get its Mason-installed server once the install finishes. mason-lspconfig skips installs headless,
-# which is why this cannot be a harness check.
+# forces the first-start prompt race), on an empty data dir, launched with main.lua so the opened buffer, whose
+# FileType comes before lazy has loaded anything, must get lua_ls from the suite's tools (the binary is resolved
+# while plugins install). Installs are off: the suite's mise is shared by every check and only --refresh fills it.
 set -u
 unset TMUX
 D=$FIX/.nvr
@@ -28,8 +29,8 @@ echo 'vim.wait(3000)' >"$DST/site/plugin/zz_nvr_init_wait.lua"
 # --cmd, before init.lua: record every nvim_echo (nvim-treesitter's log captures nvim_echo when it loads)
 cat >"$D/pre.lua" <<'LUA'
 _G.NVR = { echoes = {} }
--- the installer asks first by default; auto installs the launch file's tools with no prompt to answer
-vim.g.install_tools = "auto"
+-- nothing may install into the suite's shared mise; the launch file's tools are already there
+vim.g.install_tools = "off"
 local echo = vim.api.nvim_echo
 vim.api.nvim_echo = function(chunks, history, opts)
   local ok, text = pcall(function() return table.concat(vim.tbl_map(function(c) return tostring(c[1]) end, chunks)) end)
@@ -38,7 +39,7 @@ vim.api.nvim_echo = function(chunks, history, opts)
 end
 LUA
 
-# -c: after VimEnter, poll on a timer (the UI loop keeps running) until the parser and Mason installs settle
+# -c: after VimEnter, poll on a timer (the UI loop keeps running) until the parser installs settle
 cat >"$D/drive.lua" <<'LUA'
 local D, MODE = vim.env.NVR_CHECK_DIR, vim.env.NVR_MODE
 local CAP = tonumber(vim.env.NVR_SETTLE_MAX or "60") * 1e9
@@ -49,58 +50,6 @@ local function rec(ok, name, detail)
 end
 local function info(s) table.insert(res, "INFO " .. s) end
 local function join(t, n) return table.concat(vim.list_slice(t, 1, n or #t), ", ") end
-
-local okreg, reg = pcall(require, "mason-registry")
-local failed, started = {}, {}
-if okreg then
-  reg:on("package:install:failed", vim.schedule_wrap(function(pkg) failed[pkg.name] = true end))
-  reg:on("package:install:handle", vim.schedule_wrap(function(h) started[h.package.name] = true end))
-end
-
-local function lazy_opts(name)
-  local ok, v = pcall(function()
-    local p = require("lazy.core.config").plugins[name]
-    return p and require("lazy.core.plugin").values(p, "opts", false)
-  end)
-  return ok and type(v) == "table" and v or {}
-end
-
--- Mason packages the config asks for, by package name
-local function requested()
-  if not okreg then return {} end
-  local ok, mlsp = pcall(require, "mason-lspconfig")
-  local map = ok and mlsp.get_mappings().lspconfig_to_package or {}
-  local set = {}
-  local function add(n)
-    n = type(n) == "table" and n[1] or n
-    if type(n) ~= "string" then return end
-    local okh, has = pcall(reg.has_package, n)
-    if not (okh and has) and map[n] then n = map[n] end
-    set[n] = true
-  end
-  for _, n in ipairs(lazy_opts("mason-tool-installer.nvim").ensure_installed or {}) do add(n) end
-  for _, n in ipairs(lazy_opts("mason-lspconfig.nvim").ensure_installed or {}) do add(n) end
-  for n in pairs(started) do set[n] = true end
-  for _, n in ipairs(reg.get_installed_package_names()) do set[n] = true end
-  local list = vim.tbl_keys(set)
-  table.sort(list)
-  return list
-end
-
-local function mason_status(pkgs)
-  local missing, busy = {}, {}
-  for _, n in ipairs(pkgs) do
-    local ok, pkg = pcall(reg.get_package, n)
-    if not ok then
-      table.insert(missing, n)
-    elseif pkg:is_installing() then
-      table.insert(busy, n)
-    elseif not pkg:is_installed() then
-      table.insert(missing, n)
-    end
-  end
-  return missing, busy
-end
 
 -- parser installs, from nvim-treesitter's log lines
 local function ts_state()
@@ -133,22 +82,22 @@ local function lazy_missing()
   return out
 end
 
--- servers that must attach to buf: enabled or asked of mason-lspconfig, covering its filetype, with a root when required, runnable
+-- servers that must attach to buf: enabled, covering its filetype, with a root when required, runnable; a catalog
+-- server only when the tools resolver found its binary (the config's root_dir wrapper declines otherwise)
 local function expected_servers(buf)
-  local ft, names, want, asked = vim.bo[buf].filetype, {}, {}, {}
-  for _, n in ipairs(lazy_opts("mason-lspconfig.nvim").ensure_installed or {}) do
-    n = type(n) == "table" and n[1] or n
-    if type(n) == "string" then asked[n], names[n] = true, true end
-  end
+  local ft, names, want = vim.bo[buf].filetype, {}, {}
+  local tools, catalog = require("tools"), require("tools.catalog")
   for _, f in ipairs(vim.api.nvim_get_runtime_file("lsp/*.lua", true)) do names[vim.fn.fnamemodify(f, ":t:r")] = true end
   for n in pairs(vim.lsp._enabled_configs or {}) do names[n] = true end
   for n in pairs(names) do
-    local c = (vim.lsp.is_enabled(n) or asked[n]) and vim.lsp.config[n]
+    local c = vim.lsp.is_enabled(n) and vim.lsp.config[n]
     if c and (c.filetypes == nil or vim.list_contains(c.filetypes, ft)) then
+      local bin = catalog.binary("server", n)
+      local found = not bin or (tools.get(bin, tools.root(buf)) or {}).path ~= nil
       local runnable = type(c.cmd) == "function" or (type(c.cmd) == "table" and vim.fn.executable(c.cmd[1]) == 1)
       local root_ok = not (c.workspace_required and type(c.root_dir) ~= "function" and c.root_markers)
         or vim.fs.root(buf, c.root_markers) ~= nil
-      if runnable and root_ok then table.insert(want, n) end
+      if found and runnable and root_ok then table.insert(want, n) end
     end
   end
   table.sort(want)
@@ -158,7 +107,7 @@ local function unattached(buf, want)
   return vim.tbl_filter(function(n) return not vim.lsp.get_clients({ bufnr = buf, name = n })[1] end, want)
 end
 
-local pkgs, pkgs_ready, t_enter, t_phase, t_ready, buf0 = {}, not okreg, nil, nil, nil, nil
+local t_enter, t_phase, buf0 = nil, nil, nil
 local phase = "settle"
 
 local function report()
@@ -181,18 +130,7 @@ local function report()
   local lm = lazy_missing()
   rec(#lm == 0, "every lazy plugin installed", #lm > 0 and ("missing " .. join(lm)) or nil)
 
-  if okreg then
-    local missing, busy = mason_status(pkgs)
-    if MODE == "bootstrap" then
-      local fl = vim.tbl_filter(function(m) return failed[m] end, missing)
-      rec(#pkgs > 0 and #missing == 0 and #busy == 0, "the first start installs the launch file's Mason packages",
-        string.format("%d requested [%s]; missing [%s]; failed [%s]; still installing [%s]", #pkgs, join(pkgs), join(missing), join(fl), join(busy)))
-    elseif #missing + #busy > 0 then
-      info("seeded Mason lacked [" .. join(missing) .. "], installing [" .. join(busy) .. "]")
-    end
-  end
-
-  local attach_name = "file opened at launch gets its servers once Mason installs them"
+  local attach_name = "file opened at launch gets its servers from the suite's tools"
   if MODE == "bootstrap" and not (buf0 and vim.api.nvim_buf_is_valid(buf0)) then
     rec(false, attach_name, "no buffer for the launch file " .. vim.fn.argv(0))
   elseif MODE == "bootstrap" then
@@ -230,19 +168,10 @@ local function tick()
   local t = now()
   if phase == "settle" then
     local _, _, pending = ts_state()
-    local missing, busy = {}, {}
-    if okreg and pkgs_ready then
-      pkgs = requested()
-      missing, busy = mason_status(pkgs)
-    end
-    local mason_done = #busy == 0 and #vim.tbl_filter(function(m) return not failed[m] end, missing) == 0
-    if MODE ~= "bootstrap" then mason_done = #busy == 0
-    elseif next(started) == nil and not (t_ready and t - t_ready > 10e9) then mason_done = false end
-    local settled = pkgs_ready and t - t_enter > 3e9 and #pending == 0 and mason_done
+    local settled = t - t_enter > 3e9 and #pending == 0
     if settled or t - t_enter > CAP then
       if not settled then
-        rec(false, "first start settled", string.format("after %ds: parsers pending [%s], Mason registry ready=%s, installing [%s], not installed [%s]",
-          CAP / 1e9, join(pending), tostring(pkgs_ready), join(busy), join(missing)))
+        rec(false, "first start settled", string.format("after %ds: parsers pending [%s]", CAP / 1e9, join(pending)))
       end
       phase, t_phase = MODE == "bootstrap" and "attach" or "report", t
     end
@@ -267,11 +196,6 @@ vim.api.nvim_create_autocmd("VimEnter", {
     local b = vim.fn.argc() > 0 and vim.fn.bufnr(vim.fn.fnamemodify(vim.fn.argv(0), ":p")) or -1
     buf0 = b > 0 and b or nil
     timer:start(250, 250, vim.schedule_wrap(function()
-      -- package names come from the registry, which a fresh data dir downloads first
-      if not pkgs_ready then
-        local okn, names = pcall(reg.get_all_package_names)
-        if okn and #names > 0 then pkgs, pkgs_ready, t_ready = requested(), true, now() end
-      end
       local ok, err = pcall(tick)
       if not ok and phase ~= "done" then
         phase = "done"
@@ -288,7 +212,7 @@ LUA
   for v in PATH HOME NVR_HOME NVR_STATE NVR_DATA NVR_VERSION NVIM_REGRESS_TAG; do printf 'export %s=%q\n' "$v" "${!v}"; done
   printf 'export TERM=xterm-256color COLORTERM=truecolor NVR_CHECK_DIR=%q NVR_MODE=bootstrap NVR_SETTLE_MAX=%q\n' "$D" $((BUDGET - 35))
   printf 'cd %q || exit 1\n' "$FIX"
-  printf '%q %q --cmd %q -c %q notes.md\n' "$NV" "$V" "luafile $D/pre.lua" "luafile $D/drive.lua"
+  printf '%q %q --cmd %q -c %q main.lua\n' "$NV" "$V" "luafile $D/pre.lua" "luafile $D/drive.lua"
   printf 'echo $? >%q\n' "$D/exit"
 } >"$D/run.sh"
 

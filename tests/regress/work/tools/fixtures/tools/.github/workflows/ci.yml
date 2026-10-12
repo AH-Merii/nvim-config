@@ -1,6 +1,0 @@
-on: push
-jobs:
-  a:
-    runs-on: ubuntu-latst
-    steps:
-      - run:    echo hi

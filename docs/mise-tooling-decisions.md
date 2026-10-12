@@ -14,7 +14,16 @@ resolved per project, with project-pinned tools taking priority.
   project prompt, install timing, versions, where it is built, file-scoped tools.
 - Done: Mason bin dir removed from the shell PATH.
 - Verified: every chosen tool installs through mise and runs (see "Install specs").
-- Not started: implementation.
+- Built (2026-10-12), in `nvimt2` (worktree `~/Projects/nvim-config-t2`, branch `nvimt2/mise-tooling`), not merged:
+  - resolver, catalog and sub-filetypes in `nvim/lua/tools/`;
+  - prompts, `:Tools` and the lualine indicator in `nvim/lua/tools/ux.lua`;
+  - the explicit server list and LSP wiring in `nvim/lua/core/lsp_servers.lua`;
+  - conform and nvim-lint adapters in their plugin specs;
+  - Mason removed;
+  - the regression suite runs on its own isolated mise (`tests/regress/lib.sh` `mise_env`).
+- Where the build departs from this record, and why: see "Deviations in the build" below.
+- Follow-ups built (2026-10-12), same slot: jactionlint replaces actionlint, the indicator shows a wrench icon,
+  `:Tools` offers Restart only for a server whose binary resolved, and LSP linked editing replaces nvim-ts-autotag.
 
 ## Resolution order (2026-10-12)
 
@@ -56,7 +65,9 @@ Facts this rests on:
   - *Installed only*: use what the project pins only if it's already installed; no install, no trust.
   - *Global only*: ignore the project config; project env (`.venv`, `node_modules`) still applies.
 
-- A prompt only the first time a project or tool is missing. After that, a quiet lualine indicator plus a
+- A prompt only the first time a project or tool is missing. After that, a quiet lualine indicator (a wrench icon
+  with the missing count, e.g. `󰖷 2`, and `?` for an unanswered project config; hidden when neither applies; decided
+  2026-10-12) plus a
   `:Tools` view (per tool: chosen binary, where it came from, reason if missing; install / retry / restart).
 - One batched prompt per project, not per filetype. Answers remembered per project config file and asked
   again when that file changes.
@@ -95,7 +106,7 @@ How: files that need extra tools get a dotted sub-filetype from `vim.filetype.ad
 
 | Files | Filetype | Extra tools |
 |---|---|---|
-| `*/.github/workflows/*.y{a,}ml` | `yaml.github-actions` | actionlint, zizmor (lint) |
+| `*/.github/workflows/*.y{a,}ml` | `yaml.github-actions` | jactionlint, zizmor (lint) |
 | `pyproject.toml` | `toml.pyproject` | pyproject-fmt (format) |
 
 Why this works with the existing tools:
@@ -142,7 +153,7 @@ Bold = change from today. Struck = removed.
 | Lua | lua_ls | stylua | ~~luacheck~~ |
 | JS / TS | **tsc** (TS 7), replaces ~~ts_ls~~ | biome | biome |
 | JSON | none | biome | **biome**, replaces ~~jsonlint~~ |
-| YAML | yamlls | prettierd | yamllint, actionlint, **zizmor** |
+| YAML | yamlls | prettierd | yamllint, **jactionlint**, replaces ~~actionlint~~; **zizmor** |
 | Markdown | marksman | prettierd | **markdownlint-cli2**, replaces ~~markdownlint-cli~~ |
 | HTML / CSS / SCSS | **html, cssls** | prettierd | none |
 | sh / bash | **bashls** (runs shellcheck) | shfmt | ~~nvim-lint shellcheck~~ |
@@ -183,7 +194,8 @@ Verified = installed in an isolated mise dir and the binary ran (LSPs also answe
 | clangd | `github:clangd/clangd` (decided) | yes |
 | clang-format | `clang-format` (registry, conda backend) | yes |
 | ruff, biome, stylua, shfmt, terraform, typstyle, tinymist, marksman, lua-language-server, terraform-ls | registry short names | yes |
-| golangci-lint, shellcheck, tflint, trivy, hadolint, actionlint, checkmake, yamllint | registry short names | yes |
+| golangci-lint, shellcheck, tflint, trivy, hadolint, checkmake, yamllint | registry short names | yes |
+| jactionlint | `jactionlint` (registry: `github:jdx/jactionlint`; v2.1.0, static binary) | yes |
 | fish-lsp, yaml-language-server | `npm:<name>` | yes |
 | prettierd | `npm:@fsouza/prettierd` (needs node at runtime) | yes |
 | gopls | `go:golang.org/x/tools/gopls` | yes |
@@ -202,7 +214,7 @@ Verified = installed in an isolated mise dir and the binary ran (LSPs also answe
 
 Caveats from the check pass:
 
-- **gh_actions_ls** (dropped 2026-10-12 for this reason; actionlint + zizmor cover workflows): v0.0.3, last published 2025-01-09, ~686 weekly downloads; mise's npm installer
+- **gh_actions_ls** (dropped 2026-10-12 for this reason; jactionlint + zizmor cover workflows): v0.0.3, last published 2025-01-09, ~686 weekly downloads; mise's npm installer
   refuses it without `allow_low_downloads = true`. Needs `init_options = {}` (lspconfig already sets it).
 - **neocmakelsp**: exits on `shutdown` without replying. Should look like a normal exit to Neovim
   (unverified).
@@ -259,3 +271,86 @@ Details the build needs that the decisions above don't spell out.
   before either (unverified risk).
 - **Isolation pitfall in scripts**: inside an already mise-activated shell, `mise exec npm:...` can drop node
   from PATH ("node is not a valid shim"); add `node@lts` to the exec or prepend node's bin dir.
+
+## Deviations in the build (2026-10-12)
+
+Where the build differs from the decisions above, or fills a gap they left.
+
+- **CMake server name**: the server is enabled as `neocmake`, nvim-lspconfig's name for neocmakelsp
+  (`nvim-lspconfig/lsp/neocmake.lua`; there is no `neocmakelsp.lua`). The binary is still `neocmakelsp`.
+- **Untrusted project config with `[env]`**: the prompt offers only *Use + install* and *Global only*
+  (`nvim/lua/tools/ux.lua`, `ask_project`). *Installed only* could never take effect there: mise refuses every
+  call in that dir until the config is trusted.
+- **Library code**: besides site-packages, node_modules, the cargo registry and the Go module cache, prompts are
+  also skipped in dist-packages, cargo git checkouts and rustlib sources.
+- **biome server**: limited to JS/TS/JSON (`nvim/after/lsp/biome.lua`), as in the per-language table.
+  nvim-lspconfig also lists HTML and CSS, where biome starts only inside a Biome project (its `root_dir` looks for
+  `biome.json`). There, the install offer would have named biome on every HTML and CSS file.
+- **Server root when the server finds none**: it uses the tools' project root (the nearest mise config, `.venv`,
+  `node_modules`, language project file or `.git`). This gives one process per project, run from that project's
+  binary. Before, every buffer without a server root shared one client, started from whichever project's binary
+  came first. Only files outside any project still share a rootless client, and they all resolve the same binary.
+- **Running servers restart when their binary moves**: after a refresh, an accepted project config or an install,
+  a server running a different binary from the one now resolved for its root is restarted
+  (`nvim/lua/core/lsp_servers.lua`). The table above only says to start servers for open files. Without the restart,
+  *Use + install* left the global server running in the project.
+- **Toolchain calls in `root_dir`**: gopls's `root_dir` runs `go env` and rust_analyzer's runs `cargo metadata`, both
+  from Neovim's PATH. They now run with the tool's resolved PATH. Without it, go installed only through mise
+  raised ENOENT, and that error stopped every other tool resolving in the same root.
+- **golangcilint args**: nvim-lint builds them once, when the linter module loads, by running `golangci-lint` and
+  `go` from Neovim's PATH. They are now rebuilt for the resolved binary (`nvim/lua/plugins/nvim-lint.lua`).
+- **tsc root**: lspconfig's tsc `root_dir` runs `tsc --version` from PATH and warns when it isn't TS 7. It is
+  replaced by one that keeps its lockfile, `.git` and Deno rules; the resolver's TS 7 check does the version part.
+- **Statusline formatters**: lualine lists formatters only once their binaries are resolved, because conform's
+  availability check would block a redraw on the resolver (about 84 ms cold per project).
+- **Load order** (the unverified risk above): conform's `command` waits for the result (`tools.wait`). nvim-lint
+  and LSP `root_dir` resolve asynchronously, and run again on `User ToolsChanged`.
+
+Still open:
+
+- The neocmakelsp shutdown caveat above is still unverified.
+
+Decided since:
+
+- **actionlint → jactionlint** (2026-10-12). mise's registry marks actionlint deprecated: `mise WARN actionlint is
+  deprecated: jactionlint is an actively maintained fork of actionlint with upstream fixes merged`. jactionlint is
+  `github:jdx/jactionlint` (registry name and binary `jactionlint`, v2.1.0). It replaces actionlint in the catalog
+  and in the `github-actions` linters, as nvim-lint linter `jactionlint` defined in `nvim/lua/plugins/nvim-lint.lua`
+  (nvim-lint has none). Evidence and choices:
+  - Its CLI is GNU style: `--format '{{json .}}' --stdin-filename NAME -`; actionlint's single-dash `-format` is
+    rejected ("unknown option -format; did you mean --format?"), so nvim-lint's actionlint args can't be reused.
+  - Its JSON has the fields nvim-lint's actionlint parser reads (`line`, `column`, `end_column`, `kind`, `message`)
+    plus `id`, `severity`, `end_line` and `doc_url`. The linter has its own parser: `severity` (`error`, `warn`, `info`,
+    the levels of `--min-severity`) becomes the diagnostic severity, where actionlint's parser makes every finding a
+    warning, and `id` becomes the diagnostic code.
+  - It runs with `--profile correctness` ("what actionlint checks", per `--help`). The default profile adds security
+    rules zizmor already reports: on one test workflow it added concurrency-limits, missing-timeout,
+    missing-permissions, unpinned-uses and artipacked to the unknown-runner-label finding both profiles report. The
+    flag overrides a `profile` set in a project's `.github/jactionlint.yaml`; that file's per-rule levels still apply.
+
+## Follow-up decided alongside (2026-10-12): nvim-ts-autotag → LSP linked editing
+
+- Drop `windwp/nvim-ts-autotag` (`nvim/lua/plugins/auto-pairs-tags-comments.lua:308-312`) once the html server from
+  this feature is in. Paired-tag rename comes from `vim.lsp.linked_editing_range.enable(true, { client_id = … })`
+  on LspAttach for clients that support `textDocument/linkedEditingRange` (runtime doc/lsp.txt:2621-2641).
+- Accepted loss: auto-closing a tag on `>` (no core equivalent).
+- Built (2026-10-12) in `nvimt2`: nvim-ts-autotag is gone from the plugin spec and `lazy-lock.json`, and
+  `nvim/lua/core/lsp.lua` enables linked editing per client on LspAttach.
+- Which servers advertise it, probed 2026-10-12 (each server started on a matching file, `initialize` answer read,
+  `linkedEditingRangeProvider` and `client:supports_method("textDocument/linkedEditingRange")`):
+  - yes: html (vscode-langservers-extracted 4.10.0; on `<div><p>x</p></div>` it returned both `div` names) and tsc
+    (typescript-go 7.0.2; in a `.tsx` file it returned both names of a JSX tag);
+  - no: cssls, biome 2.5.15, marksman, yamlls 1.25.0, lua_ls 3.19.1, pyrefly 1.3.2, ruff 0.17.0, bashls, clangd 23.1.0,
+    tombi 1.8.1.
+
+## Follow-up decided alongside (2026-10-12): the tree-sitter CLI joins the catalog
+
+- The tree-sitter CLI becomes a catalog tool, spec `tree-sitter` (registry, `mise registry tree-sitter` maps it to
+  `aqua:tree-sitter/tree-sitter`). Recorded only: built after the mise build lands.
+- Trigger: nvim-treesitter's parser install runs `tree-sitter build` (`nvim-treesitter/lua/nvim-treesitter/install.lua:305-316`).
+  Without the CLI it logs `Error during "tree-sitter build"` (`install.lua:315`) and fails silently; the config tries
+  each language once per session (`nvim/lua/plugins/nvim-treesitter.lua:178,189`).
+- With this, the first failed build offers the global install like any other missing tool, under the same UX rules
+  (offered once, never headless).
+- Why: a fresh machine without the CLI silently loses the parser of every language that isn't bundled. It works on
+  this machine only because `tree-sitter = "latest"` was set globally on 2026-10-12.

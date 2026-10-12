@@ -14,8 +14,8 @@ suite.sh --changed main         # iteration: areas touched by `git diff main` in
 suite.sh --work <feature>       # iteration: the checks in work/<feature>/
 suite.sh --list [...]           # print what would run, run nothing
 suite.sh --selftest             # the runner's own tests: leak, over budget, fsmonitor, missing server
-suite.sh --refresh              # sync lazy, Mason and parsers in data/ for the current CFG, then run
-suite.sh --refresh-dry-run      # print the Mason keep, install and remove sets, change nothing, run nothing
+suite.sh --refresh              # sync lazy, the suite's tools and parsers in data/ for the current CFG, then run
+suite.sh --refresh-dry-run      # print the tools every check needs and which do not resolve, change nothing, run nothing
 CFG=/path/to/nvim suite.sh      # test another config dir (default: ../../nvim, this repo's config)
 ```
 
@@ -44,18 +44,21 @@ add a line when a new config file appears.
 
 ### Refresh
 
-`--refresh` brings lazy to the lockfile and parsers to the config's list. Mason:
+`--refresh` brings lazy to the lockfile and parsers to the config's list. Tools:
 
-- The keep-list is the `@needs` of every check in `checks/`, `selftest/` and `work/*/`, whatever
-  the run selected, plus any `ensure_installed` list in the config (the nvim-0-13 config has none:
-  it installs per filetype after asking, and keeps that table private in `lua/plugins/mason.lua`).
-- It installs what the keep-list lacks and never uninstalls. An installed package in no `@needs` is
-  listed as `left alone`; delete it from `data/nvim/mason/packages/` by hand if it is unwanted.
+- Every tool a check runs comes from the suite's own mise, never the user's: `data/mise/data` is its
+  `MISE_DATA_DIR` and `data/mise/config.toml` its global config (`lib.sh` `mise_env`). Rust components
+  come from the suite's own `RUSTUP_HOME`, `data/rustup`. The user's `~/.config/mise`,
+  `~/.local/share/mise` and `~/.rustup` are never written.
+- The keep-list is the `@needs` of every check in `checks/`, `selftest/` and `work/*/`, whatever the
+  run selected: catalog binaries (`lua/tools/catalog.lua`), plus the binaries they call (`requires`).
+- Catalog specs go into the suite's global config with one `mise use -g <spec>@latest ...`, plus the
+  runtimes they need (`node@lts`, `go@latest`); rustup components into a minimal stable toolchain.
+  Then every need must resolve through the config's own resolver, or the refresh fails.
+- It never uninstalls; delete `data/mise` or `data/rustup` by hand to start over.
 - An empty keep-list fails the refresh.
-- `--refresh-dry-run` prints the keep, install and remove sets (remove is always empty) for a reflink
-  copy of `data/`, without lazy, parsers or a registry refresh, then exits. Log in
-  `last/refresh-dry-run.log`. The config's own startup may still fetch the Mason registry into
-  the copy.
+- `--refresh-dry-run` prints the keep-list, the specs and components, and which needs do not
+  resolve now, without lazy, parsers or installs, then exits. Log in `last/refresh-dry-run.log`.
 
 ### Feature work: work/ then checks/
 
@@ -82,15 +85,15 @@ add a line when a new config file appears.
 | `nv.sh` | launcher: `nv.sh nightly [nvim args]`, sandboxed env (see Hygiene) |
 | `lib.sh` | shared shell helpers |
 | `harness.lua` | headless check harness, loaded with `-c` |
-| `refresh.lua` | `--refresh`: lazy install/restore/clean, Mason installs for every `@needs`, parser install/update |
+| `refresh.lua` | `--refresh`: lazy install/restore/clean, the suite's mise and rustup installs for every `@needs`, parser install/update |
 | `areas.map` | config file glob to areas, for `--changed` |
 | `checks/` | the kept checks |
 | `selftest/` | checks that must fail in a given way (`@expect-fail <regex>`), for changes to the runner |
 | `work/<feature>/` | checks of a feature in development, optional `fixtures/` |
 | `fixtures/<name>/` | fixture trees; `default` is a small git repo with one file per language |
-| `data/` | seed XDG_DATA_HOME: lazy plugins, Mason, parsers; each version runs on a reflink copy |
+| `data/` | `data/nvim`: seed XDG_DATA_HOME (lazy plugins, parsers), each version runs on a reflink copy; `data/mise`, `data/rustup`: the suite's tools, used in place |
 | `cache-seed/` | go-build, golangci-lint, gopls caches copied into each run so linters start warm |
-| `shared-cache/` | Go module and npm download caches, used in place by every run (not copied), so Mason installs start warm |
+| `shared-cache/` | Go module and npm download caches, used in place by every run (not copied), so Go and npm runs start warm |
 | `gui.sh` | optional GUI check: a fresh start in ghostty in the `cachyos` QEMU VM, never on the host desktop |
 | `INVENTORY.md` | where every check came from |
 
@@ -101,8 +104,8 @@ harness, or `<name>.sh`, run by bash for anything the harness cannot drive (a TU
 fresh data dir). The header is comment lines at the top:
 
 ```lua
--- @desc     every enabled or Mason-installed server attaches to its filetypes
--- @areas    lsp installer
+-- @desc     every enabled server attaches to its filetypes
+-- @areas    lsp tools
 -- @budget   60
 -- @fixture  default
 -- @args     main.lua
@@ -118,7 +121,7 @@ fresh data dir). The header is comment lines at the top:
 | `@budget` | yes | seconds of wall time, startup included; past it the check is killed and FAILs "over budget" |
 | `@fixture` | no | dir under `fixtures/` (or `work/<feature>/fixtures/`); default `default`. Copied fresh per check; it is the cwd |
 | `@args` | no | nvim startup args, e.g. a file to open, relative to the fixture |
-| `@needs` | no | Mason packages the check needs; missing ones FAIL before launch, `--refresh` installs them |
+| `@needs` | no | catalog binaries the check needs; a Lua check FAILs before its body when one does not resolve, `--refresh` installs them into the suite's mise |
 | `@fresh` | no | run with an empty, throwaway data dir (first launch) |
 | `@allow-leak` | no | a process the check may leave behind, with the reason; repeatable |
 
@@ -159,8 +162,9 @@ not stop on exit.
 
 Headless gotchas the harness handles: lazy's VeryLazy never fires without a UI, so the harness
 fires it after VimEnter; which-key and other VeryLazy plugins are loaded by the time the check
-runs. Nightly `:checkhealth` is async. mason-lspconfig skips installs when headless, so tools come
-from `--refresh`, never from a check.
+runs. Nightly `:checkhealth` is async. Without a UI the config never prompts or installs
+(`tools.can_install()` is false), so tools come from `--refresh`, never from a check. A check that
+runs a tool itself asks the resolver for it (`require("tools").wait(name, FIX)`: `path`, `env`).
 
 ### Shell checks
 
@@ -175,7 +179,9 @@ Keymap clashes (`checks/keymap_clashes.lua`, report only). For n, x and o it lis
 
 ## Hygiene (built in)
 
-- `nv.sh` strips `~/.local/share/nvim/mason/bin` and every other live nvim dir from PATH, points
+- `nv.sh` strips every live nvim dir, any Mason bin dir and any mise shims dir from PATH, unsets the
+  user's `MISE_*` and `__MISE_*` vars and points every `MISE_*` dir into the sandbox (`MISE_CEILING_PATHS=$HOME`
+  keeps mise from reading the user's `~/.config/mise/config.toml` as a project config), points
   the XDG dirs and GOPATH into the sandbox and the Go module and npm caches into `shared-cache/`
   (`GOFLAGS=-modcacherw` keeps them deletable), and exports `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor
   GIT_CONFIG_VALUE_0=false` (env only; the user's git config sets fsmonitor on).
@@ -185,14 +191,15 @@ Keymap clashes (`checks/keymap_clashes.lua`, report only). For n, x and o it lis
   leaks go in the check's `@allow-leak` with a reason.
 - Lazy's checker state is seeded per check so no check git-fetches the plugins.
 - Before the run: no text file and no symlink anywhere under `data/` may reach a live nvim dir or an
-  old sandbox (copied Mason trees start binaries by absolute path; nvim-treesitter links
+  old sandbox (copied tool trees start binaries by absolute path; nvim-treesitter links
   `site/queries/*` into its plugin dir by absolute path); `--refresh` repoints them into `data/`.
   The scan is `find -exec /usr/bin/grep` plus symlink targets: `grep -r` skips symlinks.
 - No display: the config sets `clipboard=unnamedplus`, so suite.sh unsets `WAYLAND_DISPLAY`,
   `DISPLAY` and `TMUX` for every check, and nv.sh unsets the first two. After the run, any
   `wl-copy`, `xclip` or `xsel` carrying a suite tag FAILs the run and is killed; one whose environ
   has the live `~/.config` is the user's own and is left alone.
-- After the run: nothing under the live nvim dirs is newer than the run's stamp, no inotify
+- After the run: nothing under the live nvim dirs, the user's `~/.config/mise`, `~/.local/share/mise/installs`
+  or `~/.rustup/toolchains` is newer than the run's stamp, no inotify
   instance and no `git fsmonitor--daemon` was left by the sandbox.
 
 ## GUI check (optional, not in the default run): in the VM only
@@ -211,7 +218,7 @@ gui.sh down                        # release the lease (powers the VM off)
 ```
 
 The scenes: first start (lazy bootstrap, plugin and parser install, no hit-enter prompt), the
-ask-first tool prompt on `main.lua` (answered Yes), which-key for `<leader>` with lua_ls attached,
+missing-tool prompt on `main.lua` (answered Install; `mise use -g` in the guest), which-key for `<leader>` with lua_ls attached,
 the completion menu, pending keys (`"a2d`), and `:Gitsigns diffthis` with `]c`. In the guest, the
 config replaces `~/.config/nvim` (the home-manager one is kept as `nvim.hm`), the build is
 `~/nvr/builds/<ver>`, nvim listens on `/tmp/nvr.sock` and is driven with `--remote-send` and

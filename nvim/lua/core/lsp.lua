@@ -1,4 +1,4 @@
--- LSP servers are automatically managed by Mason
+-- Diagnostics display and LSP keymaps gated on what the attached clients support; core.lsp_servers starts the servers
 vim.diagnostic.config({
   virtual_text = true,
   underline = true,

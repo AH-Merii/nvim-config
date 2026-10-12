@@ -125,7 +125,16 @@ return {
 
       -- Formatters
       local ok_conform, conform = pcall(require, "conform")
-      if ok_conform then
+      -- conform's availability check waits for each formatter's binary, so ask only once they are resolved;
+      -- ToolsChanged updates the list when the last one is
+      local tools = require("tools")
+      local root = tools.root(bufnr)
+      local resolving = ok_conform
+        and vim.iter(conform.list_formatters_for_buffer(bufnr)):any(function(name)
+          local bin = tools.catalog.binary("formatter", name)
+          return bin ~= nil and tools.resolve(bin, root) == nil
+        end)
+      if ok_conform and not resolving then
         local formatters = conform.list_formatters_to_run(bufnr)
         if formatters and not vim.tbl_isempty(formatters) then
           cached_formatters = table.concat(vim.tbl_map(function(f) return f.name end, formatters), ", ")
@@ -139,8 +148,8 @@ return {
       -- Linters
       local ok_lint, lint = pcall(require, "lint")
       if ok_lint then
-        local ft = vim.bo[bufnr].filetype
-        local configured = lint.linters_by_ft[ft]
+        -- nvim-lint's own lookup, so dotted filetypes (yaml.github-actions) get each part's linters
+        local configured = lint._resolve_linter_by_ft(vim.bo[bufnr].filetype)
         if configured and not vim.tbl_isempty(configured) then
           cached_linters = table.concat(configured, ", ")
         else
@@ -154,6 +163,14 @@ return {
     -- Update cache on buffer/window changes, LSP lifecycle events, and after save
     vim.api.nvim_create_autocmd({ "BufEnter", "FileType", "LspAttach", "LspDetach", "BufWritePost" }, {
       callback = update_statusline_cache,
+    })
+    -- A tool was found, installed or lost: update the lists and the tools indicator
+    vim.api.nvim_create_autocmd("User", {
+      pattern = "ToolsChanged",
+      callback = function()
+        update_statusline_cache()
+        lualine.refresh({ place = { "statusline" } })
+      end,
     })
 
     ---------------------------------------------------------------------------
@@ -372,6 +389,15 @@ return {
       function() return cached_linters end,
       icon = " ",
       color = { fg = colors.orange, gui = "bold" },
+    })
+
+    -- Tools: a wrench with the number of missing tools and "?" for an unanswered project mise config, hidden
+    -- otherwise (lualine leaves out the icon of an empty component); click for :Tools
+    ins_left({
+      function() return require("tools.ux").status() end,
+      icon = "󰖷",
+      color = { fg = colors.orange, gui = "bold" },
+      on_click = function() vim.cmd("Tools") end,
     })
 
     ---------------------------------------------------------------------------

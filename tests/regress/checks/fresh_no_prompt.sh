@@ -3,7 +3,7 @@
 # @areas    startup installer treesitter ui
 # @budget   90
 # @fresh
-# @network  lazy clones nvim-treesitter and ts.install downloads the parsers (~30 tarballs, ~10s); every other plugin and Mason come pre-seeded
+# @network  lazy clones nvim-treesitter and ts.install downloads the parsers (~30 tarballs, ~10s); every other plugin comes pre-seeded
 #
 # The prompt only exists with a real UI, so nvim runs as a TUI in a private tmux server (killed on exit); the
 # screen is polled for "Press ENTER" and "-- More --". The data dir is seeded from the version's data/ except nvim-treesitter
@@ -23,19 +23,20 @@ trap cleanup EXIT
 trap 'exit 143' TERM INT
 mkdir -p "$D"
 
-if ! [ -d "$SRC/lazy/lazy.nvim" ] || ! [ -d "$SRC/mason/packages" ]; then
-  say "FAIL seed  -- no lazy or Mason under $SRC (run suite.sh --refresh)"; say DONE; exit 0
+if ! [ -d "$SRC/lazy/lazy.nvim" ]; then
+  say "FAIL seed  -- no lazy under $SRC (run suite.sh --refresh)"; say DONE; exit 0
 fi
 mkdir -p "$DST/lazy" "$DST/site/plugin"
 for p in "$SRC"/lazy/*; do
   [ "${p##*/}" = nvim-treesitter ] || cp -a --reflink=auto "$p" "$DST/lazy/"
 done
-cp -a --reflink=auto "$SRC/mason" "$DST/mason"
 echo 'vim.wait(3000)' >"$DST/site/plugin/zz_nvr_init_wait.lua"
 
 # --cmd, before init.lua: record every nvim_echo (nvim-treesitter's log captures nvim_echo when it loads)
 cat >"$D/pre.lua" <<'LUA'
 _G.NVR = { echoes = {} }
+-- this check is about hit-enter prompts; the tools offer is a prompt of its own and installs nothing here
+vim.g.install_tools = "off"
 local echo = vim.api.nvim_echo
 vim.api.nvim_echo = function(chunks, history, opts)
   local ok, text = pcall(function() return table.concat(vim.tbl_map(function(c) return tostring(c[1]) end, chunks)) end)
@@ -44,7 +45,7 @@ vim.api.nvim_echo = function(chunks, history, opts)
 end
 LUA
 
-# -c: after VimEnter, poll on a timer (the UI loop keeps running) until the parser and Mason installs settle
+# -c: after VimEnter, poll on a timer (the UI loop keeps running) until the parser installs settle
 cat >"$D/drive.lua" <<'LUA'
 local D, MODE = vim.env.NVR_CHECK_DIR, vim.env.NVR_MODE
 local CAP = tonumber(vim.env.NVR_SETTLE_MAX or "60") * 1e9
@@ -55,55 +56,6 @@ local function rec(ok, name, detail)
 end
 local function info(s) table.insert(res, "INFO " .. s) end
 local function join(t, n) return table.concat(vim.list_slice(t, 1, n or #t), ", ") end
-
-local okreg, reg = pcall(require, "mason-registry")
-local failed = {}
-if okreg then
-  reg:on("package:install:failed", vim.schedule_wrap(function(pkg) failed[pkg.name] = true end))
-end
-
-local function lazy_opts(name)
-  local ok, v = pcall(function()
-    local p = require("lazy.core.config").plugins[name]
-    return p and require("lazy.core.plugin").values(p, "opts", false)
-  end)
-  return ok and type(v) == "table" and v or {}
-end
-
--- Mason packages the config asks for, by package name
-local function requested()
-  if not okreg then return {} end
-  local ok, mlsp = pcall(require, "mason-lspconfig")
-  local map = ok and mlsp.get_mappings().lspconfig_to_package or {}
-  local set = {}
-  local function add(n)
-    n = type(n) == "table" and n[1] or n
-    if type(n) ~= "string" then return end
-    local okh, has = pcall(reg.has_package, n)
-    if not (okh and has) and map[n] then n = map[n] end
-    set[n] = true
-  end
-  for _, n in ipairs(lazy_opts("mason-tool-installer.nvim").ensure_installed or {}) do add(n) end
-  for _, n in ipairs(lazy_opts("mason-lspconfig.nvim").ensure_installed or {}) do add(n) end
-  local list = vim.tbl_keys(set)
-  table.sort(list)
-  return list
-end
-
-local function mason_status(pkgs)
-  local missing, busy = {}, {}
-  for _, n in ipairs(pkgs) do
-    local ok, pkg = pcall(reg.get_package, n)
-    if not ok then
-      table.insert(missing, n)
-    elseif pkg:is_installing() then
-      table.insert(busy, n)
-    elseif not pkg:is_installed() then
-      table.insert(missing, n)
-    end
-  end
-  return missing, busy
-end
 
 -- parser installs, from nvim-treesitter's log lines
 local function ts_state()
@@ -136,22 +88,22 @@ local function lazy_missing()
   return out
 end
 
--- servers that must attach to buf: enabled or asked of mason-lspconfig, covering its filetype, with a root when required, runnable
+-- servers that must attach to buf: enabled, covering its filetype, with a root when required, runnable; a catalog
+-- server only when the tools resolver found its binary (the config's root_dir wrapper declines otherwise)
 local function expected_servers(buf)
-  local ft, names, want, asked = vim.bo[buf].filetype, {}, {}, {}
-  for _, n in ipairs(lazy_opts("mason-lspconfig.nvim").ensure_installed or {}) do
-    n = type(n) == "table" and n[1] or n
-    if type(n) == "string" then asked[n], names[n] = true, true end
-  end
+  local ft, names, want = vim.bo[buf].filetype, {}, {}
+  local tools, catalog = require("tools"), require("tools.catalog")
   for _, f in ipairs(vim.api.nvim_get_runtime_file("lsp/*.lua", true)) do names[vim.fn.fnamemodify(f, ":t:r")] = true end
   for n in pairs(vim.lsp._enabled_configs or {}) do names[n] = true end
   for n in pairs(names) do
-    local c = (vim.lsp.is_enabled(n) or asked[n]) and vim.lsp.config[n]
+    local c = vim.lsp.is_enabled(n) and vim.lsp.config[n]
     if c and (c.filetypes == nil or vim.list_contains(c.filetypes, ft)) then
+      local bin = catalog.binary("server", n)
+      local found = not bin or (tools.get(bin, tools.root(buf)) or {}).path ~= nil
       local runnable = type(c.cmd) == "function" or (type(c.cmd) == "table" and vim.fn.executable(c.cmd[1]) == 1)
       local root_ok = not (c.workspace_required and type(c.root_dir) ~= "function" and c.root_markers)
         or vim.fs.root(buf, c.root_markers) ~= nil
-      if runnable and root_ok then table.insert(want, n) end
+      if found and runnable and root_ok then table.insert(want, n) end
     end
   end
   table.sort(want)
@@ -161,7 +113,7 @@ local function unattached(buf, want)
   return vim.tbl_filter(function(n) return not vim.lsp.get_clients({ bufnr = buf, name = n })[1] end, want)
 end
 
-local pkgs, pkgs_ready, t_enter, t_phase, buf0 = {}, not okreg, nil, nil, nil
+local t_enter, t_phase, buf0 = nil, nil, nil
 local phase = "settle"
 
 local function report()
@@ -184,18 +136,7 @@ local function report()
   local lm = lazy_missing()
   rec(#lm == 0, "every lazy plugin installed", #lm > 0 and ("missing " .. join(lm)) or nil)
 
-  if okreg then
-    local missing, busy = mason_status(pkgs)
-    if MODE == "bootstrap" then
-      local fl = vim.tbl_filter(function(m) return failed[m] end, missing)
-      rec(#missing == 0 and #busy == 0, "every Mason package the config asks for installed",
-        string.format("%d requested; missing [%s]; failed [%s]; still installing [%s]", #pkgs, join(missing), join(fl), join(busy)))
-    elseif #missing + #busy > 0 then
-      info("seeded Mason lacked [" .. join(missing) .. "], installing [" .. join(busy) .. "]")
-    end
-  end
-
-  local attach_name = "file opened at launch gets its servers once Mason installs them"
+  local attach_name = "file opened at launch gets its servers from the suite's tools"
   if MODE == "bootstrap" and not (buf0 and vim.api.nvim_buf_is_valid(buf0)) then
     rec(false, attach_name, "no buffer for the launch file " .. vim.fn.argv(0))
   elseif MODE == "bootstrap" then
@@ -234,15 +175,10 @@ local function tick()
   local t = now()
   if phase == "settle" then
     local _, _, pending = ts_state()
-    local missing, busy = {}, {}
-    if okreg then missing, busy = mason_status(pkgs) end
-    local mason_done = #busy == 0 and #vim.tbl_filter(function(m) return not failed[m] end, missing) == 0
-    if MODE ~= "bootstrap" then mason_done = #busy == 0 end
-    local settled = pkgs_ready and t - t_enter > 3e9 and #pending == 0 and mason_done
+    local settled = t - t_enter > 3e9 and #pending == 0
     if settled or t - t_enter > CAP then
       if not settled then
-        rec(false, "first start settled", string.format("after %ds: parsers pending [%s], Mason registry ready=%s, installing [%s], not installed [%s]",
-          CAP / 1e9, join(pending), tostring(pkgs_ready), join(busy), join(missing)))
+        rec(false, "first start settled", string.format("after %ds: parsers pending [%s]", CAP / 1e9, join(pending)))
       end
       phase, t_phase = MODE == "bootstrap" and "attach" or "report", t
     end
@@ -267,11 +203,6 @@ vim.api.nvim_create_autocmd("VimEnter", {
     local b = vim.fn.argc() > 0 and vim.fn.bufnr(vim.fn.fnamemodify(vim.fn.argv(0), ":p")) or -1
     buf0 = b > 0 and b or nil
     timer:start(250, 250, vim.schedule_wrap(function()
-      -- package names come from the registry, which a fresh data dir downloads first
-      if not pkgs_ready then
-        local okn, names = pcall(reg.get_all_package_names)
-        if okn and #names > 0 then pkgs, pkgs_ready = requested(), true end
-      end
       local ok, err = pcall(tick)
       if not ok and phase ~= "done" then
         phase = "done"

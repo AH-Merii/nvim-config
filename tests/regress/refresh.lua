@@ -1,6 +1,6 @@
--- suite.sh --refresh: sync data/ to the config under test. Lazy to the lockfile, Mason to every check's
--- @needs (plus any ensure_installed list the config has; it never uninstalls), parsers to the config's list.
--- NVR_REFRESH_DRY=1 (suite.sh --refresh-dry-run): only print the Mason keep, install and remove sets.
+-- suite.sh --refresh: sync data/ to the config under test. Lazy to the lockfile, the suite's mise and rustup to
+-- every check's @needs (it never uninstalls), parsers to the config's list.
+-- NVR_REFRESH_DRY=1 (suite.sh --refresh-dry-run): only print the tools wanted and which of them do not resolve.
 local failed = false
 local dry = vim.env.NVR_REFRESH_DRY == "1"
 local suite = vim.fs.dirname(vim.fs.normalize(debug.getinfo(1, "S").source:sub(2)))
@@ -19,11 +19,6 @@ local function lazy_sync()
   end
   if #missing > 0 then fail("lazy plugins not installed: %s", table.concat(missing, " ")) end
   say("lazy: %d plugins at the lockfile", #require("lazy").plugins())
-end
-
-local function plugin_opts(name)
-  local p = require("lazy.core.config").plugins[name]
-  return p and require("lazy.core.plugin").values(p, "opts", false) or {}
 end
 
 -- @needs of every check in the suite, not only the selected ones; same parse as lib.sh's header()
@@ -46,60 +41,88 @@ local function suite_needs()
   return needs, #files
 end
 
-local function mason_sync()
-  require("lazy").load({ plugins = { "mason.nvim", "mason-lspconfig.nvim", "mason-tool-installer.nvim" } })
-  local registry = require("mason-registry")
-  if not dry then -- a dry run reads the registry already in data/; a refresh can download it
-    local done = false
-    registry.refresh(function() done = true end)
-    vim.wait(120000, function() return done end, 50)
-  end
-  local want = {}
-  for _, t in ipairs(plugin_opts("mason-tool-installer.nvim").ensure_installed or {}) do
-    want[type(t) == "table" and t[1] or t] = true
-  end
-  local map = require("mason-lspconfig").get_mappings().lspconfig_to_package
-  for _, s in ipairs(plugin_opts("mason-lspconfig.nvim").ensure_installed or {}) do
-    want[map[s] or s] = true
-  end
-  local needs, nfiles = suite_needs()
-  for n in pairs(needs) do want[n] = true end
-  if next(want) == nil then
-    return fail("mason: keep-list is empty: no @needs in %d checks under %s and no ensure_installed in the config", nfiles, suite)
-  end
+-- Runs cmd with the sandbox env plus env, waiting up to 15 minutes; returns the vim.system result.
+local function run(cmd, env)
+  local ok, res = pcall(function() return vim.system(cmd, { cwd = "/", env = env, text = true, stdin = false }):wait(900000) end)
+  return ok and res or { code = -1, stdout = "", stderr = tostring(res) }
+end
+local function first_line(res) return vim.trim(res.stderr ~= "" and res.stderr or res.stdout):match("[^\n]*$") end
 
-  local keep, install, unlisted = vim.tbl_keys(want), {}, {}
-  table.sort(keep)
-  for _, name in ipairs(keep) do
-    local ok, pkg = pcall(registry.get_package, name)
-    if not ok then
-      fail("mason: no package %s", name)
-    elseif not pkg:is_installed() then
-      table.insert(install, pkg)
+-- The suite's tools: every @needs is a catalog binary (lua/tools/catalog.lua). mise tools go into the suite's
+-- own global config with `mise use -g` (MISE_* point into data/mise, see lib.sh mise_env), rustup components
+-- into data/rustup. Then each need must resolve through the config's own resolver.
+local function tools_sync()
+  local catalog = require("tools.catalog")
+  local needs, nfiles = suite_needs()
+  local keep = vim.tbl_keys(needs)
+  if #keep == 0 then
+    return fail("tools: keep-list is empty: no @needs in %d checks under %s", nfiles, suite)
+  end
+  -- a tool's runtime and the binaries it calls come along
+  for _, name in ipairs(vim.list_slice(keep)) do
+    for _, extra in ipairs((catalog.tools[name] or {}).requires or {}) do
+      if not needs[extra] then needs[extra] = true; table.insert(keep, extra) end
     end
   end
-  for _, name in ipairs(registry.get_installed_package_names()) do
-    if not want[name] then table.insert(unlisted, name) end
+  table.sort(keep)
+  local specs, components, system = {}, {}, {}
+  for _, name in ipairs(keep) do
+    local entry = catalog.tools[name]
+    if not entry then
+      fail("tools: %s is in a check's @needs but not in the catalog", name)
+    elseif entry.component then
+      table.insert(components, entry.component)
+    elseif entry.spec then
+      table.insert(specs, entry.spec .. "@latest")
+    else
+      table.insert(system, name)
+    end
+    local runtime = entry and entry.runtime and entry.runtime ~= "rust" and catalog.runtimes[entry.runtime]
+    if runtime and not vim.list_contains(specs, runtime.spec) then table.insert(specs, runtime.spec) end
   end
-  table.sort(unlisted)
-  say("mason: keep (%d): %s", #keep, table.concat(keep, " "))
-  say("mason: install (%d): %s", #install, table.concat(vim.tbl_map(function(p) return p.name end, install), " "))
-  say("mason: remove (0): refresh never uninstalls")
-  if #unlisted > 0 then
-    say("mason: installed, in no @needs, left alone (%d): %s", #unlisted, table.concat(unlisted, " "))
+  table.sort(specs)
+  say("tools: keep (%d): %s", #keep, table.concat(keep, " "))
+  say("tools: mise use -g (%d): %s", #specs, table.concat(specs, " "))
+  say("tools: rustup components (%d): %s", #components, table.concat(components, " "))
+  if #system > 0 then say("tools: from the system PATH (%d): %s", #system, table.concat(system, " ")) end
+  say("tools: mise data %s, global config %s", vim.env.MISE_DATA_DIR, vim.env.MISE_GLOBAL_CONFIG_FILE)
+  if not (vim.env.MISE_DATA_DIR or ""):find(suite, 1, true) then
+    return fail("tools: MISE_DATA_DIR %s is not the suite's own; refusing to install", tostring(vim.env.MISE_DATA_DIR))
   end
-  if dry then return end
 
-  local pending = #install
-  for _, pkg in ipairs(install) do
-    say("mason: installing %s", pkg.name)
-    pkg:install({}, function(success, err)
-      pending = pending - 1
-      if not success then fail("mason: install %s: %s", pkg.name, vim.inspect(err)) end
-    end)
+  if not dry and #specs > 0 then
+    vim.fn.mkdir(vim.fs.dirname(vim.env.MISE_GLOBAL_CONFIG_FILE), "p")
+    local res = run({ "mise", "use", "-g", unpack(specs) }, { MISE_YES = "1" })
+    if res.code ~= 0 then fail("tools: mise use -g: %s", first_line(res)) end
   end
-  if not vim.wait(900000, function() return pending == 0 end, 100) then fail("mason: timed out") end
-  say("mason: %d packages wanted, %d installed", vim.tbl_count(want), #registry.get_installed_package_names())
+  if not dry and #components > 0 then
+    -- a minimal stable toolchain in the suite's own RUSTUP_HOME; the user's ~/.rustup is never touched
+    local home = suite .. "/data/rustup"
+    local env = { RUSTUP_HOME = home, CARGO_HOME = home .. "/cargo" }
+    local res = run({ "rustup", "toolchain", "install", "stable", "--profile", "minimal", "--no-self-update",
+      "--component", table.concat(components, ",") }, env)
+    if res.code ~= 0 then fail("tools: rustup toolchain install: %s", first_line(res)) end
+    res = run({ "rustup", "default", "stable" }, env)
+    if res.code ~= 0 then fail("tools: rustup default stable: %s", first_line(res)) end
+    vim.env.RUSTUP_HOME = home
+  end
+
+  -- every need must now resolve, from the suite's mise or the system, never a shim or a live dir
+  local tools = require("tools")
+  tools.refresh()
+  local root = vim.fn.getcwd()
+  local results
+  tools.resolve_all(keep, root, function(r) results = r end)
+  if not vim.wait(60000, function() return results ~= nil end, 50) then return fail("tools: resolving timed out") end
+  local missing = {}
+  for _, name in ipairs(keep) do
+    local r = results[name]
+    if not r.path then table.insert(missing, ("%s (%s)"):format(name, r.reason or r.source)) end
+  end
+  if #missing > 0 then
+    (dry and say or fail)("tools: missing (%d): %s", #missing, table.concat(missing, "; "))
+  end
+  say("tools: %d needed, %d resolve", #keep, #keep - #missing)
 end
 
 local function parsers_sync()
@@ -127,7 +150,7 @@ vim.api.nvim_create_autocmd("VimEnter", {
         vim.g.did_very_lazy = true
         vim.api.nvim_exec_autocmds("User", { pattern = "VeryLazy", modeline = false })
       end
-      for _, step in ipairs(dry and { mason_sync } or { lazy_sync, mason_sync, parsers_sync }) do
+      for _, step in ipairs(dry and { tools_sync } or { lazy_sync, tools_sync, parsers_sync }) do
         local ok, err = xpcall(step, debug.traceback)
         if not ok then fail("%s", err) end
       end

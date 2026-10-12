@@ -1,6 +1,6 @@
  Overview
 
-This is a personal Neovim configuration focused on LSP-driven development with lazy loading and modular architecture. The config supports Go, Rust, Python, Lua, TypeScript, PHP, C/C++, and more.
+This is a personal Neovim configuration focused on LSP-driven development with lazy loading and modular architecture. The config supports Go, Rust, Python, Lua, TypeScript, C/C++, and more.
 
 ## Architecture
 
@@ -8,12 +8,13 @@ This is a personal Neovim configuration focused on LSP-driven development with l
 
 The loading sequence is strictly ordered in `init.lua`:
 
-1. `core.lsp` - Configure diagnostic appearance before any LSP loads
-2. `config.options` - Set Vim options & define `mapleader`
-3. `config.keymaps` - Register global keymaps
-4. `config.autocmds` - Setup autocommands and event hooks
-5. `core.lazy` - Bootstrap Lazy.nvim and load all plugins
-6. `config.helpers` - Loaded on `VeryLazy` event after plugins ready
+1. `tools` and `tools.ux` - Tool resolver, dotted sub-filetypes, install prompts and `:Tools` (before any plugin looks a tool up)
+2. `core.lsp` - Configure diagnostic appearance before any LSP loads
+3. `config.options` - Set Vim options & define `mapleader`
+4. `config.keymaps` - Register global keymaps
+5. `config.autocmds` - Setup autocommands and event hooks
+6. `core.lazy` - Bootstrap Lazy.nvim and load all plugins
+7. `config.helpers` - Loaded on `VeryLazy` event after plugins ready
 
 **Critical**: This order ensures dependencies are met (e.g., `mapleader` defined before keymaps).
 
@@ -25,7 +26,9 @@ nvim/
 ├── lua/
 │   ├── core/                 # Core framework initialization
 │   │   ├── lazy.lua         # Plugin manager bootstrap
-│   │   └── lsp.lua          # Diagnostic configuration
+│   │   ├── lsp.lua          # Diagnostic configuration
+│   │   └── lsp_servers.lua  # Enabled servers, each run from its resolved binary
+│   ├── tools/               # Tool resolver (mise), catalog, sub-filetypes, prompts and :Tools
 │   ├── config/              # Editor configuration
 │   │   ├── options.lua      # Vim options
 │   │   ├── keymaps.lua      # Global keymaps
@@ -50,22 +53,23 @@ nvim/
 
 ### Two-Tier System
 
-**Tier 1: Automatic Setup** (`lua/plugins/mason.lua`)
-- Opening a file offers to install the Mason packages its filetype needs and lacks: the servers in `servers`, the formatters in conform's `formatters_by_ft`, the linters in nvim-lint's `linters_by_ft` and anything in `extra_packages`. A filetype never opened installs nothing, and nothing installs headless
-- The offer is a prompt, "Install X, Y for <filetype>?", with Yes, Not now and Never. Not now lasts for the session; Never is kept per filetype in `install_tools_never.json` under `stdpath("state")` (`~/.local/state/nvim/`), and removing the filetype from it brings the prompt back. Several files opened at once get one prompt at a time, one per filetype
-- `vim.g.install_tools` sets the behaviour: `"ask"` (default), `"auto"` to install without asking, or `"off"`. Set it in `lua/config/options.lua`
-- Mason's pip packages need a `python3` that can make a venv; without one, `uv` installs a managed Python first and Neovim puts it on its `PATH`
-- Mason-LSPConfig enables every installed server, so a server attaches to open buffers once its install lands
-- Servers auto-launch when filetypes are detected
+**Tier 1: Tools from mise** (`lua/tools/`, decisions in `docs/mise-tooling-decisions.md`)
+- Every server, formatter and linter binary comes from mise or the system, found per project root, first hit wins: the project env (`.venv/bin`, `node_modules/.bin`), the project's mise config if you accepted it, global mise tools, then the system `PATH` without mise shims, mise install dirs or Mason's bin dir. Each tool runs from that absolute path with cwd = the project root
+- `lua/tools/catalog.lua` lists each binary's mise spec, project dirs, runtime (node, go) and rustup component
+- A project with its own mise config asks once: *Use + install* (trusts the config and runs `mise install`), *Installed only* or *Global only*. The answer is kept in `stdpath("state")/tools/projects.json` until the config changes
+- A missing tool is offered once, in one batched prompt naming the exact `mise use -g ...` (or `rustup component add ...`), and only on files it would run on. Workflow YAML is `yaml.github-actions` and `pyproject.toml` is `toml.pyproject` (`lua/tools/filetypes.lua`), so jactionlint, zizmor and pyproject-fmt are offered only there
+- Never prompts for library code (site-packages, node_modules, cargo registry, Go module cache), git commit messages, special buffers, headless runs, or with `vim.g.install_tools = "off"`
+- After that: a statusline indicator (a wrench with the missing count, `?` for an unanswered project config; hidden when nothing is missing) and `:Tools` (per tool: binary, source, reason; install / retry / restart; `:Tools install|retry|restart|project`)
+- `core/lsp_servers.lua` enables an explicit server list. A server whose binary is missing is not started and raises no error; it starts once the binary turns up, and restarts when a refresh or install moves its binary
 
 **Tier 2: Custom Configuration** (`after/lsp/[server].lua`)
 - Each LSP server can have a custom config file that returns server-specific options
 - These files are late-loaded after Neovim understands filetypes
-- Example servers with custom configs: `gopls.lua`, `rust_analyzer.lua`, `pyrefly.lua`, `intelephense.lua`
+- Example servers with custom configs: `gopls.lua`, `rust_analyzer.lua`, `pyrefly.lua`, `yamlls.lua`
 
 ### Adding a New LSP Server
 
-1. Add server name to `servers` in `lua/plugins/mason.lua`
+1. Add the binary to `lua/tools/catalog.lua` (mise spec, `servers = { <name> = { args } }`) and the server name to `M.servers` in `lua/core/lsp_servers.lua`
 2. Optionally create `after/lsp/[server].lua` for custom settings
 3. Add formatters to `lua/plugins/conform.lua` under `formatters_by_ft`
 4. Add linters to `lua/plugins/nvim-lint.lua` under `linters_by_ft`
@@ -248,7 +252,7 @@ For each language, the tooling chain is:
 Configure in:
 - `lua/plugins/conform.lua` - Add to `formatters_by_ft`
 - `lua/plugins/nvim-lint.lua` - Add to `linters_by_ft`
-- `lua/plugins/mason.lua` - Nothing, unless the Mason package has another name (`package_names`) or no filetype list names the tool (`extra_packages`)
+- `lua/tools/catalog.lua` - The tool's binary and mise spec (`formatters = { ... }` or `linters = { ... }`)
 
 ## Testing Changes
 
@@ -263,7 +267,7 @@ After modifying configuration:
 ## Common Tasks
 
 **Update plugins**: `:Lazy update`
-**Install missing tools**: Open a file of that filetype and answer Yes; `:Mason` shows them (press `U` to update all)
+**Install missing tools**: Open a file of that filetype and accept the offer, or `:Tools install`; `:Tools` shows where each binary comes from. Update with `mise upgrade`
 **Check LSP logs**: `:LspLog` (`:LspInfo` shows the path)
 **Reload config**: Restart Neovim (changes to `init.lua` and core modules require restart)
 **Format file**: Handled automatically on save via Conform
