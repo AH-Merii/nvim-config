@@ -429,6 +429,15 @@ return {
       },
       cond = conditions.hide_in_width,
     })
+    -- Running progress-messages (LSP work, :checkhealth), e.g. "40%(2)"; % escaped, "%(" opens a statusline group
+    ins_right({
+      function() return (vim.ui.progress_status():gsub("%%", "%%%%")) end,
+      icon = "󰔟",
+      color = { fg = colors.violet },
+    })
+    vim.api.nvim_create_autocmd("Progress", {
+      callback = function() lualine.refresh({ place = { "statusline" } }) end,
+    })
     -- Macro Status
     ins_right({
       macro_recording,

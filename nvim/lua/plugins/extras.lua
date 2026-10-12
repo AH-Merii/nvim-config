@@ -1,10 +1,5 @@
 return {
 
-  -- Neovim notifications and LSP progress messages
-  {
-    "j-hui/fidget.nvim",
-  },
-
   -- Heuristically set buffer options
   -- {
   -- 	"tpope/vim-sleuth",

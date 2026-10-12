@@ -73,3 +73,9 @@ keymap("n", "<A-c>", '"_c', silent_desc("Change to black hole register"))
 
 -- Delete using black hole register
 keymap("n", "<A-d>", '"_d', silent_desc("Delete to black hole register"))
+
+-- Undo tree: Neovim's own (:Undotree), opens or closes
+keymap("n", "<leader>GU", function()
+  vim.cmd.packadd("nvim.undotree")
+  require("undotree").open()
+end, silent_desc("Toggle UndoTree"))

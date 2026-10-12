@@ -9,6 +9,8 @@ return {
   config = function()
     require("noice").setup({
       lsp = {
+        -- progress shows in lualine through vim.ui.progress_status()
+        progress = { enabled = false },
         override = {
           ["vim.lsp.util.convert_input_to_markdown_lines"] = true,
           ["vim.lsp.util.stylize_markdown"] = true,

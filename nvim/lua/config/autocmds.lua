@@ -169,6 +169,25 @@ function M.setup()
     callback = function(event) vim.bo[event.buf].commentstring = "# %s" end,
   })
 
+  -- LSP progress as progress-messages, so vim.ui.progress_status() (in lualine) counts it (:h LspProgress)
+  autocmd("LspProgress", {
+    group = user_group,
+    callback = function(ev)
+      local value = ev.data.params.value
+      if type(value) ~= "table" or not value.kind then
+        return
+      end
+      vim.api.nvim_echo({ { value.message or "done" } }, false, {
+        id = "lsp." .. ev.data.client_id .. "." .. tostring(ev.data.params.token),
+        kind = "progress",
+        source = "vim.lsp",
+        title = value.title,
+        status = value.kind ~= "end" and "running" or "success",
+        percent = value.percentage,
+      })
+    end,
+  })
+
   -- LuaSnip integration
   autocmd("CursorHold", {
     group = user_group,

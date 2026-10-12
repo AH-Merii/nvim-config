@@ -134,12 +134,4 @@ return {
     event = "VeryLazy",
     cmd = { "DiffviewOpen", "DiffviewClose", "DiffviewToggleFiles", "DiffviewFocusFiles" },
   },
-
-  -- not git, but lives in the same mental drawer: "history / timeline"
-  {
-    "mbbill/undotree",
-    keys = {
-      { "<leader>GU", ":UndotreeToggle<CR>", desc = "Toggle UndoTree" },
-    },
-  },
 }
