@@ -310,21 +310,4 @@ return {
     "windwp/nvim-ts-autotag",
     opts = {},
   },
-
-  -- comments
-  {
-    "numToStr/Comment.nvim",
-    opts = {
-      -- Comment.nvim indexes a nil parser in buffers without one on 0.12+ (numToStr/Comment.nvim#517)
-      pre_hook = function(ctx)
-        if not vim.treesitter.get_parser(0, nil, { error = false }) then
-          return require("Comment.ft").get(vim.bo.filetype, ctx.ctype) or vim.bo.commentstring
-        end
-      end,
-    },
-    lazy = false,
-  },
-
-  -- useful when there are embedded languages in certain types of files (e.g. Vue or React)
-  { "joosepalviste/nvim-ts-context-commentstring", lazy = true },
 }
