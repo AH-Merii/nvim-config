@@ -23,7 +23,6 @@ local function highlight_color(ctx)
 end
 
 return {
-  { "L3MON4D3/LuaSnip", keys = {} },
   {
     "saghen/blink.cmp",
     dependencies = {
@@ -32,7 +31,6 @@ return {
     version = "1.*",
     config = function()
       require("blink.cmp").setup({
-        snippets = { preset = "luasnip" },
         sources = {
           per_filetype = {
             codecompanion = { "codecompanion" },
@@ -109,7 +107,6 @@ return {
         -- Experimental signature help support
         -- signature = { window = { border = "rounded" }, enabled = true },
       })
-      require("luasnip.loaders.from_vscode").lazy_load()
     end,
   },
 }
