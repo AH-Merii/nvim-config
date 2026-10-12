@@ -1,38 +1,4 @@
 -- palletes
---- dynamic Catppuccin palette (fallback if missing)
-local function get_catppuccin_pallete()
-  local ok, palette = pcall(require, "catppuccin.palettes")
-  if ok then
-    local c = palette.get_palette()
-    return {
-      bg = c.mantle,
-      fg = c.text,
-      red = c.red,
-      yellow = c.yellow,
-      green = c.green,
-      cyan = c.teal,
-      blue = c.blue,
-      magenta = c.mauve,
-      orange = c.peach,
-      violet = c.lavender,
-    }
-  else
-    vim.notify("Unable to Load catppuccin pallette in lualine", vim.log.levels.WARN)
-    return {
-      bg = "#1e1e2e",
-      fg = "#cdd6f4",
-      red = "#f38ba8",
-      yellow = "#f9e2af",
-      green = "#a6e3a1",
-      cyan = "#94e2d5",
-      blue = "#89b4fa",
-      magenta = "#cba6f7",
-      orange = "#fab387",
-      violet = "#b4befe",
-    }
-  end
-end
-
 local function get_onedark_palette()
   local ok, onedark = pcall(require, "onedark.palette")
   if ok then

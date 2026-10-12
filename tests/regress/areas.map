@@ -22,7 +22,6 @@ lua/plugins/lualine.lua           ui
 lua/plugins/colorschemes.lua      ui
 lua/plugins/flash.lua             keys editing
 lua/plugins/extras.lua            ui editing keys
-lua/plugins/laravel.lua           lsp
 lua/plugins/dap.lua               keys
 lua/config/keymaps.lua            keys which-key
 lua/config/options.lua            editing ui
