@@ -1,7 +1,6 @@
 -- @desc     format_buffer (<leader>lf) formats with the planned formatter, reports no-ops and missing formatters, and shows the formatter's own error text
 -- @areas    format lsp
 -- @budget   40
--- @version-sensitive
 -- @needs    stylua terraform-ls
 local c = require("conform")
 local L = vim.log.levels

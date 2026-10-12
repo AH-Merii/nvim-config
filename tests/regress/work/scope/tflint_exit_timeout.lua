@@ -1,7 +1,6 @@
 -- @desc     the tflint client gets exit_timeout 500 from after/lsp/tflint.lua
 -- @areas    lsp
 -- @budget   40
--- @version-sensitive
 -- @needs    tflint
 -- @allow-leak tflint known --act-as-bundled-plugin orphan
 vim.fn.writefile({ 'variable "x" {}' }, FIX .. "/main.tf")

@@ -1,10 +1,5 @@
 return {
 
-  -- Neovim notifications and LSP progress messages
-  {
-    "j-hui/fidget.nvim",
-  },
-
   -- Heuristically set buffer options
   -- {
   -- 	"tpope/vim-sleuth",
@@ -21,10 +16,13 @@ return {
     -- VeryLazy, not lazy = true: snacks never requires mini.icons, it only reads the MiniIcons global that setup() sets
     event = "VeryLazy",
     opts = {},
-  },
-
-  {
-    "nvim-tree/nvim-web-devicons",
+    init = function()
+      -- diffview and lualine's filetype icons require nvim-web-devicons; mini.icons stands in for it
+      package.preload["nvim-web-devicons"] = function()
+        require("mini.icons").mock_nvim_web_devicons()
+        return package.loaded["nvim-web-devicons"]
+      end
+    end,
   },
 
   {

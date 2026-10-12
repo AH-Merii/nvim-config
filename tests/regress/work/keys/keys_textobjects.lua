@@ -1,7 +1,6 @@
 -- @desc     pressed in each fixture buffer, ]f reaches the file's first function where a language in the buffer has textobjects and is the built-in where none has, a ]/[ key's which-key label differs from its built-in label exactly where the key acts unlike the built-in, a filetype change re-derives both, a markdown code block brings its language's selects and moves until it goes, and the treesitter toggle exists iff a parser is active and flips highlighting
 -- @areas    keys treesitter which-key
 -- @budget   40
--- @version-sensitive
 -- Replaces work/keys/keys_textobjects.lua: judged by pressing the keys, not by which maps exist.
 
 local cur, n, bad

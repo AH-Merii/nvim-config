@@ -1,38 +1,4 @@
 -- palletes
---- dynamic Catppuccin palette (fallback if missing)
-local function get_catppuccin_pallete()
-  local ok, palette = pcall(require, "catppuccin.palettes")
-  if ok then
-    local c = palette.get_palette()
-    return {
-      bg = c.mantle,
-      fg = c.text,
-      red = c.red,
-      yellow = c.yellow,
-      green = c.green,
-      cyan = c.teal,
-      blue = c.blue,
-      magenta = c.mauve,
-      orange = c.peach,
-      violet = c.lavender,
-    }
-  else
-    vim.notify("Unable to Load catppuccin pallette in lualine", vim.log.levels.WARN)
-    return {
-      bg = "#1e1e2e",
-      fg = "#cdd6f4",
-      red = "#f38ba8",
-      yellow = "#f9e2af",
-      green = "#a6e3a1",
-      cyan = "#94e2d5",
-      blue = "#89b4fa",
-      magenta = "#cba6f7",
-      orange = "#fab387",
-      violet = "#b4befe",
-    }
-  end
-end
-
 local function get_onedark_palette()
   local ok, onedark = pcall(require, "onedark.palette")
   if ok then
@@ -429,16 +395,23 @@ return {
       },
       cond = conditions.hide_in_width,
     })
+    -- Running progress-messages (LSP work, :checkhealth), e.g. "40%(2)"; % escaped, "%(" opens a statusline group
+    ins_right({
+      function() return (vim.ui.progress_status():gsub("%%", "%%%%")) end,
+      icon = "󰔟",
+      color = { fg = colors.violet },
+    })
+    vim.api.nvim_create_autocmd("Progress", {
+      callback = function() lualine.refresh({ place = { "statusline" } }) end,
+    })
     -- Macro Status
     ins_right({
       macro_recording,
       color = { fg = colors.yellow, gui = "bold" },
     })
-    -- 0.12 leaves "~@\253" in %S while a <Cmd> or Lua mapping runs, e.g. which-key (neovim#40747)
-    function _G.statusline_showcmd() return (vim.api.nvim_eval_statusline("%S", {}).str:gsub("~@\253", "")) end
     -- Pending keys (e.g. a count), shown here since 'cmdheight' is 0
     ins_right({
-      function() return "%{v:lua.statusline_showcmd()}" end,
+      function() return "%S" end,
       color = { fg = colors.fg },
     })
 

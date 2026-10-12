@@ -1,7 +1,6 @@
 -- @desc     in diff mode ]c and [c jump to the next and previous change even in a buffer where the config maps them (a treesitter class move), and outside diff mode such a map still moves the cursor
 -- @areas    keys treesitter
 -- @budget   20
--- @version-sensitive
 -- From the keys-tidy patch to nvim-sbx-keys/checks2/textobjects.lua (section 6). Where ]c lands outside diff
 -- mode is the map's business: the file is a tracked repo file with a hunk and two classes, so a class or hunk move both move.
 

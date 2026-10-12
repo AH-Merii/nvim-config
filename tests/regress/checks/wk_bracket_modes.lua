@@ -1,7 +1,6 @@
 -- @desc     a ] or [ key with an icon of ours in normal mode shows the same icon wherever the visual or operator-pending popup shows it; ]b ]a ]l carry ours in every mode where pressing them runs the treesitter move and never where they run the built-ins; the x and o popups list no unmapped key that does nothing there
 -- @areas    which-key keys treesitter
 -- @budget   40
--- @version-sensitive
 -- @args     app.py
 local loaded = wait_until(function()
   local c = package.loaded["which-key.config"]

@@ -1,7 +1,6 @@
 -- @desc     every method-gated LSP key in core.lsp's table exists in a buffer iff an attached client supports its method, through attach, detach, dynamic (un)registration, a second client, and ftplugin maps
 -- @areas    keys lsp which-key
 -- @budget   30
--- @version-sensitive
 -- Ported from nvim-sbx-keys/checks2/lsp_gate.lua. In-process fake servers, so no Mason package is needed.
 
 local cur, n, bad

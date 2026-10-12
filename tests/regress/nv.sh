@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# usage: nv.sh <stable|nightly> [nvim args...]
+# usage: nv.sh nightly [nvim args...]
 # Runs the sandboxed nvim. NVR_HOME holds config/ state/ cache/, NVR_DATA the data dir (default: the
 # suite's data/). Without NVR_HOME a scratch home is built from $CFG and removed on exit.
 S=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 case "$1" in
-  stable) BIN=$HOME/.local/share/mise/installs/neovim/0.12.5/bin/nvim ;;
   nightly) BIN=$HOME/.local/share/mise/installs/neovim/nightly/bin/nvim ;;
-  *) echo "usage: nv.sh <stable|nightly> [nvim args...]" >&2; exit 2 ;;
+  *) echo "usage: nv.sh nightly [nvim args...]" >&2; exit 2 ;;
 esac
 shift
 

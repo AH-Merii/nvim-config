@@ -1,7 +1,6 @@
 -- @desc     which-key draws an icon of ours on ]b ]a ]l and their [ pairs where pressing the key runs a treesitter move (it stays in the buffer, no error), never the move's icon where it runs the built-in :bnext, :next or :lnext, also across filetype changes, and opening buffers adds no spec
 -- @areas    which-key keys treesitter
 -- @budget   30
--- @version-sensitive
 -- @args     main.lua
 local loaded = wait_until(function()
   local c = package.loaded["which-key.config"]

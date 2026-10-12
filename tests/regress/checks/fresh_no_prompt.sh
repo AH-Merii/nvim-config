@@ -2,7 +2,6 @@
 # @desc     a first start that installs a plugin and the parsers raises no hit-enter prompt, even when init-time work outlasts lazy's last redraw
 # @areas    startup installer treesitter ui
 # @budget   90
-# @version-sensitive
 # @fresh
 # @network  lazy clones nvim-treesitter and ts.install downloads the parsers (~30 tarballs, ~10s); every other plugin and Mason come pre-seeded
 #

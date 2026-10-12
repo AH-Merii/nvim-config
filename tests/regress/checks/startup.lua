@@ -1,7 +1,6 @@
 -- @desc     startup is clean: every lazy spec plugin is installed, specs load without notices, :checkhealth lazy has no ERROR or WARNING, and no error or warning reached the user after startup and VeryLazy
 -- @areas    startup smoke
 -- @budget   12
--- @version-sensitive
 local Config = require("lazy.core.config")
 local missing, count = {}, 0
 for name, p in pairs(Config.plugins) do

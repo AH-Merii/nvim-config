@@ -1,7 +1,6 @@
 -- @desc     pyrefly and ruff share one position encoding on python buffers, and ruff's columns, fixes and pyrefly hover stay right after multibyte text
 -- @areas    lsp
 -- @budget   45
--- @version-sensitive
 -- @needs    pyrefly ruff
 vim.cmd.edit("app.py")
 local buf = vim.api.nvim_get_current_buf()

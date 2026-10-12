@@ -97,8 +97,7 @@ function M.setup()
   -- Highlight on yank
   autocmd("TextYankPost", {
     group = user_group,
-    -- on_yank is the 0.12 name of hl_op
-    callback = function() (vim.hl.hl_op or vim.hl.on_yank)({ higroup = "Search", timeout = 200 }) end,
+    callback = function() vim.hl.hl_op({ higroup = "Search", timeout = 200 }) end,
   })
 
   -- Close specific filetypes with 'q'
@@ -170,17 +169,22 @@ function M.setup()
     callback = function(event) vim.bo[event.buf].commentstring = "# %s" end,
   })
 
-  -- LuaSnip integration
-  autocmd("CursorHold", {
+  -- LSP progress as progress-messages, so vim.ui.progress_status() (in lualine) counts it (:h LspProgress)
+  autocmd("LspProgress", {
     group = user_group,
-    callback = function()
-      local status_ok, luasnip = pcall(require, "luasnip")
-      if not status_ok then
+    callback = function(ev)
+      local value = ev.data.params.value
+      if type(value) ~= "table" or not value.kind then
         return
       end
-      if luasnip.expand_or_jumpable() then
-        vim.cmd([[silent! lua require("luasnip").unlink_current()]])
-      end
+      vim.api.nvim_echo({ { value.message or "done" } }, false, {
+        id = "lsp." .. ev.data.client_id .. "." .. tostring(ev.data.params.token),
+        kind = "progress",
+        source = "vim.lsp",
+        title = value.title,
+        status = value.kind ~= "end" and "running" or "success",
+        percent = value.percentage,
+      })
     end,
   })
 end
