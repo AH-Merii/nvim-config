@@ -1,7 +1,6 @@
 -- @desc     every bracket map the runtime python, go, rust, php and markdown ftplugins set shows a which-key label, not its rhs, and is otherwise the ftplugin's own map; no label outlives its map or shows where the maps are off
 -- @areas    which-key keys editing
 -- @budget   40
--- @version-sensitive
 -- @args     app.py
 local loaded = wait_until(function()
   local c = package.loaded["which-key.config"]

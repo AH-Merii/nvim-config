@@ -1,14 +1,14 @@
 # nvim-regress
 
-One rerunnable regression suite for the Neovim config, on stable 0.12.5 and nightly 0.13-dev.
+One rerunnable regression suite for the Neovim config, on nightly 0.13-dev.
 Nothing here edits the config under test, the repo, or the live `~/.config/nvim`,
 `~/.local/share/nvim`, `~/.local/state/nvim` and `~/.cache/nvim`.
 
 ## Run
 
 ```sh
-suite.sh                        # full suite, stable and nightly in parallel
-suite.sh both lsp               # full selection mode, only checks whose name matches /lsp/
+suite.sh                        # full suite
+suite.sh lsp                    # only checks whose name matches /lsp/
 suite.sh --area which-key       # iteration: checks tagged with an area
 suite.sh --changed main         # iteration: areas touched by `git diff main` in $CFG, plus startup and smoke
 suite.sh --work <feature>       # iteration: the checks in work/<feature>/
@@ -19,12 +19,9 @@ suite.sh --refresh-dry-run      # print the Mason keep, install and remove sets,
 CFG=/path/to/nvim suite.sh      # test another config dir (default: ../../nvim, this repo's config)
 ```
 
-- Positional `stable|nightly|both` picks versions; a second positional is a name filter (an
-  extended regex on the check name).
-- A plain run, with no `--area`, `--changed` or `--work`, runs everything on both versions. Use it
-  at integration points: before a branch lands, and for the final regression.
-- Iteration runs (`--area`, `--changed`, `--work`) default to stable only, plus nightly for checks
-  marked `@version-sensitive`. An explicit `stable|nightly|both` overrides that.
+- A positional argument is a name filter (an extended regex on the check name).
+- A plain run, with no `--area`, `--changed` or `--work`, runs everything. Use it at integration
+  points: before a branch lands, and for the final regression.
 - Output: one line per check and version with PASS/FAIL, elapsed and budget, the reasons under
   each FAIL, then a table, per-area timings, total wall time and the hygiene assertions. The exit
   status is non-zero on any failure.
@@ -34,12 +31,12 @@ CFG=/path/to/nvim suite.sh      # test another config dir (default: ../../nvim, 
 
 ### Tiers
 
-| when | run | versions |
-| --- | --- | --- |
-| iterating on one area | `suite.sh --area lsp,format` | stable, plus nightly for `@version-sensitive` checks |
-| after editing config files | `suite.sh --changed <git-range>` (e.g. `HEAD`, `main`) | same |
-| developing a feature | `suite.sh --work <feature>` | same |
-| before a branch lands, final regression | `suite.sh` | both, in parallel |
+| when | run |
+| --- | --- |
+| iterating on one area | `suite.sh --area lsp,format` |
+| after editing config files | `suite.sh --changed <git-range>` (e.g. `HEAD`, `main`) |
+| developing a feature | `suite.sh --work <feature>` |
+| before a branch lands, final regression | `suite.sh` |
 
 `--changed` maps each changed file (relative to `$CFG`) through `areas.map` to areas, and always
 adds `startup` and `smoke`. A changed file that no line of `areas.map` matches runs every area, so
@@ -63,8 +60,7 @@ add a line when a new config file appears.
 ### Feature work: work/ then checks/
 
 1. `mkdir work/<feature>` and write its checks there, same format as `checks/` (fixtures in
-   `work/<feature>/fixtures/<name>/` if needed). Run them with `suite.sh --work <feature>`; add
-   `both` for nightly too.
+   `work/<feature>/fixtures/<name>/` if needed). Run them with `suite.sh --work <feature>`.
 2. When the feature lands, promote the checks that pass the keep rule below: move them into
    `checks/` with their `@areas` (and fixtures into `fixtures/`), add `areas.map` lines for new
    config files, run `suite.sh --area <its areas>` once, then `rm -r work/<feature>`.
@@ -83,7 +79,7 @@ add a line when a new config file appears.
 | path | what |
 | --- | --- |
 | `suite.sh` | runner |
-| `nv.sh` | launcher: `nv.sh <stable\|nightly> [nvim args]`, sandboxed env (see Hygiene) |
+| `nv.sh` | launcher: `nv.sh nightly [nvim args]`, sandboxed env (see Hygiene) |
 | `lib.sh` | shared shell helpers |
 | `harness.lua` | headless check harness, loaded with `-c` |
 | `refresh.lua` | `--refresh`: lazy install/restore/clean, Mason installs for every `@needs`, parser install/update |
@@ -108,8 +104,6 @@ fresh data dir). The header is comment lines at the top:
 -- @desc     every enabled or Mason-installed server attaches to its filetypes
 -- @areas    lsp installer
 -- @budget   60
--- @versions stable nightly
--- @version-sensitive
 -- @fixture  default
 -- @args     main.lua
 -- @needs    lua-language-server pyrefly
@@ -122,8 +116,6 @@ fresh data dir). The header is comment lines at the top:
 | `@desc` | yes | one line: the behaviour that would go red |
 | `@areas` | yes | space-separated areas (see `areas.map`); `startup` and `smoke` always run under `--changed` |
 | `@budget` | yes | seconds of wall time, startup included; past it the check is killed and FAILs "over budget" |
-| `@versions` | no | where the check can run at all; default `stable nightly` |
-| `@version-sensitive` | no | iteration runs also run it on nightly |
 | `@fixture` | no | dir under `fixtures/` (or `work/<feature>/fixtures/`); default `default`. Copied fresh per check; it is the cwd |
 | `@args` | no | nvim startup args, e.g. a file to open, relative to the fixture |
 | `@needs` | no | Mason packages the check needs; missing ones FAIL before launch, `--refresh` installs them |
@@ -151,13 +143,13 @@ Globals available to a `.lua` check (cwd is the fixture copy; lazy's VeryLazy ha
 | `info(msg)` | record an INFO line |
 | `feed(keys)` | `nvim_feedkeys(keycode(keys), "mx")`: typed, mappings applied, executed now |
 | `wait_until(pred, ms)` | `vim.wait` with a 10ms poll; returns the predicate result |
-| `health(name, ms)` | text of `:checkhealth <name>` after its FileType checkhealth event, the last step on both versions (nightly renders async); `"TIMEOUT"` if it never comes |
+| `health(name, ms)` | text of `:checkhealth <name>` after its FileType checkhealth event, the last step (nightly renders async); `"TIMEOUT"` if it never comes |
 | `deprecations()` | `health("vim.deprecated")` |
 | `lsp_expected(buf, ms)` | sorted names of servers that must attach to `buf`, and notes; handles function `cmd`; waits up to `ms` (10s) for root_dir lookups, and expects one still looking |
 | `wait_attach(buf, names, ms)` | returns `missing, reasons`; returns early once every missing server has failed |
 | `wait_diagnostics(buf, pred, ms)` | waits until `pred(vim.diagnostic.get(buf))`, returns the diagnostics |
 | `lsp_log_tail(pat, n)` | last `n` lsp.log lines containing `pat` |
-| `FIX`, `VERSION` | fixture dir, `stable` or `nightly` |
+| `FIX`, `VERSION` | fixture dir, `nightly` |
 
 After the check body the harness also records as failures: errors in `:messages` (`MSG`) and
 error messages in noice's history (`NOTIFY`). Not `v:errmsg`: `:silent!` and `try` still set it,
@@ -179,7 +171,7 @@ then `DONE`). `NVR_DATA` is the data dir, a throwaway empty one under `@fresh`.
 
 ### Keymap clashes
 
-Keymap clashes (`checks/keymap_clashes.lua`, report only). For n, x and o it lists every built-in key a map of ours hides: global maps after startup, and buffer-local maps in python, lua, markdown, go, text and sh buffers once their servers and gitsigns attach. It compares them against two sources. The first is the same nvim's default maps, read from a `--clean --headless` child with throwaway XDG dirs. The second is the commands and text objects in `$VIMRUNTIME/doc/index.txt`: the normal, text-object, `[`/`]`, `g`, `z`, operator-pending and visual tables, where normal-mode motions (note 1) count in x and o too. A map counts as hiding a built-in when it equals the key, prefixes it, or gives a char, mark or register argument to it (`ma`, `'a`). A map identical to one the `--clean` nvim has (a default, a runtime ftplugin map) is not ours, and which-key triggers are skipped. Each version keeps its list in `state/<version>/keymap_clashes.txt`, the one place a check keeps anything between runs. The check diffs against that list, rewrites it and logs `INFO NEW` / `INFO GONE` lines, which only show with `-v` (`suite.sh -v both keymap_clashes`). It fails only when its own logic breaks: a probe map on `ip` in o mode must be reported and one on `<F35>` must not; each index.txt section and mode must parse to a sane count, with long-standing keys in the right modes; the `--clean` dump must succeed. It never asserts on which clashes exist.
+Keymap clashes (`checks/keymap_clashes.lua`, report only). For n, x and o it lists every built-in key a map of ours hides: global maps after startup, and buffer-local maps in python, lua, markdown, go, text and sh buffers once their servers and gitsigns attach. It compares them against two sources. The first is the same nvim's default maps, read from a `--clean --headless` child with throwaway XDG dirs. The second is the commands and text objects in `$VIMRUNTIME/doc/index.txt`: the normal, text-object, `[`/`]`, `g`, `z`, operator-pending and visual tables, where normal-mode motions (note 1) count in x and o too. A map counts as hiding a built-in when it equals the key, prefixes it, or gives a char, mark or register argument to it (`ma`, `'a`). A map identical to one the `--clean` nvim has (a default, a runtime ftplugin map) is not ours, and which-key triggers are skipped. Each version keeps its list in `state/<version>/keymap_clashes.txt`, the one place a check keeps anything between runs. The check diffs against that list, rewrites it and logs `INFO NEW` / `INFO GONE` lines, which only show with `-v` (`suite.sh -v keymap_clashes`). It fails only when its own logic breaks: a probe map on `ip` in o mode must be reported and one on `<F35>` must not; each index.txt section and mode must parse to a sane count, with long-standing keys in the right modes; the `--clean` dump must succeed. It never asserts on which clashes exist.
 
 ## Hygiene (built in)
 
@@ -212,8 +204,8 @@ no host window, runs no host `niri msg` and touches no host clipboard; every GUI
 
 ```sh
 gui.sh up                          # lease cachyos, restore after-pr140, boot headless, log in, push builds + $CFG + fixtures
-gui.sh scenes 0.12.5 ~/out         # empty data/state/cache, then six scenes -> ~/out/0.12.5-<n>-<scene>.png
-gui.sh scenes nightly ~/out        #   plus ~/out/<ver>-messages.txt (:messages, v:errmsg, parser count, ]c lines)
+gui.sh scenes nightly ~/out        # empty data/state/cache, then six scenes -> ~/out/nightly-<n>-<scene>.png
+                                   #   plus ~/out/<ver>-messages.txt (:messages, v:errmsg, parser count, ]c lines)
 gui.sh start nightly main.lua      # or drive it by hand: keys '<Space>', expr 'mode()', shot ~/out/x.png, stop
 gui.sh down                        # release the lease (powers the VM off)
 ```

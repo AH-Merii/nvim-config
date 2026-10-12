@@ -2,7 +2,6 @@
 # @desc     in the TUI the last line shows pending keys (count, operator, register) and never a mapping's internal key (~@<fd>), also after <Esc>
 # @areas    ui keys which-key
 # @budget   25
-# @version-sensitive
 set -u
 out() { printf '%s\n' "$*" >>"$CHECK_OUT"; }
 pass() { out "PASS $1"; }
@@ -78,7 +77,7 @@ for c in "44|4 4" "2d|2 d" '"a|" a'; do
   fi
 done
 
-# which-key's triggers are Lua mappings that stay open while the popup waits; 0.12 puts their key in %S
+# which-key's triggers are Lua mappings that stay open while the popup waits; their key must stay out of %S (neovim#40747)
 reset
 b0=$(body)
 send Space
@@ -94,7 +93,7 @@ b0=$(body)
 if has_last 3; then
   fail "3<leader> pending: the count shows, the mapping key does not" "a 3 is on the last line before typing: $(last_row)"
 else
-  # typed apart, as a person types; nightly does not show a count that arrives in one read with <leader>
+  # typed apart, as a person types; nvim does not show a count that arrives in one read with <leader>
   send 3
   wait_for 3000 has_last 3
   send Space

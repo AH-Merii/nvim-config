@@ -1,7 +1,6 @@
 -- @desc     every enabled or Mason-installed server covering a fixture file's filetype attaches to it, whether its cmd is a table or a function; Mason servers have a cmd; no root_dir declines because its tool failed; a buffer's clients share one position encoding
 -- @areas    lsp installer
 -- @budget   60
--- @version-sensitive
 -- @args     main.lua
 local files = { "main.lua", "app.py", "index.ts", "notes.md", "pyproject.toml", "hello.c", "rs/src/main.rs",
   "main.go", "script.sh", ".github/workflows/ci.yml" }

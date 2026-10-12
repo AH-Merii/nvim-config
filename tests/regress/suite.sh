@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # usage: suite.sh [-v] [--refresh] [--refresh-dry-run] [--list] [--selftest] [--area a,b] [--changed <git-range>] [--work <feature>]
-#                 [stable|nightly|both] [name-filter]
+#                 [name-filter]
 # See README.md.
 set -u
 S=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -11,7 +11,7 @@ unset WAYLAND_DISPLAY DISPLAY TMUX
 . "$S/lib.sh"
 export CFG
 
-VERS= FILTER= AREAS= RANGE= WORK= REFRESH=0 DRY=0 LIST=0 SELFTEST=0 VERBOSE=0
+FILTER= AREAS= RANGE= WORK= REFRESH=0 DRY=0 LIST=0 SELFTEST=0 VERBOSE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --refresh) REFRESH=1 ;;
@@ -23,18 +23,16 @@ while [ $# -gt 0 ]; do
     --changed) RANGE=$2; shift ;;
     --work) WORK=$2; shift ;;
     -h|--help) sed -n '2,4p' "$0"; exit 0 ;;
-    stable|nightly|both) VERS=$1 ;;
     -*) echo "unknown option $1" >&2; exit 2 ;;
     *) FILTER=$1 ;;
   esac
   shift
 done
 [ -f "$CFG/init.lua" ] || { echo "CFG=$CFG has no init.lua" >&2; exit 2; }
-ITER=0; [ -n "$AREAS$RANGE$WORK" ] && ITER=1
 
 # ---- select checks -----------------------------------------------------------------------------
 if [ $SELFTEST = 1 ]; then
-  CDIR=$S/selftest; VERS=${VERS:-stable}
+  CDIR=$S/selftest
 elif [ -n "$WORK" ]; then
   CDIR=$S/work/$WORK
   [ -d "$CDIR" ] || { echo "no work dir $CDIR" >&2; exit 2; }
@@ -70,15 +68,7 @@ for f in "$CDIR"/*.lua "$CDIR"/*.sh; do
     for a in $AREAS; do [[ $fareas == *" $a "* ]] && match=1; done
     [ -n "$match" ] || continue
   fi
-  allowed=$(header "$f" versions); allowed=${allowed:-stable nightly}
-  if [ "$VERS" = both ] || { [ -z "$VERS" ] && [ $ITER = 0 ]; }; then want="stable nightly"
-  elif [ -n "$VERS" ]; then want=$VERS
-  else
-    want=stable
-    has_header "$f" version-sensitive && want="stable nightly"
-    [[ " $allowed " == *" stable "* ]] || want=nightly
-  fi
-  for v in $want; do [[ " $allowed " == *" $v "* ]] && PLAN+=("$v $f"); done
+  PLAN+=("nightly $f")
 done
 if [ ${#PLAN[@]} = 0 ]; then echo "no checks selected" >&2; exit 2; fi
 if [ $LIST = 1 ]; then
@@ -92,7 +82,7 @@ fi
 # ---- run setup ---------------------------------------------------------------------------------
 RUNID=$(date +%Y%m%d-%H%M%S)-$$
 RUNROOT=$S/run/$RUNID
-mkdir -p "$RUNROOT"
+mkdir -p "$RUNROOT" "$S/last"
 touch "$RUNROOT/stamp"
 T0=$EPOCHREALTIME
 cleanup() {
@@ -120,7 +110,7 @@ if [ $REFRESH = 1 ]; then
     echo "refresh: lazy, Mason and parsers in $S/data for $CFG"
   fi
   ( cd "$H" && exec env NVR_HOME="$H" NVR_DATA="$data" NVR_REFRESH_DRY=$DRY NVIM_REGRESS_TAG="$RUNID/refresh/" \
-      timeout 1200 setsid "$S/nv.sh" stable --headless -c "luafile $S/refresh.lua" ) >"$log" 2>&1
+      timeout 1200 setsid "$S/nv.sh" nightly --headless -c "luafile $S/refresh.lua" ) >"$log" 2>&1
   rc=$?
   sed "s/\x1b\[[0-9;]*m//g" "$log" | grep -E "^(lazy|mason|parsers):|FAIL|REFRESH"
   pids=$(tagged_pids "$RUNID/refresh/")
@@ -281,17 +271,14 @@ fail=0
 echo
 echo "== results"
 cat "$RUNROOT"/*/results 2>/dev/null >"$RUNROOT/all"
-awk -F'\t' '
-  { names[$2]=1; r[$2 "," $1]=sprintf("%s %6.1fs", $3, $4); if ($3=="FAIL") bad=1 }
-  END { printf "%-28s %-14s %-14s\n", "check", "stable", "nightly";
-        n=asorti(names, s); for (i=1;i<=n;i++) printf "%-28s %-14s %-14s\n", s[i], (s[i] ",stable") in r ? r[s[i] ",stable"] : "-", (s[i] ",nightly") in r ? r[s[i] ",nightly"] : "-" }' "$RUNROOT/all"
+sort -t$'\t' -k2,2 "$RUNROOT/all" | awk -F'\t' 'BEGIN { printf "%-28s %s\n", "check", "result" } { printf "%-28s %s %6.1fs\n", $2, $3, $4 }'
 grep -q $'\tFAIL\t' "$RUNROOT/all" && fail=1
 
 echo
 echo "== per-area time (sum of check times; a check counts in each of its areas)"
-awk -F'\t' '{ n=split($6, a, " "); for (i=1;i<=n;i++) { t[a[i] "," $1]+=$4; c[a[i] "," $1]++; areas[a[i]]=1 } }
-  END { printf "%-12s %16s %16s\n", "area", "stable", "nightly";
-        n=asorti(areas, s); for (i=1;i<=n;i++) printf "%-12s %10.1fs (%2d) %10.1fs (%2d)\n", s[i], t[s[i] ",stable"], c[s[i] ",stable"], t[s[i] ",nightly"], c[s[i] ",nightly"] }' "$RUNROOT/all"
+awk -F'\t' '{ n=split($6, a, " "); for (i=1;i<=n;i++) { t[a[i]]+=$4; c[a[i]]++ } }
+  END { printf "%-12s %16s\n", "area", "time (checks)";
+        n=asorti(t, s); for (i=1;i<=n;i++) printf "%-12s %10.1fs (%2d)\n", s[i], t[s[i]], c[s[i]] }' "$RUNROOT/all"
 
 echo
 echo "== wall time"

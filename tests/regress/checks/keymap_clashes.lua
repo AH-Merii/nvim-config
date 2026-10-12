@@ -1,7 +1,6 @@
 -- @desc     report only: lists each built-in key (an index.txt command or text object, a --clean default map) that a global or buffer map of ours hides in n, x and o, with NEW and GONE against the version's previous list; red only when the detector, the index.txt parse or the --clean read breaks
 -- @areas    keys treesitter lsp git
 -- @budget   60
--- @version-sensitive
 -- @args     app.py
 -- The list and its previous run live in $S/state/<version>/keymap_clashes.txt. Which clashes exist is config: never asserted.
 

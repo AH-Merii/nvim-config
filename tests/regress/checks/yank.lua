@@ -1,7 +1,6 @@
--- @desc     yanking highlights the yanked text, through a call that is not deprecated on this version
+-- @desc     yanking highlights the yanked text, through a call that is not deprecated
 -- @areas    editing ui
 -- @budget   20
--- @version-sensitive
 vim.cmd.edit("main.lua")
 vim.api.nvim_win_set_cursor(0, { 1, 0 })
 local function hl_marks()

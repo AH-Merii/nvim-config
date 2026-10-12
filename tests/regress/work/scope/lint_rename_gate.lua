@@ -1,7 +1,6 @@
 -- @desc     <leader>ll only while a configured linter would run, <leader>li wherever linters are configured (covered ones marked), <leader>lr only with a rename-capable client
 -- @areas    lint lsp keys
 -- @budget   60
--- @version-sensitive
 -- @args     notes.md
 local lint = require("lint")
 local function has(lhs, buf)

@@ -1,7 +1,6 @@
 -- @desc     ]/[ moves reach the host's and the injected languages' objects (markdown fences, HTML script, Vim lua heredoc) in n, x and o with counts, stay the built-in or Neovim's default where no language has the object (.txt, diff-mode ]c), never take ]C/[C, and leave ; and , repeating f/t
 -- @areas    treesitter keys
 -- @budget   40
--- @version-sensitive
 -- @fixture  tobj
 -- @args     doc.md
 
@@ -200,7 +199,7 @@ check("diff: [c is the built-in previous change, not the class", same(ours, nati
 vim.cmd("diffoff!")
 vim.cmd("only!")
 
--- ]C and [C: Neovim's own (multicursor on nightly, nothing on stable), never a class-end move
+-- ]C and [C: Neovim's own multicursor maps, never a class-end move
 open("a.py")
 for _, k in ipairs({ "]C", "v]C", "y]C" }) do
   at("class Box")

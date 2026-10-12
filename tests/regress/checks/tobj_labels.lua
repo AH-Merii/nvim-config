@@ -1,7 +1,6 @@
 -- @desc     the which-key popup says what each ]/[ move and a/i object does at the cursor, judged by pressing it: an icon of ours and the target's language where it acts unlike the built-in (node-type wording for a markdown heading and an HTML element, also for a target off screen), Neovim's help index or default-map text and no icon of ours where it acts as the built-in, hidden where the built-in has no meaning; opening buffers adds no spec
 -- @areas    which-key treesitter keys
 -- @budget   90
--- @version-sensitive
 -- @fixture  tobj
 -- @args     doc.md
 local loaded = wait_until(function()

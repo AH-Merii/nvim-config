@@ -1,7 +1,6 @@
 -- @desc     the profiler keys live under <leader>P, labelled Profiler, and leave <leader>p to the PR review menu
 -- @areas    which-key keys
 -- @budget   30
--- @version-sensitive
 -- @args     main.lua
 local loaded = wait_until(function()
   local c = package.loaded["which-key.config"]

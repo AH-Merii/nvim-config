@@ -1,7 +1,6 @@
 -- @desc     a/i objects follow the language at the cursor: fence and injected parameters (markdown, HTML script, Vim lua heredoc), the built-in paragraph in prose and plain text with counts and dot repeat, and a select with nothing at the cursor, later on its line or around it does nothing instead of editing far away
 -- @areas    treesitter keys
 -- @budget   40
--- @version-sensitive
 -- @fixture  tobj
 -- @args     doc.md
 
