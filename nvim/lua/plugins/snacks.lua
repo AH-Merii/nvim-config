@@ -93,7 +93,13 @@ return {
         },
       },
     },
-    notifier = { enabled = true },
+    notifier = {
+      enabled = true,
+      -- Errors stay until dismissed (<leader>N), like ui2 message errors, except the routine ones
+      -- config/ui2/messages.lua marks (a search that found nothing); the rest is snacks' default keep
+      -- (snacks/notifier.lua:131-133).
+      keep = function(n) return n.level == "error" and not n.routine or vim.fn.getcmdpos() > 0 end,
+    },
     quickfile = { enabled = true },
     scope = { enabled = true },
     scroll = { enabled = true },
@@ -142,7 +148,8 @@ return {
     { "<leader>ss", function() Snacks.scratch.select() end, desc = "Scratch Buffers" },
 
     -- Misc
-    { "<leader>n", function() Snacks.picker.notifications() end, desc = "Notification History" },
+    { "<leader>n", function() require("config.ui2.history").open() end, desc = "Message History" },
+    { "<leader>N", function() Snacks.notifier.hide() end, desc = "Dismiss Notifications" },
     { "<C-W>z", function() Snacks.zen() end, desc = "Toggle Zen Mode" },
     { "<C-W>Z", function() Snacks.zen.zoom() end, desc = "Toggle Zoom" },
     { "<leader>.", function() Snacks.scratch({ ft = "markdown" }) end, desc = "Toggle Scratch Buffer" },
@@ -242,6 +249,7 @@ return {
 
         -- Misc
         { "<leader>n", icon = { icon = "󰂚", color = "yellow" } },
+        { "<leader>N", icon = { icon = "󰎟", color = "yellow" } },
         { "<C-W>z", icon = { icon = "󰫢", color = "yellow" } },
         { "<C-W>Z", icon = { icon = "󰘖", color = "yellow" } },
         { "<leader>.", icon = { icon = "󰎕", color = "grey" } },
@@ -267,8 +275,6 @@ return {
         -- debug helpers
         _G.dd = function(...) Snacks.debug.inspect(...) end
         _G.bt = function() Snacks.debug.backtrace() end
-
-        vim._print = function(_, ...) _G.dd(...) end
 
         local function setup_format_on_save_toggle()
           -- Global flag: on by default

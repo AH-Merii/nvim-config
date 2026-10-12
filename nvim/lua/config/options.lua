@@ -51,13 +51,15 @@ vim.o.showcmdloc = "statusline" -- show partial commands in the statusline
 vim.o.winborder = "rounded"
 
 -- Neovim's built-in message and cmdline UI (:h ui2), enabled before plugins so it sees every message.
--- With cmdheight=0 a message aimed at the cmdline expands it until the next key, so messages go to the
--- msg window (bottom-right float, cleared after the 'messagesopt' timeout) and only the output of a
--- command typed on the cmdline goes to the cmdline, to be read before the next key. g< opens the
+-- config.ui2 then hooks it to behave like noice did: ':' in a popup near the top, messages as
+-- snacks.notifier toasts, long output in a split (lua/config/ui2/). Until snacks is set up, and for
+-- anything the hooks pass on, these targets apply: messages go to the msg window (bottom-right float,
+-- cleared after the 'messagesopt' timeout) and output of a typed command to the cmdline. g< opens the
 -- pager with the whole history. Does nothing headless (no UI attached).
 require("vim._core.ui2").enable({
   msg = { targets = { default = "msg", typed_cmd = "cmd" } },
 })
+require("config.ui2").setup()
 
 -- make the hidden chars foreground color more subtle
 vim.cmd([[

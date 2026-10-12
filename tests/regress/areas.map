@@ -28,6 +28,7 @@ lua/plugins/dap.lua               keys
 lua/config/keymaps.lua            keys which-key
 lua/config/options.lua            editing ui
 lua/config/autocmds.lua           editing ui
+lua/config/ui2/*                  ui
 lua/config/helpers.lua            keys lsp
 lua/config/utils.lua              keys lsp
 .luarc.json                       smoke
