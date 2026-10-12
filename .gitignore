@@ -6,3 +6,6 @@ tests/regress/state/
 tests/regress/bin/
 tests/regress/cache-seed/
 tests/regress/shared-cache/
+
+# machine-local mise overrides
+mise.local.toml
