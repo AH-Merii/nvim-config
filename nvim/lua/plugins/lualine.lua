@@ -420,6 +420,11 @@ return {
     vim.api.nvim_create_autocmd("Progress", {
       callback = function() lualine.refresh({ place = { "statusline" } }) end,
     })
+    -- Search count, e.g. "[2/3]": ui2 draws it on the cmdline, which is hidden since 'cmdheight' is 0
+    ins_right({
+      "searchcount",
+      color = { fg = colors.fg },
+    })
     -- Macro Status
     ins_right({
       macro_recording,

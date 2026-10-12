@@ -19,7 +19,6 @@ lua/plugins/which-key.lua         which-key keys
 lua/plugins/auto-pairs-tags-comments.lua editing
 lua/plugins/trouble.lua           ui lsp
 lua/plugins/tiny-inline-diagnostic.lua ui lsp
-lua/plugins/noice.lua             ui
 lua/plugins/snacks.lua            ui keys
 lua/plugins/lualine.lua           ui
 lua/plugins/colorschemes.lua      ui

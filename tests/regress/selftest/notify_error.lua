@@ -1,4 +1,4 @@
--- @desc     runner self-test: vim.notify at ERROR level fails the check (NOTIFY, or MSG without noice)
+-- @desc     runner self-test: vim.notify at ERROR level fails the check (NOTIFY from snacks.notifier's history, or MSG)
 -- @areas    selftest
 -- @budget   15
 -- @expect-fail (NOTIFY|MSG) .*nvr selftest notification

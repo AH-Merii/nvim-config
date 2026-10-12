@@ -34,20 +34,13 @@ end
 check("checkhealth lazy: no ERROR or WARNING", #bad == 0, table.concat(bad, " | "))
 if #excused > 0 then info("excused, empty vim.pack dir: " .. table.concat(excused, " | ")) end
 
--- noice takes over vim.notify and snacks.notifier holds what came before it, so :messages alone misses notifications
+-- :messages holds every message ui2 shows (ui2 has no history of its own; its pager renders this one);
+-- snacks.notifier takes over vim.notify and never echoes, so its history holds the notifications
 local errs = {}
 local msgs = vim.api.nvim_exec2("messages", { output = true }).output
 for line in msgs:gmatch("[^\n]+") do
   if line:find("E%d+:") or line:find("[Ee]rror") or line:find("stack traceback") or line:find("[Ww]arn") then
     table.insert(errs, ":messages: " .. line)
-  end
-end
-if package.loaded["noice"] then
-  local ok, manager = pcall(require, "noice.message.manager")
-  if ok then
-    for _, f in ipairs({ { error = true }, { warning = true } }) do
-      for _, m in ipairs(manager.get(f, { history = true })) do table.insert(errs, "noice: " .. m:content()) end
-    end
   end
 end
 local snacks_notifier = package.loaded["snacks.notifier"]

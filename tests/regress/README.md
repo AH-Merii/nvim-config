@@ -155,10 +155,12 @@ Globals available to a `.lua` check (cwd is the fixture copy; lazy's VeryLazy ha
 | `FIX`, `VERSION` | fixture dir, `nightly` |
 
 After the check body the harness also records as failures: errors in `:messages` (`MSG`) and
-error messages in noice's history (`NOTIFY`). Not `v:errmsg`: `:silent!` and `try` still set it,
-for errors the user never sees (nvim's two markdown ftplugins both `sil! nunmap <buffer> [[` on
-`:edit!`). Before quitting it waits up to 15s for running nvim-lint linters, which nvim-lint does
-not stop on exit.
+ERROR-level notifications in snacks.notifier's history (`NOTIFY`): snacks.notifier owns `vim.notify`
+and never echoes. ui2 keeps no history of its own (its pager renders `:messages`), and it stays off
+headless, so `MSG` covers every message it would show (only gui.sh checks that ui2 attaches). Not
+`v:errmsg`: `:silent!` and `try` still set it, for errors the user never sees (nvim's two markdown
+ftplugins both `sil! nunmap <buffer> [[` on `:edit!`). Before quitting it waits up to 15s for running
+nvim-lint linters, which nvim-lint does not stop on exit.
 
 Headless gotchas the harness handles: lazy's VeryLazy never fires without a UI, so the harness
 fires it after VimEnter; which-key and other VeryLazy plugins are loaded by the time the check
@@ -212,7 +214,7 @@ no host window, runs no host `niri msg` and touches no host clipboard; every GUI
 ```sh
 gui.sh up                          # lease cachyos, restore after-pr140, boot headless, log in, push builds + $CFG + fixtures
 gui.sh scenes nightly ~/out        # empty data/state/cache, then six scenes -> ~/out/nightly-<n>-<scene>.png
-                                   #   plus ~/out/<ver>-messages.txt (:messages, v:errmsg, parser count, ]c lines)
+                                   #   plus ~/out/<ver>-messages.txt (:messages, v:errmsg, ui2 attached, parser count, ]c lines)
 gui.sh start nightly main.lua      # or drive it by hand: keys '<Space>', expr 'mode()', shot ~/out/x.png, stop
 gui.sh down                        # release the lease (powers the VM off)
 ```

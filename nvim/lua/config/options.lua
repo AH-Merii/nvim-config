@@ -44,6 +44,21 @@ vim.opt.cmdheight = 0
 vim.o.showcmd = true
 vim.o.showcmdloc = "statusline" -- show partial commands in the statusline
 
+-- Floats that set no border of their own (LSP hover and signature help, diagnostic floats, ui2's
+-- message window) get a rounded one. blink, gitsigns and snacks also fall back to it where this
+-- config sets no border (blink's signature window). lazy.nvim's backdrop float would get
+-- one too, but it only opens when Normal has a background, and onedark is transparent here.
+vim.o.winborder = "rounded"
+
+-- Neovim's built-in message and cmdline UI (:h ui2), enabled before plugins so it sees every message.
+-- With cmdheight=0 a message aimed at the cmdline expands it until the next key, so messages go to the
+-- msg window (bottom-right float, cleared after the 'messagesopt' timeout) and only the output of a
+-- command typed on the cmdline goes to the cmdline, to be read before the next key. g< opens the
+-- pager with the whole history. Does nothing headless (no UI attached).
+require("vim._core.ui2").enable({
+  msg = { targets = { default = "msg", typed_cmd = "cmd" } },
+})
+
 -- make the hidden chars foreground color more subtle
 vim.cmd([[
 highlight NonText guifg=#cccccc ctermfg=lightgray
