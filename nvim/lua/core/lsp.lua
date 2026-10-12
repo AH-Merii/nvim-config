@@ -216,6 +216,17 @@ vim.api.nvim_create_autocmd("LspDetach", {
   end,
 })
 
+-- Linked editing: renaming a tag renames its pair, where the server supports it (html, and tsc in JSX/TSX)
+vim.api.nvim_create_autocmd("LspAttach", {
+  group = vim.api.nvim_create_augroup("core.lsp.linked_editing", { clear = true }),
+  callback = function(ev)
+    local client = vim.lsp.get_client_by_id(ev.data.client_id)
+    if client and client:supports_method("textDocument/linkedEditingRange", ev.buf) then
+      vim.lsp.linked_editing_range.enable(true, { client_id = client.id })
+    end
+  end,
+})
+
 -- Servers may (un)register methods after LspAttach, which fires no autocmd
 for _, method in ipairs({ "client/registerCapability", "client/unregisterCapability" }) do
   local handler = vim.lsp.handlers[method]

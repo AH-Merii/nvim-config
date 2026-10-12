@@ -304,10 +304,4 @@ return {
       npairs.add_rules(all_custom_rules())
     end,
   },
-
-  -- Autotags
-  {
-    "windwp/nvim-ts-autotag",
-    opts = {},
-  },
 }
