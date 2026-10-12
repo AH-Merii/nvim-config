@@ -303,7 +303,8 @@ function M.build_status()
   -- Linters
   local ok_lint, lint = pcall(require, "lint")
   if ok_lint then
-    local linters = lint.linters_by_ft[ft] or {}
+    -- nvim-lint's own lookup, so dotted filetypes (yaml.github-actions) get each part's linters
+    local linters = lint._resolve_linter_by_ft(ft)
     table.insert(lines, string.format("󱉶  Linters: %s", next(linters) and table.concat(linters, ", ") or "none"))
   else
     table.insert(lines, "󱉶  Linters: none")

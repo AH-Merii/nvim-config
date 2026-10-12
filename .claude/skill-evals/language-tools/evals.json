@@ -1,0 +1,52 @@
+{
+  "skill_name": "language-tools",
+  "harness": {
+    "seed": "seed.sh <clone dir under ~/.cache/skill-eval> <with-skill 0|1>",
+    "check": "check-<id>.sh <clone dir>: one 'PASS|FAIL <id> <what> -- <evidence>' line per check, then 'GATE env OK|TOUCHED'",
+    "gate": "the user's real mise is unchanged: sha256 of readlink -f ~/.config/mise/config.toml and md5 of the sorted ~/.local/share/mise/installs listing equal the values recorded in lib.sh; a TOUCHED gate voids the run, it is not scored",
+    "validation": "validation/validate.sh [untouched|reference|wrong] [id]: untouched clone all FAIL, reference solution (validation/ref-<id>.sh) all PASS, each sibling wrong implementation (validation/wrong.sh list) FAILs its matching check"
+  },
+  "evals": [
+    {
+      "id": "e1-new-language",
+      "prompt": "Add Zig support: zls as the language server and zig fmt as the formatter.",
+      "check_script": "check-e1-new-language.sh",
+      "checks": [
+        "a catalog entry provides server zls with a spec mise knows",
+        "zls is enabled with an nvim-lspconfig config and planned for zig buffers only",
+        "zig buffers format with conform's built-in zigfmt, cataloged with a spec mise knows, and no custom formatter duplicates a built-in",
+        "live: zls attaches to a Zig buffer and conform reformats it through zig fmt",
+        "regression checks needing zls and the zig formatter exist and pass with startup",
+        "the decisions doc has a Zig per-language row, install-spec rows with the catalog specs, and a decision entry",
+        "changed Lua passes stylua --check"
+      ]
+    },
+    {
+      "id": "e2-existing-language",
+      "prompt": "Add selene as a linter for Lua.",
+      "check_script": "check-e2-existing-language.sh",
+      "checks": [
+        "a catalog entry provides linter selene with a spec mise knows",
+        "lua buffers lint with nvim-lint's built-in selene (no custom or duplicate definition), keep lua_ls and stylua, and other filetypes don't get selene",
+        "live: selene reports unused_variable on a Lua buffer while lua_ls is attached, and nothing on a sh buffer",
+        "a regression check needing selene exists and passes with startup",
+        "the decisions doc names selene in the Lua row, has an install-spec row with its spec, and a decision entry",
+        "changed Lua passes stylua --check"
+      ]
+    },
+    {
+      "id": "e3-file-scoped",
+      "prompt": "Lint GitHub Dependabot config (.github/dependabot.yml) with jactionlint, only on that file.",
+      "check_script": "check-e3-file-scoped.sh",
+      "checks": [
+        ".github/dependabot.yml gets a yaml sub-filetype linted by jactionlint and still by yamllint",
+        "jactionlint runs on the Dependabot file but not on plain YAML or other .github files; workflows keep jactionlint and zizmor",
+        "yamlls still serves the Dependabot sub-filetype",
+        "live: jactionlint reports dependabot-syntax on a bad .github/dependabot.yml, yamlls attaches there, and config.yml with the same text gets no jactionlint finding",
+        "a regression check expects the Dependabot sub-filetype, and it passes with tools_subfiletypes, lint_jactionlint and startup",
+        "the decisions doc's File-scoped tools table and decision list, and the README, name the Dependabot sub-filetype",
+        "changed Lua passes stylua --check"
+      ]
+    }
+  ]
+}

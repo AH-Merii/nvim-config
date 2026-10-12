@@ -179,11 +179,11 @@ scenes() {
     shot "$out/$ver-1-second-start.png"
     fi
 
-  # 2. a filetype whose tools are missing asks first: Yes / Not now / Never
+  # 2. a filetype whose tools are missing asks first (lua/tools/ux.lua): Install / Not now
   rkeys '<C-\><C-n>:e main.lua<CR>'
   sleep 4
   shot "$out/$ver-2-ask-install.png"
-  rkeys '<CR>' # Yes, the first choice
+  rkeys '<CR>' # Install, the first choice; it runs `mise use -g` in the guest
   wait_for 300 'luaeval("#vim.lsp.get_clients({ bufnr = 0, name = \"lua_ls\" })") > 0' ||
     echo "$ver: lua_ls did not attach" >>"$LOG"
   sleep 3

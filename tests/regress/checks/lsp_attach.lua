@@ -1,18 +1,10 @@
--- @desc     every enabled or Mason-installed server covering a fixture file's filetype attaches to it, whether its cmd is a table or a function; Mason servers have a cmd; no root_dir declines because its tool failed; a buffer's clients share one position encoding
--- @areas    lsp installer
+-- @desc     every enabled server covering a fixture file's filetype attaches to it, whether its cmd is a table or a function; every catalog server is enabled with a cmd; no root_dir declines because its tool failed; a buffer's clients share one position encoding
+-- @areas    lsp tools
 -- @budget   60
 -- @args     main.lua
+-- @needs    lua-language-server pyrefly ruff tsc marksman tombi clangd rust-analyzer gopls bash-language-server yaml-language-server
 local files = { "main.lua", "app.py", "index.ts", "notes.md", "pyproject.toml", "hello.c", "rs/src/main.rs",
   "main.go", "script.sh", ".github/workflows/ci.yml" }
-
-local from_mason = {}
-local okreg, registry = pcall(require, "mason-registry")
-if okreg then
-  for _, pkg in ipairs(registry.get_installed_packages()) do
-    local lsp = pkg.spec.neovim and pkg.spec.neovim.lspconfig
-    if lsp then from_mason[lsp] = true end
-  end
-end
 
 -- Calls root_dir again, recording the tools it runs and the executables it finds missing.
 -- Returns true if it accepted, false on a plain decline, or nil and why its tool failed.
@@ -68,11 +60,10 @@ local function recheck_declines(buf, want)
     local name = vim.fn.fnamemodify(f, ":t:r")
     local c = not seen[name] and vim.lsp.config[name]
     seen[name] = true
-    if c and (vim.lsp.is_enabled(name) or from_mason[name]) and type(c.root_dir) == "function"
+    if c and vim.lsp.is_enabled(name) and type(c.root_dir) == "function"
       and (c.filetypes == nil or vim.list_contains(c.filetypes, ft)) and not vim.list_contains(want, name) then
       local accepted, why = probe_root(c, buf)
-      local runnable = type(c.cmd) == "function"
-        or (type(c.cmd) == "table" and (vim.fn.executable(c.cmd[1]) == 1 or from_mason[name] ~= nil))
+      local runnable = type(c.cmd) == "function" or (type(c.cmd) == "table" and vim.fn.executable(c.cmd[1]) == 1)
       if accepted and runnable then table.insert(late, name) end
       if why then failed[name] = why end
       if accepted == false then info(vim.fn.bufname(buf) .. ": " .. name .. " root_dir declined, no tool failed") end
@@ -106,10 +97,10 @@ for _, f in ipairs(files) do
   verify(vim.api.nvim_get_current_buf(), f)
 end
 check("some server was expected at all", total > 0, total .. " expected attachments")
--- lsp_expected cannot expect a Mason server it has no cmd for (nvim-lspconfig never loaded)
-local no_cmd = vim.tbl_filter(function(n)
+-- lsp_expected only expects enabled servers with a config: a catalog server left out of vim.lsp.enable, or
+-- with no config (nvim-lspconfig not loaded), would never be expected anywhere
+local bad = vim.tbl_filter(function(n)
   local c = vim.lsp.config[n]
-  return not (c and c.cmd)
-end, vim.tbl_keys(from_mason))
-table.sort(no_cmd)
-check("every Mason-installed server has a config with a cmd", #no_cmd == 0, table.concat(no_cmd, ","))
+  return not (vim.lsp.is_enabled(n) and c and c.cmd)
+end, require("tools.catalog").servers())
+check("every catalog server is enabled and has a config with a cmd", #bad == 0, table.concat(bad, ","))

@@ -10,12 +10,33 @@ make_home() {
   mkdir -p "$h/config/nvim" "$h/state" "$h/cache"
   cp -a --reflink=auto "$CFG/." "$h/config/nvim/"
   ln -s "$HOME/.config/git" "$h/config/git"
-  ln -s "$HOME/.config/mise" "$h/config/mise"
+  # mise's config dir stays empty: the global config is the suite's own (see mise_env)
+  mkdir -p "$h/config/mise"
   seed_state "$h/state"
 }
 
 # sandbox_env <home>: Go and npm ignore XDG; their download caches are shared by every run (both lock)
 sandbox_env() { export GOPATH=$1/go GOMODCACHE=$S/shared-cache/gomod GOFLAGS=-modcacherw npm_config_cache=$S/shared-cache/npm; }
+
+# The suite's own mise and rustup: every tool a check needs comes from here, never from the user's mise.
+# suite.sh --refresh fills them (`mise use -g` into MISE_GLOBAL_CONFIG_FILE, `rustup component add` into RUSTUP_HOME).
+# Used in place, not copied per run: checks never install (headless, so tools.can_install() is false).
+SUITE_MISE=${NVR_MISE:-$S/data/mise}
+SUITE_RUSTUP=$S/data/rustup
+# mise_env <home>: every MISE_* var points into the sandbox. The user's shell exports its own (MISE_SHELL,
+# __MISE_DIFF, __MISE_ORIG_PATH...), which describe the live mise session; none may reach a check.
+mise_env() {
+  local v
+  for v in $(compgen -e); do [[ $v =~ ^_*MISE_ ]] && unset "$v"; done
+  export MISE_DATA_DIR=$SUITE_MISE/data MISE_GLOBAL_CONFIG_FILE=$SUITE_MISE/config.toml MISE_CONFIG_DIR=$1/config/mise \
+    MISE_STATE_DIR=${NVR_STATE:-$1/state}/mise MISE_CACHE_DIR=$1/cache/mise
+  # With MISE_CONFIG_DIR moved, mise takes the user's ~/.config/mise/config.toml for a project config of $HOME,
+  # found walking up from any fixture, and refuses every call there as untrusted; $HOME is not a project
+  export MISE_CEILING_PATHS=$HOME
+  # a query must never install behind the check's back
+  export MISE_AUTO_INSTALL=0 MISE_EXEC_AUTO_INSTALL=0 MISE_NOT_FOUND_AUTO_INSTALL=0 MISE_TASK_RUN_AUTO_INSTALL=0
+  if [ -d "$SUITE_RUSTUP" ]; then export RUSTUP_HOME=$SUITE_RUSTUP; fi
+}
 
 # seed_state <dir>: lazy's checker would git-fetch every plugin when state has no recent check
 seed_state() {
@@ -45,7 +66,7 @@ kill_pids() { local sig=$1; shift; [ $# -gt 0 ] && kill "-$sig" "$@" 2>/dev/null
 # inotify_holders: one pid per inotify instance held by this user's processes
 inotify_holders() { find /proc/[0-9]*/fd -lname 'anon_inode:inotify' 2>/dev/null | cut -d/ -f3; }
 
-# Copied trees keep absolute paths to their old install: Mason wrappers, shebangs and venvs, and
+# Copied trees keep absolute paths to their old install: tool shebangs and venvs, and
 # nvim-treesitter's query symlinks into lazy/. Any live nvim dir or old sandbox counts.
 FOREIGN_RE="$HOME/(\\.local/(share|state)/nvim|\\.config/nvim|\\.cache/nvim|\\.cache/nvim-sbx[^/]*)(/|\$)|/tmp/nvim-sbx"
 # the old data dirs that map onto $S/data/nvim/

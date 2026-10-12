@@ -103,16 +103,16 @@ if [ $REFRESH = 1 ]; then
   H=$RUNROOT/refresh; make_home "$H"
   data=$S/data log=$S/last/refresh.log
   if [ $DRY = 1 ]; then
-    echo "refresh dry run: Mason keep, install and remove sets for $S/data and $CFG, nothing changed"
+    echo "refresh dry run: the tools every check needs and what is missing, for $S/data and $CFG, nothing changed"
     data=$H/data log=$S/last/refresh-dry-run.log
-    cp -a --reflink=auto "$S/data" "$data"
+    mkdir -p "$data"; cp -a --reflink=auto "$S/data/nvim" "$data/nvim"
   else
-    echo "refresh: lazy, Mason and parsers in $S/data for $CFG"
+    echo "refresh: lazy, tools (the suite's mise and rustup) and parsers in $S/data for $CFG"
   fi
   ( cd "$H" && exec env NVR_HOME="$H" NVR_DATA="$data" NVR_REFRESH_DRY=$DRY NVIM_REGRESS_TAG="$RUNID/refresh/" \
       timeout 1200 setsid "$S/nv.sh" nightly --headless -c "luafile $S/refresh.lua" ) >"$log" 2>&1
   rc=$?
-  sed "s/\x1b\[[0-9;]*m//g" "$log" | grep -E "^(lazy|mason|parsers):|FAIL|REFRESH"
+  sed "s/\x1b\[[0-9;]*m//g" "$log" | grep -E "^(lazy|tools|parsers):|FAIL|REFRESH"
   pids=$(tagged_pids "$RUNID/refresh/")
   # shellcheck disable=SC2086
   [ -n "$pids" ] && { echo "refresh left: $(describe_pids $pids)"; kill_pids KILL $pids; }
@@ -141,12 +141,6 @@ run_check() {
   : >"$out"
   if ! [[ $budget =~ ^[0-9]+$ ]]; then
     printf '%s\t%s\tFAIL\t0\t-\t%s\t%s\n' "$v" "$name" "$areas" "no @budget" >>"$H/results"
-    return
-  fi
-  local missing=
-  for p in $(header "$f" needs); do [ -d "$H/data/nvim/mason/packages/$p" ] || missing="$missing $p"; done
-  if [ -n "$missing" ]; then
-    printf '%s\t%s\tFAIL\t0\t%s\t%s\t%s\n' "$v" "$name" "$budget" "$areas" "Mason lacks$missing (run --refresh)" >>"$H/results"
     return
   fi
   fixture=$(header "$f" fixture); fixture=${fixture:-default}
@@ -247,8 +241,8 @@ run_version() {
   H=$RUNROOT/$v
   make_home "$H"
   rmdir "$H/cache" && cp -a --reflink=auto "$S/cache-seed" "$H/cache"
-  # each version gets its own reflink copy: two nvims refreshing one Mason registry read it half-written
-  cp -a --reflink=auto "$S/data" "$H/data"
+  # each version gets its own reflink copy of the nvim data; the suite's mise and rustup are used in place
+  mkdir -p "$H/data"; cp -a --reflink=auto "$S/data/nvim" "$H/data/nvim"
   mkdir -p "$S/last/$v"
   mkfifo "$H/tick"; exec {TICK}<>"$H/tick"
   : >"$H/results"
@@ -294,6 +288,14 @@ if [ -n "$changed" ]; then
   live=$(pgrep -a -x nvim | grep -v -F "$S" | cut -c1-120)
   [ -n "$live" ] && echo "       (nvim processes outside the sandbox were running: $(echo "$live" | wc -l))"
 else echo "PASS live nvim dirs unchanged"; fi
+
+# the suite's tools come from data/mise and data/rustup only; the user's mise config, installs and toolchains stay as they were
+mise_changed=$(find "$HOME/.config/mise" "$HOME/.local/share/mise/installs" "$HOME/.rustup/toolchains" "$HOME/.rustup/settings.toml" \
+  -maxdepth 2 -newer "$RUNROOT/stamp" 2>/dev/null | head -20)
+if [ -n "$mise_changed" ]; then
+  fail=1; echo "FAIL the user's mise or rustup changed during the run (an install outside the suite's own, or the user's):"
+  echo "$mise_changed" | sed 's/^/       /'
+else echo "PASS the user's mise config, mise installs and rustup toolchains unchanged"; fi
 
 left=$(tagged_pids "$RUNID/")
 # shellcheck disable=SC2086

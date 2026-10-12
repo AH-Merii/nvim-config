@@ -2,7 +2,13 @@
 -- @areas    which-key keys
 -- @budget   10
 -- @args     main.lua
+-- @needs    lua-language-server
 local buf = vim.api.nvim_get_current_buf()
+-- LSP groups get their keymaps when a server attaches, which waits for the tools resolver to find the binary
+local want = lsp_expected(buf)
+local missing, why = wait_attach(buf, want, 15000)
+check("main.lua's servers attach before the groups are judged", #want > 0 and #missing == 0,
+  "want " .. table.concat(want, ",") .. "; " .. table.concat(why, "; "))
 -- which-key schedules loading its spec when set up after VimEnter
 local loaded = wait_until(function()
   local c = package.loaded["which-key.config"]

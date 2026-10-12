@@ -1,4 +1,4 @@
--- LSP servers are automatically managed by Mason
+-- Diagnostics display and LSP keymaps gated on what the attached clients support; core.lsp_servers starts the servers
 vim.diagnostic.config({
   virtual_text = true,
   underline = true,
@@ -213,6 +213,17 @@ vim.api.nvim_create_autocmd("LspDetach", {
   callback = function(ev)
     local id = ev.data.client_id
     vim.schedule(function() sync(ev.buf, id) end)
+  end,
+})
+
+-- Linked editing: renaming a tag renames its pair, where the server supports it (html, and tsc in JSX/TSX)
+vim.api.nvim_create_autocmd("LspAttach", {
+  group = vim.api.nvim_create_augroup("core.lsp.linked_editing", { clear = true }),
+  callback = function(ev)
+    local client = vim.lsp.get_client_by_id(ev.data.client_id)
+    if client and client:supports_method("textDocument/linkedEditingRange", ev.buf) then
+      vim.lsp.linked_editing_range.enable(true, { client_id = client.id })
+    end
   end,
 })
 

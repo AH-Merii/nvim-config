@@ -37,22 +37,15 @@ function _G.health(name, ms)
 end
 function _G.deprecations() return health("vim.deprecated") end
 
--- Servers that must attach to buf: enabled, or installed by Mason (automatic_enable promises those),
--- covering the filetype, accepted by a root_dir function or holding a root when workspace_required,
--- and with a runnable cmd.
--- A function cmd (upstream ts_ls) picks its binary itself, so it is expected and judged by attaching.
+-- Servers that must attach to buf: enabled, covering the filetype, accepted by a root_dir function or
+-- holding a root when workspace_required, and with a runnable cmd.
+-- A function cmd picks its binary itself (the tools resolver's absolute path), so it is expected and judged by attaching.
+-- A root_dir function declines by never calling on_dir; the resolver's wrapper does that when the binary is
+-- missing, so a declined catalog server whose binary did not resolve gets a note saying why.
 -- Waits up to ms for root_dir lookups to answer; one still looking at the deadline is expected, so a hang fails.
 function _G.lsp_expected(buf, ms)
   buf = buf == 0 and vim.api.nvim_get_current_buf() or buf
   ms = ms or 10000
-  local from_mason = {}
-  local okreg, registry = pcall(require, "mason-registry")
-  if okreg then
-    for _, pkg in ipairs(registry.get_installed_packages()) do
-      local lsp = pkg.spec.neovim and pkg.spec.neovim.lspconfig
-      if lsp then from_mason[lsp] = pkg.name end
-    end
-  end
   local names = {}
   for _, f in ipairs(vim.api.nvim_get_runtime_file("lsp/*.lua", true)) do
     names[vim.fn.fnamemodify(f, ":t:r")] = true
@@ -63,7 +56,7 @@ function _G.lsp_expected(buf, ms)
   local cands, roots = {}, {}
   local system = vim.system
   for name in pairs(names) do
-    if from_mason[name] or vim.lsp.is_enabled(name) then
+    if vim.lsp.is_enabled(name) then
       local c = vim.lsp.config[name]
       if c and (c.filetypes == nil or vim.list_contains(c.filetypes, ft)) then
         cands[name] = c
@@ -110,13 +103,13 @@ function _G.lsp_expected(buf, ms)
     elseif c.workspace_required and c.root_markers then
       root_ok = vim.fs.root(fname, c.root_markers) ~= nil
     end
-    local runnable = type(c.cmd) == "function"
-      or (type(c.cmd) == "table" and (vim.fn.executable(c.cmd[1]) == 1 or from_mason[name] ~= nil))
+    local runnable = type(c.cmd) == "function" or (type(c.cmd) == "table" and vim.fn.executable(c.cmd[1]) == 1)
     if root_ok and runnable then
       table.insert(want, name)
-      if type(c.cmd) == "table" and vim.fn.executable(c.cmd[1]) ~= 1 then
-        notes[name] = "cmd " .. c.cmd[1] .. " not executable (Mason package " .. from_mason[name] .. ")"
-      end
+    elseif r and r.got == nil then
+      local bin = package.loaded["tools"] and require("tools.catalog").binary("server", name)
+      local res = bin and require("tools").get(bin, require("tools").root(buf))
+      if res and not res.path then notes[name] = ("not expected: %s is missing (%s)"):format(bin, res.reason or "?") end
     end
   end
   table.sort(want)
@@ -187,6 +180,26 @@ function _G.wait_diagnostics(buf, pred, ms)
   return vim.diagnostic.get(buf)
 end
 
+-- @needs: catalog binaries the check needs; each must resolve to a path (suite.sh --refresh installs them
+-- into the suite's own mise). A missing one fails the check before its body runs.
+function _G.needs_resolve()
+  local list
+  for line in io.lines(CHECK) do
+    list = line:match("^%-%- @needs +(.*)$")
+    if list or not line:match("^%-%-") then break end
+  end
+  local ok = true
+  for name in (list or ""):gmatch("%S+") do
+    local r = require("tools").wait(name, FIX, 15000)
+    if not (r and r.path) then
+      ok = false
+      check("needed tool " .. name .. " resolves", false,
+        (r and (r.source .. ": " .. (r.reason or "")) or "no answer within 15s") .. " (run suite.sh --refresh)")
+    end
+  end
+  return ok
+end
+
 local function main()
   if not vim.g.did_very_lazy then
     vim.g.did_very_lazy = true
@@ -194,7 +207,8 @@ local function main()
   end
   vim.wait(30) -- lazy defers its VeryLazy work by 10ms
   vim.v.errmsg = ""
-  local ok, err = xpcall(dofile, debug.traceback, CHECK)
+  local ok, err = true, nil
+  if needs_resolve() then ok, err = xpcall(dofile, debug.traceback, CHECK) end
   if not ok then check("check script ran", false, err) end
   -- nvim-lint does not stop its linters on exit; let in-flight runs finish so only real leaks remain
   local lint = package.loaded["lint"]

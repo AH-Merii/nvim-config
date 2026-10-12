@@ -1,3 +1,7 @@
+-- Tool resolver and sub-filetypes, before plugins: conform (BufWritePre) and nvim-lint (BufReadPre) look tools up through it
+require("tools").setup()
+-- Install prompts, :Tools and the statusline indicator; prompts need a UI and vim.g.install_tools ~= "off"
+require("tools.ux").setup()
 require("core.lsp")
 require("config.options")
 require("config.keymaps")

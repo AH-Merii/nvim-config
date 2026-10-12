@@ -1,10 +1,15 @@
 -- @desc     formatting a Go buffer through conform leaves it gofmt-clean and adds the imports it uses
 -- @areas    format
 -- @budget   10
--- @needs    goimports
+-- @needs    goimports gofumpt
 
-if vim.fn.executable("gofmt") ~= 1 then
-  check("gofmt is on PATH to judge the result", false, "the Go toolchain is not on PATH")
+-- judge with the gofmt of the Go that goimports runs with (its env PATH, from the suite's mise)
+local goimports = require("tools").wait("goimports", FIX, 10000)
+local gofmt_bin
+for _, dir in ipairs(vim.split(goimports and goimports.env and goimports.env.PATH or "", ":", { plain = true })) do
+  if not gofmt_bin and vim.fn.executable(dir .. "/gofmt") == 1 then gofmt_bin = dir .. "/gofmt" end
+end
+if not check("gofmt is on goimports' PATH to judge the result", gofmt_bin ~= nil, goimports and goimports.env and goimports.env.PATH) then
   return
 end
 local dir = FIX .. "/gofmt"
@@ -18,7 +23,7 @@ local ok, err = pcall(require("conform").format, { bufnr = buf, async = false, t
 if not ok then check("go: conform.format runs", false, err) end
 local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n") .. "\n"
 local shown = (text:gsub("\n", " | "))
-local gofmt = vim.system({ "gofmt" }, { stdin = text, text = true }):wait(10000)
+local gofmt = vim.system({ gofmt_bin }, { stdin = text, text = true }):wait(10000)
 check("go: the formatted buffer is gofmt-clean", gofmt.code == 0 and gofmt.stdout == text, shown)
 check("go: formatting adds the missing fmt import",
   text:find('import%s+"fmt"') ~= nil or text:find('import%s*%([^)]*"fmt"') ~= nil, shown)

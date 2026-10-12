@@ -1,12 +1,12 @@
 -- @desc     every analyzer named in the resolved gopls settings is one the installed gopls knows; gopls ignores unknown names without a warning
 -- @areas    lsp
--- @budget   10
+-- @budget   15
+-- @needs    gopls
 
-if vim.fn.executable("gopls") ~= 1 then
-  check("gopls is on PATH", false, "gopls is enabled from PATH, outside Mason; put it on the suite's PATH")
-  return
-end
-local api = vim.system({ "gopls", "api-json" }, { text = true }):wait(10000)
+-- the gopls the config would run here, with its env (go on PATH)
+local gopls = require("tools").wait("gopls", FIX, 10000)
+if not (gopls and gopls.path) then return end -- the harness already failed the check
+local api = vim.system({ gopls.path, "api-json" }, { text = true, env = gopls.env }):wait(10000)
 local okj, doc = pcall(vim.json.decode, api.stdout or "")
 local known, count = {}, 0
 for _, a in ipairs(okj and type(doc) == "table" and doc.Analyzers or {}) do
