@@ -9,6 +9,8 @@ return {
         -- Use 2-space indentation and preserve manual alignment padding.
         prepend_args = { "-i", "2", "-kp" },
       },
+      -- The resolved fish runs its builtin fish_indent (fish >= 4.1, tools/catalog.lua): mise's fish is a single binary
+      fish_indent = { args = { "-c", "builtin fish_indent" } },
     },
 
     -- A dotted filetype with no key of its own uses its most specific part that has one (yaml.docker-compose -> yaml)

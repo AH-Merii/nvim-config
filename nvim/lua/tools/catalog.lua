@@ -76,8 +76,10 @@ M.tools = {
   shfmt = { spec = "shfmt", formatters = { "shfmt" } },
 
   -- Fish
-  ["fish-lsp"] = { spec = "npm:fish-lsp", runtime = "node", servers = { fish_lsp = { "start" } } },
-  fish_indent = { formatters = { "fish_indent" } }, -- ships with fish
+  -- fish-lsp runs `fish` from PATH (or $fish_lsp_fish_path). conform formats with `fish -c 'builtin fish_indent'`:
+  -- mise's fish is one binary without a fish_indent command, and the builtin came in fish 4.1.0
+  ["fish-lsp"] = { spec = "npm:fish-lsp", runtime = "node", requires = { "fish" }, servers = { fish_lsp = { "start" } } },
+  fish = { spec = "github:fish-shell/fish-shell", min = "4.1", formatters = { "fish_indent" } },
 
   -- C / C++
   clangd = { spec = "github:clangd/clangd", servers = { clangd = {} } },

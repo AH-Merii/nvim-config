@@ -28,7 +28,7 @@ local root = vim.fs.abspath(_G.arg[1] or vim.fs.dirname(config))
 print("root " .. root)
 check(tools.get("ruff", root) == nil, "nothing cached before resolving")
 local t0 = vim.uv.hrtime()
-local names = { "ruff", "stylua", "rust-analyzer", "rustfmt", "cargo-clippy", "tsc", "prettierd", "fish_indent", "not-a-tool" }
+local names = { "ruff", "stylua", "rust-analyzer", "rustfmt", "cargo-clippy", "tsc", "prettierd", "fish", "not-a-tool" }
 local done
 tools.resolve_all(names, root, function(results) done = results end)
 vim.wait(10000, function() return done ~= nil end, 10)
