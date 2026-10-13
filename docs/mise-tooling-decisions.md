@@ -157,7 +157,7 @@ Bold = change from today. Struck = removed.
 | Markdown | marksman | prettierd | **markdownlint-cli2**, replaces ~~markdownlint-cli~~ |
 | HTML / CSS / SCSS | **html, cssls** | prettierd | none |
 | sh / bash | **bashls** (runs shellcheck) | shfmt | ~~nvim-lint shellcheck~~ |
-| Fish | fish-lsp | **fish_indent** (system) | none |
+| Fish | fish-lsp | **fish_indent** (fish's builtin, fish via mise; 2026-10-13) | none |
 | C / C++ | clangd | clang-format (**via mise**) | none |
 | Go | gopls (stale settings cleaned) | goimports **then gofumpt** | golangci-lint |
 | Rust | rust-analyzer (**rustup component**) | rustfmt | clippy |
@@ -357,7 +357,8 @@ Decided since:
 
 ## `:Tools` review, case by case (2026-10-13)
 
-Walking through every resolver case with the user, from screenshots of `:Tools` in `nvimt2`. Not built yet.
+Walking through every resolver case with the user, from screenshots of `:Tools` in `nvimt2`. Built 2026-10-13 in
+`nvimt2`, branch `nvimt2/tools-ux-review`; see "Built from this review" at the end of this section.
 
 - **Rows fit the window.** Names are padded to the longest name, not 28 columns. Roles come right after the name as
   plain words (`lsp, formatter, linter`), so they are never what gets cut off. A found tool shows its source and
@@ -472,3 +473,28 @@ Walking through every resolver case with the user, from screenshots of `:Tools` 
     unaffected.
   - That leaves no catalog tool mise can't install. The `kind = "none"` path stays for future ones: no prompt, still
     counted in the wrench, row `not installed · install <x> with your package manager`, picking it shows that advice.
+
+### Built from this review (2026-10-13)
+
+Where the build fills a gap the cases above left, or departs from them:
+
+- **The pickers size themselves to their rows.** `vim.ui.select` here is snacks' picker, whose `select` layout is
+  `width = 0.5, min_width = 80, max_width = 100` (`snacks.nvim/lua/snacks/picker/config/layouts.lua:144-151`), so
+  rows past 100 columns were cut whatever their format. Every Tools picker passes its own width through
+  `opts.snacks` (`snacks/picker/select.lua:70-73`): the longest row or title plus room for the numbers and borders,
+  up to the screen's width (`select` in `nvim/lua/tools/ux.lua`). Asked for by the user during the build.
+- **fish needs 4.1 or newer.** `builtin fish_indent` came in fish 4.1.0: "The fish_indent and fish_key_reader programs
+  are now also available as builtins" (https://fishshell.com/docs/current/relnotes.html). The catalog's version
+  check, which only tsc had (`accept`), became `min = "<version>"` for both: tsc `"7"`, fish `"4.1"`.
+- **fish-lsp lists fish in `requires`.** fish-lsp 1.1.4 runs `$fish_lsp_fish_path` or `fish` from PATH for its
+  features, and `fish_indent` from PATH only for its own formatting (`execFile("fish_indent", …)` in
+  `fish-lsp/dist/fish-lsp`). conform formats fish files, so the server's formatting is only the fallback.
+- **Which copy wins before the conflict question is answered**: the project env, as before. A dismissed question is
+  asked again next session.
+- **Case 5's offer** (`Install 0.15.0 for this project with mise`) is made when a global or system copy runs, not when
+  a `.venv`/`node_modules` copy does: that copy already wins over the pin.
+- **Roles of a tool another one calls** read `used by <server>` (shellcheck: `used by bashls`), keeping the roles
+  column short.
+- **`:Tools retry` is now `:Tools rescan`**, matching the row.
+- **The linters list and nvim-lint share one check** (`nvim/lua/tools/lint.lua`): `covering_server` moved there from
+  `nvim/lua/plugins/nvim-lint.lua`, with the "will this linter run" test both use.

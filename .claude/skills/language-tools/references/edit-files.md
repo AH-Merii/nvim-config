@@ -110,7 +110,7 @@ Do not set `cmd` (`wiring()` replaces it with the resolved binary plus the catal
 
 ## Custom root
 
-Add a custom root only when nvim-lspconfig's `root_dir` runs the tool or a version check from PATH. tsc's `root_dir` runs `tsc --version`, so `roots.tsc` in `nvim/lua/core/lsp_servers.lua` replaces it, and the version check moved to the catalog's `accept`.
+Add a custom root only when nvim-lspconfig's `root_dir` runs the tool or a version check from PATH. tsc's `root_dir` runs `tsc --version`, so `roots.tsc` in `nvim/lua/core/lsp_servers.lua` replaces it, and the version check moved to the catalog's `min`.
 
 A `root_dir` that runs the language's toolchain (`go env`, `cargo metadata`) already runs with the tool's PATH (`lsp_servers.lua:127-140`), so it needs no root entry.
 

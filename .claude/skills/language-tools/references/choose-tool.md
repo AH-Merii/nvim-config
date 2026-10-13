@@ -84,10 +84,10 @@ The fields are documented at `nvim/lua/tools/catalog.lua:4-14`.
 |---|---|---|
 | `project` | Projects may pin their own copy, in `.venv/bin` (`venv`) or `node_modules/.bin` (`node_modules`) | ruff, biome |
 | `runtime = "node"` / `"go"` | The binary needs node or go on PATH at run time: every `npm:` tool, and go tools that call go | `catalog.lua:59,63,92` |
-| `runtime = "rust"` with `component` | A rustup component (rust-analyzer, rustfmt, clippy). Leave out `spec` | `catalog.lua:98-100` |
-| `requires = { "<catalog binary>" }` | The tool calls another catalog binary at run time | bashls requires shellcheck, `catalog.lua:79` |
-| `accept = fn(version)` | Only some versions work | tsc TS 7, `catalog.lua:32-36` |
-| no `spec` | The tool ships with something else (fish_indent with fish) | `catalog.lua:85` |
+| `runtime = "rust"` with `component` | A rustup component (rust-analyzer, rustfmt, clippy). Leave out `spec` | `catalog.lua:95-97` |
+| `requires = { "<catalog binary>" }` | The tool calls another catalog binary at run time | bashls requires shellcheck, `catalog.lua:74` |
+| `min = "<version>"` | Older versions don't work; an older copy is skipped and noted in `:Tools` | tsc `"7"`, fish `"4.1"`, `catalog.lua:54,82` |
+| no `spec` | Nothing mise can install provides it; `:Tools` says to use the system package manager | none today |
 
 A new runtime kind needs an entry in `M.runtimes` (`catalog.lua:23-27`). Add one only if step 3 shows the tool fails without it.
 
