@@ -1,4 +1,4 @@
--- @desc     with a UI: a project mise config asks once with three choices (two when it is untrusted), a missing tool is offered once and only on files it runs on, and library code, git files and install_tools = "off" never ask; nothing installs
+-- @desc     with a UI: a project mise config that pins tools asks once with three choices (two when it is untrusted), one that pins none never asks, a missing tool is offered once and only on files it runs on, no prompt shows a command, and library code, git files and install_tools = "off" never ask; nothing installs
 -- @areas    tools ui
 -- @budget   40
 -- @needs    jactionlint yaml-language-server
@@ -45,7 +45,7 @@ got = open("pinned/a.lua", { "return 1" })
 local first = got[1]
 check(
   "a project mise config asks first, three choices, Use + install says it trusts",
-  first and first.kind == "tools.project" and #first.items == 3 and first.items[1]:find("trust") ~= nil,
+  first and first.kind == "tools.project" and #first.items == 3 and first.items[1]:find("trusts") ~= nil,
   vim.inspect(first)
 )
 got = open("pinned/b.lua", { "return 2" })
@@ -55,9 +55,13 @@ write("untrusted/mise.toml", { "[env]", 'FOO = "1"', "[tools]", 'stylua = "lates
 got = open("untrusted/a.lua", { "return 1" })
 check(
   "an untrusted config with [env] says so and offers two choices",
-  got[1] and got[1].kind == "tools.project" and #got[1].items == 2 and got[1].prompt:find("not trusted") ~= nil,
+  got[1] and got[1].kind == "tools.project" and #got[1].items == 2 and got[1].prompt:find("Trust", 1, true) ~= nil,
   vim.inspect(got[1])
 )
+
+write("notools/mise.toml", { "[tools]" })
+got = open("notools/a.lua", { "return 1" })
+check("a project config that pins no tools is not asked about", not vim.iter(got):any(function(p) return p.kind == "tools.project" end), show(got))
 
 got = open("y/a.yaml", { "a: 1" })
 local plain = vim.iter(got):find(function(p) return p.kind == "tools.install" end)
@@ -90,6 +94,17 @@ check('no prompt with vim.g.install_tools = "off"', #got == 0, show(got))
 vim.g.install_tools = nil
 got = open("on/Dockerfile", { "FROM scratch" })
 check("control: a Dockerfile elsewhere does prompt", #got > 0 and got[1].prompt:find("hadolint") ~= nil, show(got))
+
+-- The prompts say what happens in words; the commands behind them are not the user's concern
+local commands = {}
+for _, p in ipairs(prompts) do
+  for _, text in ipairs({ p.prompt, unpack(p.items) }) do
+    if text:find("mise use", 1, true) or text:find("mise install", 1, true) or text:find("mise trust", 1, true) or text:find("rustup component", 1, true) then
+      table.insert(commands, text)
+    end
+  end
+end
+check("no prompt names a command", #prompts > 0 and #commands == 0, vim.inspect(commands))
 
 local installs = vim.tbl_filter(function(c) return c:find(" use %-g") or c:find(" install") or c:find(" trust") or c:find("component add") end, ran)
 check("nothing installed or trusted", #installs == 0, vim.inspect(installs))

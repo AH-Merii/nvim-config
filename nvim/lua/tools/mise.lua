@@ -9,12 +9,12 @@ local M = {}
 
 --- Runs cmd and calls back with its result on the main loop; a missing executable is code -1.
 ---@param cmd string[]
----@param opts? { cwd?: string, env?: table<string, string> }
+---@param opts? { cwd?: string, env?: table<string, string>, timeout?: integer }
 ---@param on_exit fun(result: tools.Run)
 function M.run(cmd, opts, on_exit)
   opts = opts or {}
   local done = vim.schedule_wrap(function(out) on_exit({ code = out.code, stdout = out.stdout or "", stderr = out.stderr or "" }) end)
-  local ok, err = pcall(vim.system, cmd, { cwd = opts.cwd, env = opts.env, text = true, stdin = false }, done)
+  local ok, err = pcall(vim.system, cmd, { cwd = opts.cwd, env = opts.env, timeout = opts.timeout, text = true, stdin = false }, done)
   if not ok then
     vim.schedule(function() on_exit({ code = -1, stdout = "", stderr = tostring(err) }) end)
   end
@@ -23,6 +23,19 @@ end
 local function data_dir()
   local xdg = vim.env.XDG_DATA_HOME or vim.fs.joinpath(vim.uv.os_homedir(), ".local/share")
   return vim.fs.normalize(vim.env.MISE_DATA_DIR or vim.fs.joinpath(xdg, "mise"))
+end
+
+--- The version of a binary in mise's install dir (installs/<tool>/<version>/...), following alias links such as
+--- "latest"; nil for a binary elsewhere.
+---@param path string
+---@return string?
+function M.install_version(path)
+  local dir, alias = vim.fs.normalize(path):match("^(" .. vim.pesc(data_dir()) .. "/installs/[^/]+/)([^/]+)/")
+  if not dir then
+    return nil
+  end
+  local real = vim.uv.fs_realpath(dir .. alias)
+  return real and vim.fs.basename(real) or alias
 end
 
 local function config_dir()
