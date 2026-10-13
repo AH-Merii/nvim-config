@@ -7,7 +7,7 @@
 ---@field runtime? "node"|"go"|"rust" what the binary needs on PATH when it runs
 ---@field component? string rustup component providing it; checked with `rustup which` and installed with `rustup component add`
 ---@field run? string binary to execute instead, from the same dir (cargo for cargo-clippy)
----@field accept? fun(version: string): boolean a candidate whose `--version` output fails this is skipped
+---@field min? string lowest version accepted, e.g. "7"; a candidate whose `--version` reports an older one is skipped
 ---@field requires? string[] other catalog binaries it calls at run time
 ---@field servers? table<string, string[]> server name -> args after the binary
 ---@field formatters? string[] conform formatter names
@@ -28,12 +28,6 @@ M.runtimes = {
 
 local venv = { ".venv/bin" }
 local node_modules = { "node_modules/.bin" }
-
--- TS 7 is the first tsc with --lsp; a project still on TS 5/6 falls through to the global one
-local function ts7(version)
-  local v = vim.version.parse(version)
-  return v ~= nil and v.major >= 7
-end
 
 ---@type table<string, tools.Entry>
 M.tools = {
@@ -56,7 +50,8 @@ M.tools = {
   stylua = { spec = "stylua", formatters = { "stylua" } },
 
   -- JS / TS / JSON
-  tsc = { spec = "npm:typescript", project = node_modules, runtime = "node", accept = ts7, servers = { tsc = { "--lsp", "--stdio" } } },
+  -- TS 7 is the first tsc with --lsp; a project still on TS 5/6 falls through to the global one
+  tsc = { spec = "npm:typescript", project = node_modules, runtime = "node", min = "7", servers = { tsc = { "--lsp", "--stdio" } } },
   biome = { spec = "biome", project = node_modules, servers = { biome = { "lsp-proxy" } }, formatters = { "biome" }, linters = { "biomejs" } },
 
   -- YAML

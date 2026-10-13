@@ -1,7 +1,7 @@
--- @desc     :Tools offers to restart a tool's servers only when its binary was found; a missing server binary gets install and retry, not restart
+-- @desc     a :Tools tool menu acts only on that tool: a found server binary offers its server, a missing one an install and no restart, neither re-resolves every tool; a tool without a server opens no menu and says where it comes from
 -- @areas    tools ui lsp
 -- @budget   25
--- @needs    lua-language-server
+-- @needs    lua-language-server stylua
 -- The pickers are stubbed: the :Tools list picks the tool under test and the actions picker is recorded and dismissed.
 -- Which tools are missing depends on the suite's mise: lua-language-server is there, docker-language-server is not.
 local tools = require("tools")
@@ -28,20 +28,39 @@ local function actions(path, lines, bin)
     offered = texts
     on_choice(nil, nil)
   end
+  local notify = vim.notify
+  local said
+  vim.notify = function(msg, ...)
+    if type(msg) == "string" and vim.startswith(msg, bin) then
+      said = msg
+    end
+    return notify(msg, ...)
+  end
   vim.cmd("Tools")
-  wait_until(function() return offered ~= nil end, 10000)
-  vim.ui.select = select
-  return offered or {}, result
+  wait_until(function() return offered ~= nil or said ~= nil end, 10000)
+  vim.ui.select, vim.notify = select, notify
+  return offered or {}, result, said
 end
-local function has_restart(texts) return vim.iter(texts):any(function(t) return t:find("^Restart") ~= nil end) end
+local function has(texts, pattern) return vim.iter(texts):any(function(t) return t:find(pattern) ~= nil end) end
+-- Re-resolving every tool of the folder is the main list's job, not one tool's
+local function rescans(texts) return has(texts, "^Retry") or has(texts, "[Rr]escan") or has(texts, "[Rr]esolve") end
 
 local offered, result = actions(FIX .. "/dock/Dockerfile", { "FROM scratch" }, "docker-language-server")
 if check("docker-language-server is missing in the suite", result ~= nil and result.path == nil, result and result.source) then
-  check("a missing server binary is not offered a restart", #offered > 0 and not has_restart(offered), vim.inspect(offered))
-  check("it is offered a retry", vim.iter(offered):any(function(t) return t:find("^Retry") ~= nil end), vim.inspect(offered))
+  check("a missing server binary is not offered a start or restart", #offered > 0 and not has(offered, "^Restart") and not has(offered, "^Start"), vim.inspect(offered))
+  check("it is offered an install", has(offered, "^Install"), vim.inspect(offered))
+  check("its menu does not re-resolve every tool", not rescans(offered), vim.inspect(offered))
 end
 
 offered, result = actions(FIX .. "/main.lua", { "return 1" }, "lua-language-server")
 if check("lua-language-server is found in the suite", result ~= nil and result.path ~= nil, result and result.source) then
-  check("a found server binary is offered a restart of its server", has_restart(offered), vim.inspect(offered))
+  check("a found server binary is offered a start or restart of lua_ls", has(offered, "^Restart lua_ls") or has(offered, "^Start lua_ls"), vim.inspect(offered))
+  check("its menu does not re-resolve every tool", not rescans(offered), vim.inspect(offered))
+end
+
+local said
+offered, result, said = actions(FIX .. "/main.lua", { "return 1" }, "stylua")
+if check("stylua is found in the suite", result ~= nil and result.path ~= nil, result and result.source) then
+  check("a found tool without a server opens no menu", #offered == 0, vim.inspect(offered))
+  check("it says its full path instead", said ~= nil and said:find(vim.fn.fnamemodify(result.path, ":~"), 1, true) ~= nil, said)
 end

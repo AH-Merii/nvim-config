@@ -1,4 +1,4 @@
--- @desc     a project mise config with [env] that mise refuses until trusted is treated as global only, even after the user accepts it; its project env still applies
+-- @desc     a project mise config with [env] that mise refuses until trusted is treated as global only, even after the user accepts it, and still counts as a project config when it pins nothing; its project env still applies
 -- @areas    tools
 -- @budget   25
 -- @needs    ruff
@@ -45,3 +45,13 @@ vim.fn.setfperm(venv_ruff, "rwxr-xr-x")
 tools.refresh(root)
 r = tools.wait("ruff", root, 10000)
 check("the project env still applies", r and r.source == "project-env" and r.path == venv_ruff, show(r))
+
+-- mise hides the pins until the config is trusted, so one that only sets [env] still counts
+local envonly = FIX .. "/envonly"
+vim.fn.mkdir(envonly, "p")
+vim.fn.writefile({ "[env]", 'NVR_UNTRUSTED = "1"' }, envonly .. "/mise.toml")
+p = nil
+tools.project(envonly, function(x) p = x end)
+wait_until(function() return p ~= nil end, 10000)
+check("an untrusted config that only sets [env] is still a project config", p and p.untrusted and #p.configs == 1,
+  p and vim.inspect({ p.untrusted, p.configs }))
