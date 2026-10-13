@@ -145,19 +145,9 @@ return {
         cached_formatters = ""
       end
 
-      -- Linters
-      local ok_lint, lint = pcall(require, "lint")
-      if ok_lint then
-        -- nvim-lint's own lookup, so dotted filetypes (yaml.github-actions) get each part's linters
-        local configured = lint._resolve_linter_by_ft(vim.bo[bufnr].filetype)
-        if configured and not vim.tbl_isempty(configured) then
-          cached_linters = table.concat(configured, ", ")
-        else
-          cached_linters = ""
-        end
-      else
-        cached_linters = ""
-      end
+      -- Linters that run, like the lists above: found by the resolver and not covered by an attached server
+      -- (ToolsChanged and LspAttach/LspDetach update the list)
+      cached_linters = table.concat(require("tools.lint").to_run(bufnr), ", ")
     end
 
     -- Update cache on buffer/window changes, LSP lifecycle events, and after save

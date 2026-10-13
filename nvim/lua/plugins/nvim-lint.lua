@@ -4,6 +4,7 @@ return {
   config = function()
     local lint = require("lint")
     local tools = require("tools")
+    local lint_tools = require("tools.lint")
 
     -- A dotted filetype with no key of its own gets the linters of all its parts (yaml.github-actions -> yaml + github-actions)
     lint.linters_by_ft = {
@@ -64,33 +65,10 @@ return {
     local augroup = vim.api.nvim_create_augroup
     local user_group = augroup("UserAutocmdsNvimLint", { clear = true })
 
-    -- Linters whose findings a language server also reports, by server name; each runs only where its server is not attached
-    local covering_server = { ruff = "ruff", biomejs = "biome", tflint = "tflint", clippy = "rust_analyzer", tombi = "tombi" }
-
     -- Linters whose parser matches file names relative to Neovim's cwd, so they keep running there
     local keep_cwd = { tflint = true }
 
-    local function covered(linter_name, bufnr)
-      local server = covering_server[linter_name]
-      return server ~= nil and #vim.lsp.get_clients({ bufnr = bufnr, name = server }) > 0
-    end
-
-    --- The binary the resolver looks up for a linter: its catalog binary, else its command when that is a bare name.
-    ---@param name string
-    ---@param linter? lint.Linter|fun(): lint.Linter
-    ---@return string?
-    local function binary(name, linter)
-      local bin = tools.catalog.binary("linter", name)
-      if bin then
-        return bin
-      end
-      linter = linter or lint.linters[name]
-      if type(linter) == "function" then
-        linter = linter()
-      end
-      local cmd = type(linter) == "table" and linter.cmd
-      return type(cmd) == "string" and not cmd:find("/") and cmd or nil
-    end
+    local covering_server, covered, binary = lint_tools.covering_server, lint_tools.covered, lint_tools.binary
 
     -- golangcilint builds its version-specific args once, when its module loads, from the golangci-lint and go on
     -- Neovim's PATH (lint/linters/golangcilint.lua); build them again with the resolved binary and its runtime first
@@ -144,10 +122,7 @@ return {
     local function lint_buffer(names)
       local root = tools.root(0)
       local opts = {
-        filter = function(linter)
-          local bin = binary(linter.name, linter)
-          return not covered(linter.name, 0) and (not bin or (tools.resolve(bin, root) or {}).path ~= nil)
-        end,
+        filter = function(linter) return lint_tools.runs(linter.name, vim.api.nvim_get_current_buf(), root, linter) end,
         wrap_linter = function(linter)
           local bin = binary(linter.name, linter)
           local result = bin and tools.get(bin, root)
