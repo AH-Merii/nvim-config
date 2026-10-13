@@ -354,3 +354,121 @@ Decided since:
   (offered once, never headless).
 - Why: a fresh machine without the CLI silently loses the parser of every language that isn't bundled. It works on
   this machine only because `tree-sitter = "latest"` was set globally on 2026-10-12.
+
+## `:Tools` review, case by case (2026-10-13)
+
+Walking through every resolver case with the user, from screenshots of `:Tools` in `nvimt2`. Not built yet.
+
+- **Rows fit the window.** Names are padded to the longest name, not 28 columns. Roles come right after the name as
+  plain words (`lsp, formatter, linter`), so they are never what gets cut off. A found tool shows its source and
+  version (`global mise · 0.17.0`), not its install path. A missing tool shows `not installed · install`, not the
+  mise command. The last row is `Rescan tool sources` (renamed from "Retry all" during case 3).
+  - Why: the rows ran past the picker's edge and hid the roles, while 20 columns stayed blank.
+- **A tool's menu only acts on that tool.** Pressing a row offers `Start <server>` or `Restart <server>` (whichever
+  applies), and `Install` when it is missing. It does not offer "Retry: resolve it again".
+  - Why: that entry refreshes every tool in the folder (`tools.refresh(root)`), which is misleading from one tool's
+    menu. Looking tools up again stays as the `Rescan tool sources` row in the main list.
+  - Rejected: renaming it "Look for it again" (still misleading).
+- **The statusline's linters list shows only linters that will run**, like the LSP and formatter lists: not ones
+  whose binary is missing, and not ones whose covering server is attached.
+  - Why: in `~` it listed `ruff` as a linter while ruff was missing everywhere, because it showed the configured list
+    (`lualine.lua:150-154`).
+- **A project mise config that pins no tools is ignored**: no project question, no row in `:Tools`. Exception: an
+  untrusted config that sets `[env]`, because mise refuses to run in that folder until it is trusted.
+  - Why: `~/Projects/nvim-config/mise.local.toml` only sets `CLAUDE_CODE_PLUGIN_DIRS`, yet it was asked about.
+- **Case 1 (outside a project, tool found): no prompt.** A server tool's menu holds `Start`/`Restart <server>` only;
+  a tool without a server opens no menu and instead notifies its full path, e.g.
+  `stylua 2.6.0 · global mise · <path>`.
+- **Case 2 (outside a project, tool missing): the prompt names no command.**
+  `python needs pyrefly and ruff` / `Install them globally with mise` /
+  `Not now (won't ask again; install later from :Tools)`. One tool: `Install it globally with mise`; a tool's
+  `:Tools` menu: `Install globally with mise`. Progress reads `Installing pyrefly, ruff`; the result notification
+  reads `Installed pyrefly and ruff`, or `Couldn't install ruff` followed by mise's error.
+  - Why: the user doesn't need the command; "globally with mise" says where and how, and sets it apart from the
+    project installs of cases 4-6.
+- **Case 3 (project `.venv`/`node_modules` has the tool): it wins, silently.** The row reads
+  `project .venv · 0.15.0` (or `project node_modules · …`). A tool the project env lacks falls through to case 1 or 2;
+  Neovim never installs into a project's `.venv` or `node_modules`.
+- **Case 4 (project mise config pins the tool, answered "use + install").** The project question becomes
+  `Use this project's mise.toml?` / `Yes, and install ruff (trusts mise.toml)` (just `Yes (trusts mise.toml)` when
+  nothing is missing) / `Only versions already installed` / `No, use my global tools`. No path or version list in
+  the question; `:Tools` shows them (`project mise · 0.15.0`). The answer row in `:Tools` reads
+  `Use mise.toml? yes, install missing`; picking it asks again.
+  - Why: the old question named the full path, every pin and the command, and ran past the picker.
+  - **`.venv`/`node_modules` vs a mise pin: ask on conflict.** When the project config is in use and a tool is found in
+    both with different versions, ask once per project: `ruff is in .venv (0.16.0) and mise.toml (0.15.0)` /
+    `Use .venv's 0.16.0` / `Use mise.toml's 0.15.0`. Same version: no question. The answer is remembered and can be
+    switched from the tool's `:Tools` menu (`Use mise.toml's 0.15.0 instead`).
+    - Rejected: `.venv` always wins (the user wants to be able to say no); a switch only in `:Tools` (hard to find);
+      one project-wide answer in the mise.toml question (makes that question longer for a rare case).
+- **Prompt titles don't say "which is not installed".** The prompt only appears for missing tools, so the title is
+  just `python needs pyrefly and ruff` (case 2) or `python needs ruff 0.15.0 (pinned by mise.toml)` (case 5).
+- **Case 5 (pinned, answered "only versions already installed").** A pinned version that is installed is used. A
+  missing one can be installed for the project without trusting it: `mise install ruff@0.15.0` run outside the
+  project installs into mise's shared store, leaves the project untrusted and its config unchanged, and the
+  project then resolves to it (probed 2026-10-13 in a scratch mise: `mise trust --show` still `untrusted`,
+  `mise which ruff` -> `installs/ruff/0.15.0/.mise-bins/ruff`).
+  - No global copy: prompt `python needs ruff 0.15.0 (pinned by mise.toml)` / `Install 0.15.0 for this project with
+    mise` / `Install it globally with mise (latest)` / `Not now (won't ask again; install later from :Tools)`.
+  - A global copy exists: no prompt; it is used, the row reads `global mise · 0.17.0 (project wants 0.15.0)`, and the
+    tool's `:Tools` menu adds `Install 0.15.0 for this project with mise`.
+  - "For this project", not "locally": the version lands in mise's shared store, not in the project folder.
+  - Still different from "Yes": that trusts the config (its `[env]` and hooks apply) and installs every pin up front.
+- **Case 6 (pinned, answered "No, use my global tools").** The project's mise config is skipped; a project
+  `.venv`/`node_modules` still applies; then global mise, then the system PATH; a missing tool gets the case 2 prompt,
+  never a project install. A row whose version differs from the pin still notes it:
+  `global mise · 0.17.0 (project wants 0.15.0)`. The answer row reads `Use mise.toml? no`.
+  - Why: the user wants to see when the editor runs a different version than the project expects, even when the
+    config is ignored. Rejected: hiding the note as noise.
+- **`:Tools` names the pins once, on the answer row** (decided after case 7): `Use mise.toml (pyrefly 1.3.0, ruff
+  0.15.0)?`, at most three pins then `+N more`, only the pins this filetype uses. Tool rows then drop the
+  `(project wants …)` note, which replaces what cases 5 and 6 said about rows; prompts keep their pinned-version text.
+  - Why: the answer row already shows what the project wants, so repeating it per tool is noise.
+- **The answer row says what picking it does, not the current answer**: `Choose how to use mise.toml (pyrefly 1.3.0,
+  ruff 0.15.0)`; picking it asks the mise.toml question again. Replaces the `Use mise.toml? …` row text above. The
+  current answer is visible from the tool rows' sources (`project mise` vs `global mise`).
+  - Why: showing the answer on the row was confusing. Rejected: `Change mise.toml settings` (suggests editing the file).
+- **The mise.toml row is a direct action, named for what it does** (replaces the two row entries above): while the
+  config is not fully in use ("No" or "Only versions already installed") the row reads
+  `Use mise.toml (pyrefly 1.3.0, ruff 0.15.0) · trusts it`, and picking it trusts the config, installs the missing
+  pins and uses them (the "Yes" answer), with no further menu. While it is in use ("Yes") the row reads
+  `Stop using mise.toml (pyrefly 1.3.0, ruff 0.15.0)` and picking it switches to global tools ("No").
+  "Only versions already installed" stays a choice in the first-time prompt only.
+  - Why: the user wants the row to say what picking it will do, not the current state, and no nested menu.
+    `· trusts it` stays because picking the row is the trust decision.
+  - Rejected: `Choose how to use mise.toml` (vague); showing the current answer on the row (confusing).
+- **Case 8 (untrusted project config that sets `[env]`).** mise refuses every call in the folder, so the pins can't
+  be read; tools resolve globally (and from a project `.venv`/`node_modules`). The first-time prompt stays:
+  `Trust this project's mise.toml? (it sets environment variables)` / `Yes, trust it and install its tools` /
+  `No, use my global tools`. The `:Tools` row reads `Trust mise.toml and use its tools` (no versions: mise hides the
+  pins until it is trusted); picking it trusts, installs and uses them.
+  - Note: trusting it in a terminal (`mise trust`) leaves the file unchanged, so Neovim only sees it after
+    `Rescan tool sources`.
+- **Case 9 (a copy fails the version check; today only tsc, which needs TypeScript 7+).** Rejected copies are
+  skipped in the usual order. A found copy notes what was skipped: `global mise · 7.0.2 (project's 5.9.3 is too old)`
+  (a note, no action: upgrading the project is not the editor's job). If none passes, the prompt reads
+  `typescript needs tsc 7 or newer (project has 5.9.3)` / `Install it globally with mise` / `Not now (…)`.
+- **Case 10 (a tool needs a runtime: node or go).** mise installs npm tools without node (its embedded aube package
+  manager) but never adds node, and the tool then fails to run (probed 2026-10-13 in a scratch mise with no node on
+  PATH: `mise use -g npm:yaml-language-server@1.25.0` succeeded, running it gave `exec: node: not found`;
+  https://mise.jdx.dev/dev-tools/backends/npm.html: "Add `node` to `[tools]` … but never adds it for you").
+  - So an install of a tool whose runtime is missing installs the runtime in the same step:
+    `yaml needs yaml-language-server` / `Install it and node globally with mise`. Same for go (gopls, goimports,
+    golangci-lint).
+  - When the runtime goes missing later (removed, or the tool came from outside Neovim): row
+    `✗ yaml-language-server  lsp  needs node · install`, prompt `yaml needs node to run yaml-language-server` /
+    `Install node globally with mise`; the tool menu entry reads `Install node globally with mise`.
+- **Case 11 (rustup components: rust-analyzer, rustfmt, clippy).** Checked with `rustup which <tool>` in the project
+  folder, since rustup's stand-ins exist either way. Missing: `rust needs rust-analyzer` / `Install it with rustup`
+  (naming the toolchain when the project pins one: `Install it with rustup (toolchain 1.92)`), run in the project so
+  it lands in that project's toolchain. No rustup: `Install Rust globally with mise, then add rust-analyzer`. Rows:
+  `not installed · install`, and once found `rustup · stable` (the toolchain, not a version).
+- **Case 12 (a tool mise can't install).** fish joins the catalog after all: spec `github:fish-shell/fish-shell`
+  (not in mise's registry by name, but its GitHub releases ship a Linux binary; probed 2026-10-13: `mise install
+  github:fish-shell/fish-shell@latest` installed fish 4.9.3 as a single `fish` binary). The formatter runs
+  `fish -c 'builtin fish_indent'`, since fish 4 has fish_indent as a builtin (`printf … | fish -c 'builtin
+  fish_indent'` indented the input, exit 0). Prompt: `fish needs fish` / `Install it globally with mise`.
+  - Side effect: `mise use -g` puts mise's fish ahead of `/usr/bin/fish` on the terminal PATH; the login shell is
+    unaffected.
+  - That leaves no catalog tool mise can't install. The `kind = "none"` path stays for future ones: no prompt, still
+    counted in the wrench, row `not installed · install <x> with your package manager`, picking it shows that advice.
