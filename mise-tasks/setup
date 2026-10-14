@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#MISE description="Point git at the repo's hooks in .githooks/ (once per clone)"
+# Hooks don't come with a clone, so each clone runs this once. git and GitButler
+# (`but push`) both run the hooks in core.hooksPath. GitButler keeps its own guard
+# hooks in git config (hook.gitbutler-*), which git runs whatever core.hooksPath
+# says; GitButler builds before gitbutlerapp/gitbutler#14698 wrote them into
+# .git/hooks instead, where core.hooksPath switches them off.
+set -euo pipefail
+
+git config core.hooksPath .githooks
+echo "git now runs the hooks in .githooks/"
+
+old=$(git rev-parse --git-path hooks)
+if grep -qs GITBUTLER_MANAGED_HOOK "$old"/*; then
+  echo "GitButler's guard in $old no longer runs: update GitButler (\`but update install nightly\`" \
+    "until a release has #14698), then run any but command to move it into git config." >&2
+  exit 1
+fi
