@@ -164,6 +164,18 @@ return {
   config = function(_, opts)
     require("snacks").setup(opts)
 
+    -- Nightly names its built-in modules "@vim/loader", without ".lua", and the profiler reads that path as a file
+    local loc = require("snacks.profiler.loc")
+    local ts_locs = loc.ts_locs
+    loc.ts_locs = function(file)
+      for _, f in ipairs({ file, file .. ".lua", file .. "/init.lua" }) do
+        if vim.fn.filereadable(f) == 1 then
+          return ts_locs(f)
+        end
+      end
+      return {}
+    end
+
     local git_group = vim.api.nvim_create_augroup("SnacksGitKeys", { clear = true })
     vim.api.nvim_create_autocmd("DirChanged", { group = git_group, callback = map_git_pickers })
     vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile", "BufFilePost" }, {
