@@ -1,0 +1,2 @@
+# Tasks are files in mise-tasks/, each pinning its own tools in its #MISE header: `mise tasks` lists them.
+min_version = "2026.10.6"

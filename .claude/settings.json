@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"$(git -C \"$CLAUDE_PROJECT_DIR\" config core.hooksPath)\" = .githooks ] || echo 'The git hooks are not set up in this clone: run `mise trust && mise run setup` before starting work (see AGENTS.md).'"
+          }
+        ]
+      }
+    ]
+  }
+}

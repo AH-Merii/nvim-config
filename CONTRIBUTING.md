@@ -3,6 +3,19 @@
 How the config is laid out and how to change it. For what it does and how to run it, see [README.md](README.md).
 Design decisions for the bigger features are in [docs/](docs/), one `*-decisions.md` per feature.
 
+## Setup
+
+```sh
+mise run setup            # once per clone: pushes check the formatting and scan for secrets first
+mise run fmt              # format the Lua with stylua
+mise tasks                # everything else
+```
+
+Hooks don't come with a clone, so `mise run setup` points git at `.githooks/` (`core.hooksPath`), whose pre-push hook
+runs for `git push` and `but push` alike. With GitButler, use a build that keeps its own hooks in git config
+(nightly, until a release has [gitbutlerapp/gitbutler#14698](https://github.com/gitbutlerapp/gitbutler/pull/14698));
+setup tells you if yours doesn't.
+
 ## Architecture
 
 ### Initialization Flow
