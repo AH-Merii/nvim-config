@@ -42,7 +42,7 @@ vim.opt.listchars = {
 
 vim.opt.cmdheight = 0
 vim.o.showcmd = true
-vim.o.showcmdloc = "statusline" -- show partial commands in the statusline
+vim.o.showcmdloc = "statusline" -- partial commands in the statusline; config.ui2.showcmd makes it "last" and draws them there itself
 
 -- Floats that set no border of their own (LSP hover and signature help, diagnostic floats, ui2's
 -- message window) get a rounded one. blink, gitsigns and snacks also fall back to it where this

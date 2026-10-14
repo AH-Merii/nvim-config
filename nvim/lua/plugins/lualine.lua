@@ -458,9 +458,12 @@ return {
       macro_recording,
       color = { fg = colors.yellow, gui = "bold" },
     })
-    -- Pending keys (e.g. a count), shown here since 'cmdheight' is 0
+    -- Pending keys (e.g. a count), shown here since 'cmdheight' is 0: through config.ui2.showcmd, which leaves out
+    -- keys whose command runs at once, or Neovim's own %S without ui2
     ins_right({
-      function() return "%S" end,
+      function()
+        return require("config.ui2.showcmd").active and "%{v:lua.require'config.ui2.showcmd'.get()}" or "%S"
+      end,
       color = { fg = colors.fg },
     })
 
