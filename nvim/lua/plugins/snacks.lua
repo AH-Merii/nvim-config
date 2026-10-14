@@ -212,10 +212,14 @@ return {
     local stc_get = stc.get
     local rows = {} ---@type table<string, string[]> the row before and after its number, or the whole row
     local wins = {} ---@type table<integer, boolean[]> each window's 'number' and 'relativenumber'
-    assert(vim.uv.new_timer()):start(200, 200, function() rows, wins = {}, {} end)
+    assert(vim.uv.new_timer()):start(200, 200, function()
+      rows, wins = {}, {}
+    end)
     vim.api.nvim_create_autocmd("OptionSet", {
       pattern = { "number", "relativenumber" },
-      callback = function() rows, wins = {}, {} end,
+      callback = function()
+        rows, wins = {}, {}
+      end,
     })
     stc.get = function()
       local win = vim.g.statusline_winid
@@ -226,8 +230,7 @@ return {
         wins[win] = w
       end
       local nu, rnu = w[1], w[2]
-      local num = (nu or rnu) and vim.v.virtnum == 0
-        and ((rnu and not (nu and vim.v.relnum == 0)) and vim.v.relnum or vim.v.lnum)
+      local num = (nu or rnu) and vim.v.virtnum == 0 and ((rnu and not (nu and vim.v.relnum == 0)) and vim.v.relnum or vim.v.lnum)
       local key = ("%d:%d:%d:%d:%s:%s"):format(win, buf, vim.v.lnum, vim.v.virtnum ~= 0 and 1 or 0, nu, rnu)
       local row = rows[key]
       if not row then
