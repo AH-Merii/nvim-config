@@ -81,7 +81,7 @@ fi
 
 # ---- run setup ---------------------------------------------------------------------------------
 RUNID=$(date +%Y%m%d-%H%M%S)-$$
-RUNROOT=$S/run/$RUNID
+RUNROOT=$RUNS/$RUNID
 mkdir -p "$RUNROOT" "$S/last"
 touch "$RUNROOT/stamp"
 T0=$EPOCHREALTIME

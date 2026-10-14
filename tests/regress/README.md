@@ -27,7 +27,8 @@ CFG=/path/to/nvim suite.sh      # test another config dir (default: ../../nvim, 
   status is non-zero on any failure.
 - The output and stderr of failed checks are kept in `last/<version>/`, replaced when that check
   runs again, so parallel runs of different checks don't clobber each other.
-  Run dirs live in `run/` only while the suite runs.
+  Run dirs live in `~/.cache/nvim-regress/run/` (`$NVR_RUNS`) only while the suite runs. They sit outside
+  the repo so that no project marker above a fixture, such as an untracked `mise.local.toml`, reaches a check.
 
 ### Tiers
 
