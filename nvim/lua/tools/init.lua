@@ -286,9 +286,7 @@ end
 --- Whether runtime's binary is on env's PATH.
 ---@param runtime string
 ---@param env table<string, string>
-local function has_runtime(runtime, env)
-  return find_in(vim.split(env.PATH or "", ":", { plain = true }), catalog.runtimes[runtime].bin) ~= nil
-end
+local function has_runtime(runtime, env) return find_in(vim.split(env.PATH or "", ":", { plain = true }), catalog.runtimes[runtime].bin) ~= nil end
 
 ---@param name string
 ---@param root string
@@ -340,8 +338,14 @@ local function compute(name, root, done)
             local global = entry.spec and { kind = "global", spec = entry.spec .. "@latest", runtime = runtime } or nil
             ---@type tools.Install?
             local for_project = pin_missing
-              and project.choice == "installed"
-              and { kind = "pinned", spec = ("%s@%s"):format(entry.spec, pinned.version), version = pinned.version, config = vim.fs.basename(pinned.source), global = global }
+                and project.choice == "installed"
+                and {
+                  kind = "pinned",
+                  spec = ("%s@%s"):format(entry.spec, pinned.version),
+                  version = pinned.version,
+                  config = vim.fs.basename(pinned.source),
+                  global = global,
+                }
               or nil
             if not found then
               if pin_missing and project.choice == "use" then

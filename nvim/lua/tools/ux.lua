@@ -474,7 +474,9 @@ local function ask_conflicts(results, root, done)
   select({
     { prefer = "env", text = ("Use %s's %s"):format(env.where, env.version) },
     { prefer = "mise", text = ("Use %s's %s"):format(pin.where, pin.version) },
-  }, { prompt = ("%s is in %s (%s) and %s (%s)"):format(result.name, env.where, env.version, pin.where, pin.version), kind = "tools.conflict" }, function(item)
+  }, { prompt = ("%s is in %s (%s) and %s (%s)"):format(result.name, env.where, env.version, pin.where, pin.version), kind = "tools.conflict" }, function(
+    item
+  )
     if not item then
       return ask_conflicts(results, root, done)
     end
@@ -745,7 +747,12 @@ local function rows(names, results, versions, roles)
   end
   return vim.tbl_map(function(name)
     local result = results[name]
-    return ("%s %s  %s  %s"):format(result.path and "✓" or "✗", pad(name, name_w), pad(table.concat(roles[name] or {}, ", "), role_w), status_text(result, versions[name]))
+    return ("%s %s  %s  %s"):format(
+      result.path and "✓" or "✗",
+      pad(name, name_w),
+      pad(table.concat(roles[name] or {}, ", "), role_w),
+      status_text(result, versions[name])
+    )
   end, names)
 end
 
@@ -805,9 +812,17 @@ function M.open(buf)
           return use_project(item.project, names)
         elseif item.project then
           local _, config = pin_list(item.project, names)
-          return tools.set_choice(root, "global", function(ok, err)
-            vim.notify(ok and ("Stopped using %s; using your global tools"):format(config) or (err or "failed"), ok and vim.log.levels.INFO or vim.log.levels.ERROR, { title = title })
-          end)
+          return tools.set_choice(
+            root,
+            "global",
+            function(ok, err)
+              vim.notify(
+                ok and ("Stopped using %s; using your global tools"):format(config) or (err or "failed"),
+                ok and vim.log.levels.INFO or vim.log.levels.ERROR,
+                { title = title }
+              )
+            end
+          )
         end
         M.actions(item.result, buf, vim.tbl_filter(function(server) return catalog.binary("server", server) == item.result.name end, servers), item.version)
       end)
