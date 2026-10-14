@@ -204,6 +204,46 @@ return {
       last_key = now
     end, vim.api.nvim_create_namespace("config.indent_at_rest"))
 
+    -- snacks caches each row of the statuscolumn by its relative number too, which with 'relativenumber' changes for
+    -- every row on every j, and empties the cache every 50 ms. Rows are cached here around their number, which is
+    -- put back in each time the way snacks picks it (absolute on the cursor line, relative elsewhere), for 200 ms:
+    -- signs and marks show at most that late (docs/profiling-scrolling.md).
+    local stc = require("snacks.statuscolumn")
+    local stc_get = stc.get
+    local rows = {} ---@type table<string, string[]> the row before and after its number, or the whole row
+    local wins = {} ---@type table<integer, boolean[]> each window's 'number' and 'relativenumber'
+    assert(vim.uv.new_timer()):start(200, 200, function() rows, wins = {}, {} end)
+    vim.api.nvim_create_autocmd("OptionSet", {
+      pattern = { "number", "relativenumber" },
+      callback = function() rows, wins = {}, {} end,
+    })
+    stc.get = function()
+      local win = vim.g.statusline_winid
+      local buf = vim.api.nvim_win_get_buf(win)
+      local w = wins[win]
+      if not w then
+        w = { vim.wo[win].number, vim.wo[win].relativenumber }
+        wins[win] = w
+      end
+      local nu, rnu = w[1], w[2]
+      local num = (nu or rnu) and vim.v.virtnum == 0
+        and ((rnu and not (nu and vim.v.relnum == 0)) and vim.v.relnum or vim.v.lnum)
+      local key = ("%d:%d:%d:%d:%s:%s"):format(win, buf, vim.v.lnum, vim.v.virtnum ~= 0 and 1 or 0, nu, rnu)
+      local row = rows[key]
+      if not row then
+        -- snacks writes the number as "%=<number> "; found by its shape, since snacks' own cache can hand back a
+        -- row drawn just before 'number' or 'relativenumber' changed
+        local s = stc_get()
+        local from, to = s:find("%%=%d+ ")
+        row = from and { s:sub(1, from - 1), s:sub(to + 1) } or { s }
+        rows[key] = row
+      end
+      if not row[2] then
+        return row[1]
+      end
+      return num and (row[1] .. "%=" .. num .. " " .. row[2]) or (row[1] .. row[2])
+    end
+
     local git_group = vim.api.nvim_create_augroup("SnacksGitKeys", { clear = true })
     vim.api.nvim_create_autocmd("DirChanged", { group = git_group, callback = map_git_pickers })
     vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile", "BufFilePost" }, {
