@@ -25,7 +25,7 @@ unset WAYLAND_DISPLAY DISPLAY
 . "$S/lib.sh"
 
 if [ -z "${NVR_HOME:-}" ]; then
-  mkdir -p "$S/run"; NVR_HOME=$(mktemp -d "$S/run/manual.XXXXXX")
+  mkdir -p "$RUNS"; NVR_HOME=$(mktemp -d "$RUNS/manual.XXXXXX")
   trap 'rm -rf "$NVR_HOME"' EXIT
   make_home "$NVR_HOME"
   export NVR_HOME

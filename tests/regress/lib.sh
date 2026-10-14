@@ -3,6 +3,9 @@
 S=${S:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}
 DEFAULT_CFG=$(cd "$S/../../nvim" && pwd)
 CFG=${CFG:-$DEFAULT_CFG}
+# Run dirs live outside the repo: a project marker above a fixture, such as an untracked mise.local.toml in
+# the checkout, would make the fixture part of that project, for mise and for the config's project root
+RUNS=${NVR_RUNS:-${XDG_CACHE_HOME:-$HOME/.cache}/nvim-regress/run}
 
 # make_home <dir>: a copy of $CFG plus state and cache dirs. Data is shared: $S/data, see nv.sh.
 make_home() {
