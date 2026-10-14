@@ -1,27 +1,18 @@
 #!/usr/bin/env bash
-# Checks what a push sends: the formatting of each pushed commit, then gitleaks on
-# every commit not yet on main. git and GitButler (`but push`) both run it through
-# core.hooksPath, which `mise run setup` sets; --no-verify skips it. The regression
-# suite is too slow for every push: CONTRIBUTING.md says when to run it.
-#
-# The formatting is checked in a copy of each commit's files, not the working tree:
-# GitButler's working tree holds every applied branch and uncommitted edits.
-# Git passes "<local ref> <local sha> <remote ref> <remote sha>" lines on stdin.
+# Checks each pushed commit's formatting and scans new commits for secrets.
+# `mise run setup` installs it; git and `but push` both run it.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 remote=$1
-refs=0 tips=()
+tips=()
 while read -r _ sha _ _; do
-  refs=$((refs + 1))
   # An all-zero sha deletes the remote branch: nothing to check.
   [[ $sha =~ ^0+$ ]] || tips+=("$sha")
 done
-# No ref lines (a tool that doesn't pass them): check HEAD instead.
-[ "$refs" -gt 0 ] || tips=(HEAD)
 [ ${#tips[@]} -gt 0 ] || exit 0
 
-# What the push adds over main (everything, before main exists on the remote).
+# Commits not on main yet.
 new=("${tips[@]}")
 git rev-parse -q --verify "$remote/main" >/dev/null && new+=(--not "$remote/main")
 mise run -q check:secrets "${new[@]}" </dev/null
@@ -29,6 +20,7 @@ mise run -q check:secrets "${new[@]}" </dev/null
 export TMPDIR=${XDG_CACHE_HOME:-$HOME/.cache}/nvim-config
 mkdir -p "$TMPDIR"
 for tip in "${tips[@]}"; do
+  # A copy of the commit's files: GitButler's working tree mixes in other branches.
   copy=$(mktemp -d)
   trap 'rm -rf "$copy"' EXIT
   git archive "$tip" | tar -x -C "$copy"
