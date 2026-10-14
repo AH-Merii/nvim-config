@@ -115,6 +115,15 @@ local function report()
   info(string.format("echoes before VimEnter: %d%s", #init,
     #init > 0 and (" (first: " .. join(vim.tbl_map(function(e) return e.text end, init), 3) .. ")") or ""))
 
+  -- lazy reports a plugin hook that raised as "Failed to run `config` for <plugin>" (also init, build, ...)
+  local hook_errs = {}
+  for _, e in ipairs(NVR.echoes) do
+    local hook, name = e.text:match("Failed to run `(%w+)` for ([%w%._%-]+)")
+    if hook then table.insert(hook_errs, name .. " " .. hook) end
+  end
+  rec(#hook_errs == 0, "every plugin's init, build and config run without error at the first start",
+    #hook_errs > 0 and join(hook_errs) or nil)
+
   local started, errs, pending = ts_state()
   local n, unloadable, errlist = 0, {}, {}
   for l in pairs(started) do

@@ -139,6 +139,8 @@ return {
     },
     dependencies = {
       { "nvim-treesitter/nvim-treesitter-textobjects", branch = "main" },
+      -- config uses Snacks.toggle; on the first start lazy runs configs as plugins finish installing, not by priority
+      "folke/snacks.nvim",
     },
     config = function()
       local ts = require("nvim-treesitter")
