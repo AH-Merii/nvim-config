@@ -155,9 +155,12 @@ settle() {
   echo "settled: $PROMPTS prompts, $PARSERS parsers, mode '$(rmode)'" >>"$LOG"
 }
 
-# messages <title>: append :messages and the last error to the log; only as a session ends, since noice
-# shows :messages in a split that would stay in every later shot
-messages() { { echo "== $1"; rexpr 'execute("messages")'; echo; echo "errmsg: $(rexpr 'v:errmsg')"; } >>"$LOG" 2>&1; }
+# messages <title>: append :messages and the last error to the log, as a session ends. execute() captures
+# the history without opening ui2's pager, which would stay in every later shot
+messages() { { echo "== $1"; rexpr 'execute("messages")'; echo; echo "errmsg: $(rexpr 'v:errmsg')"; echo "ui2: $(rexpr "$UI2")"; } >>"$LOG" 2>&1; }
+# the suite runs headless, where ui2 never attaches, so only here would a broken ui2 show: "ui2: attached"
+# needs its cmd and msg windows open, and no ui_attach error in :messages
+UI2='luaeval("(function() local u = require([[vim._core.ui2]]); local ok = u.cmd ~= nil and vim.iter({ u.wins.cmd, u.wins.msg }):all(function(w) return vim.api.nvim_win_is_valid(w) end); local err = vim.fn.execute([[messages]]):find([[ui_attach]]); return (ok and not err) and [[attached]] or ([[NOT OK: windows ]] .. tostring(ok) .. [[, ui_attach error ]] .. tostring(err ~= nil)) end)()")'
 
 scenes() {
   local ver=$1 out=${2:-$S/last/gui}

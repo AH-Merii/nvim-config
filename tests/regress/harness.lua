@@ -217,16 +217,17 @@ local function main()
       info("linters still running at exit: " .. table.concat(lint.get_running(), ","))
     end
   end
+  -- ui2 keeps no history of its own: its msg and cmd windows clear, and its pager renders this same
+  -- :messages history, so :messages holds every error ui2 shows (and ui2 stays off headless anyway)
   local msgs = vim.api.nvim_exec2("messages", { output = true }).output
   for line in msgs:gmatch("[^\n]+") do
     if line:find("E%d+:") or line:find("Error") or line:find("stack traceback") then emit("MSG " .. line) end
   end
-  -- noice takes over vim.notify and the message area; its history holds the errors :messages misses
-  if package.loaded["noice"] then
-    local okm, manager = pcall(require, "noice.message.manager")
-    if okm then
-      for _, m in ipairs(manager.get({ error = true }, { history = true })) do emit("NOTIFY " .. m:content()) end
-    end
+  -- snacks.notifier takes over vim.notify and never echoes, so :messages misses its errors
+  -- a require that failed leaves a non-table here; the MSG lines above already report why
+  local notifier = package.loaded["snacks.notifier"]
+  if type(notifier) == "table" and notifier.get_history then
+    for _, n in ipairs(notifier.get_history({ filter = vim.log.levels.ERROR })) do emit("NOTIFY " .. tostring(n.msg)) end
   end
   emit("DONE")
   vim.cmd("qa!")

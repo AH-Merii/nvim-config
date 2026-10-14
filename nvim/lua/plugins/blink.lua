@@ -104,8 +104,9 @@ return {
           ghost_text = { enabled = true },
         },
 
-        -- Experimental signature help support
-        -- signature = { window = { border = "rounded" }, enabled = true },
+        -- Signature help while typing a call (on trigger characters and after accepting an item);
+        -- noice did this before ui2 replaced it. Border comes from 'winborder' (options.lua).
+        signature = { enabled = true },
       })
     end,
   },

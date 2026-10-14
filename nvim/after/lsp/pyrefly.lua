@@ -26,5 +26,8 @@ return {
     local on = root ~= nil and vim.iter({ "pyproject.toml", "pyrefly.toml" }):any(function(f) return vim.uv.fs_stat(vim.fs.joinpath(root, f)) ~= nil end)
     require("config.utils").pyrefly_type_errors(client, on)
   end,
-  on_exit = function(code, _, _) vim.notify("Closing Pyrefly LSP exited with code: " .. code, vim.log.levels.INFO) end,
+  -- on_exit runs in a fast event, where vim.notify's first call (snacks loading its notifier) fails with E5560
+  on_exit = function(code, _, _)
+    vim.schedule(function() vim.notify("Closing Pyrefly LSP exited with code: " .. code, vim.log.levels.INFO) end)
+  end,
 }

@@ -92,11 +92,8 @@ local function build_client_basic_info(i, client)
 end
 
 ---@param lines string[]
-local function echo_lines(lines)
-  for _, line in ipairs(lines) do
-    print(line)
-  end
-end
+-- nvim_echo, not print: headless with no UI attached, print is not captured by nvim_exec2's output
+local function echo_lines(lines) vim.api.nvim_echo({ { table.concat(lines, "\n") } }, true, {}) end
 
 -- ============================================================================
 -- Builders
