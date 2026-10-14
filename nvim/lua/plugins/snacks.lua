@@ -186,6 +186,24 @@ return {
       return {}
     end
 
+    -- The indent scope animates after a key pressed on its own, not while keys repeat (a held j or C-d): each of
+    -- those started another 150 ms of redraws for a scope the cursor then left (docs/profiling-scrolling.md). Keys,
+    -- not cursor moves, since a smooth scroll's frames move the cursor too; and only typed ones, since the frames run
+    -- `normal!` and mappings expand. A buffer variable, which snacks reads before the global one.
+    local last_key = 0
+    vim.on_key(function(_, typed)
+      if not typed or typed == "" then
+        return
+      end
+      local now = vim.uv.hrtime()
+      if now - last_key > 150e6 then
+        vim.b.snacks_animate_indent = nil
+      else
+        vim.b.snacks_animate_indent = false
+      end
+      last_key = now
+    end, vim.api.nvim_create_namespace("config.indent_at_rest"))
+
     local git_group = vim.api.nvim_create_augroup("SnacksGitKeys", { clear = true })
     vim.api.nvim_create_autocmd("DirChanged", { group = git_group, callback = map_git_pickers })
     vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile", "BufFilePost" }, {
