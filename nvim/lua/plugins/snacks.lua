@@ -61,7 +61,12 @@ return {
     profiler = { enabled = true },
     dashboard = { enabled = false }, --
     explorer = { enabled = false }, --
-    indent = { enabled = true },
+    indent = {
+      enabled = true,
+      -- The scope grows out from the cursor in 150 ms rather than snacks' 500 (20 ms a line): a jump settled sooner
+      -- and redrew for half as long (docs/profiling-scrolling.md)
+      animate = { duration = { step = 10, total = 150 } },
+    },
     input = { enabled = true },
     picker = {
       enabled = true,
@@ -102,7 +107,12 @@ return {
     },
     quickfile = { enabled = true },
     scope = { enabled = true },
-    scroll = { enabled = true },
+    scroll = {
+      enabled = true,
+      -- Front-loaded, so C-d/C-u cover half the distance in about 20 ms, and done in about 80 ms; snacks' default
+      -- is linear over 200 ms, halfway at about 85 ms (docs/profiling-scrolling.md)
+      animate = { duration = { step = 10, total = 120 }, easing = "outCubic" },
+    },
     statuscolumn = {
       enabled = true,
       folds = {
