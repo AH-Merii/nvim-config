@@ -292,6 +292,22 @@ return {
         component_separators = "",
         section_separators = "",
         globalstatus = true,
+        -- lualine's default events without CursorMoved/CursorMovedI, which rebuilt the whole statusline on every j
+        -- (about 1.8 ms; docs/profiling-scrolling.md). What follows the cursor is drawn by Neovim instead: the
+        -- location and progress below are statusline expressions, and searchcount refreshes on its own.
+        refresh = {
+          events = {
+            "WinEnter",
+            "BufEnter",
+            "BufWritePost",
+            "SessionLoadPost",
+            "FileChangedShellPost",
+            "VimResized",
+            "Filetype",
+            "ModeChanged",
+            "DiagnosticChanged",
+          },
+        },
         theme = {
           normal = { c = { fg = colors.fg } },
           inactive = { c = { fg = colors.fg } },
@@ -345,8 +361,12 @@ return {
       cond = conditions.buffer_not_empty,
     })
 
-    ins_left({ "location" })
-    ins_left({ "progress", color = { fg = colors.fg, gui = "bold" } })
+    -- lualine's location and progress, as expressions Neovim evaluates whenever it draws the statusline
+    ins_left({ function() return "%3l:%-2{charcol('.')}" end })
+    ins_left({
+      function() return "%{line('.') == 1 ? 'Top' : line('.') == line('$') ? 'Bot' : printf('%2d%%', line('.') * 100 / line('$'))}" end,
+      color = { fg = colors.fg, gui = "bold" },
+    })
     -- diagnostics
     ins_left({
       "diagnostics",
@@ -421,6 +441,14 @@ return {
       callback = function() lualine.refresh({ place = { "statusline" } }) end,
     })
     -- Search count, e.g. "[2/3]": ui2 draws it on the cmdline, which is hidden since 'cmdheight' is 0
+    -- the count follows the cursor, so refresh on moves while a search is highlighted
+    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+      callback = function()
+        if vim.v.hlsearch == 1 then
+          lualine.refresh({ place = { "statusline" } })
+        end
+      end,
+    })
     ins_right({
       "searchcount",
       color = { fg = colors.fg },
@@ -430,9 +458,10 @@ return {
       macro_recording,
       color = { fg = colors.yellow, gui = "bold" },
     })
-    -- Pending keys (e.g. a count), shown here since 'cmdheight' is 0
+    -- Pending keys (e.g. a count), shown here since 'cmdheight' is 0: through config.ui2.showcmd, which leaves out
+    -- keys whose command runs at once, or Neovim's own %S without ui2
     ins_right({
-      function() return "%S" end,
+      function() return require("config.ui2.showcmd").active and "%{v:lua.require'config.ui2.showcmd'.get()}" or "%S" end,
       color = { fg = colors.fg },
     })
 
