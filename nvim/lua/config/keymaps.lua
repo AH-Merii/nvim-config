@@ -13,9 +13,10 @@ keymap("x", "K", ":m '<-2<CR>gv", { desc = "Move line up", silent = true })
 keymap("n", "<leader>w", ":write!<CR>", silent_desc("Save file"))
 keymap("n", "<leader>q", ":q!<CR>", silent_desc("Quit without saving"))
 
--- Remap for dealing with visual line wraps -> respects wraps
-keymap("n", "k", "v:count == 0 ? 'gk' : 'k'", { expr = true, desc = "Move up" })
-keymap("n", "j", "v:count == 0 ? 'gj' : 'j'", { expr = true, desc = "Move down" })
+-- Remap for dealing with visual line wraps -> respects wraps. gj/gk run from here rather than typed (an expr
+-- mapping), which made each press a two-key command that flashed "gj" in the statusline's pending keys.
+keymap("n", "k", function() vim.cmd("normal! " .. (vim.v.count == 0 and "gk" or vim.v.count .. "k")) end, { desc = "Move up" })
+keymap("n", "j", function() vim.cmd("normal! " .. (vim.v.count == 0 and "gj" or vim.v.count .. "j")) end, { desc = "Move down" })
 
 -- Better indenting (with temporary Snacks indent animation disable)
 keymap("x", "<", function()
