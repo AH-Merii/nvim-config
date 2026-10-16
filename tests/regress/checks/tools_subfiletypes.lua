@@ -26,12 +26,14 @@ local function none(list, names)
   return not vim.iter(names):any(function(n) return vim.list_contains(list, n) end)
 end
 
--- Every sub-filetype: the tools set for it alone (by its full name or its extra part) are needed there and not in its
--- base filetype; it keeps the base's servers and linters, and the base's formatters unless it sets its own
+-- Every sub-filetype: the tools set for it alone (by its full name or its extra part, or servers that list it and not its
+-- base) are needed there and not in its base filetype; it keeps the base's servers and linters, and the base's
+-- formatters unless it sets its own
 local lint, conform, catalog = require("lint"), require("conform"), require("tools.catalog")
 local subs = vim.tbl_keys(require("tools.filetypes").filetypes)
 table.sort(subs)
 check("sub-filetypes are defined", #subs > 0, vim.inspect(subs))
+local kept = { servers = 0, formatters = 0 }
 for _, ft in ipairs(subs) do
   local base, part = ft:match("^([^.]+)%.(.+)$")
   local own, own_formatters = {}, false
@@ -44,18 +46,31 @@ for _, ft in ipairs(subs) do
       table.insert(own, catalog.binary("formatter", name) or name)
     end
   end
+  for _, server in ipairs(catalog.servers()) do
+    local ok, config = pcall(function() return vim.lsp.config[server] end)
+    local fts = ok and config and config.filetypes or {}
+    if vim.list_contains(fts, ft) and not vim.list_contains(fts, base) then
+      table.insert(own, catalog.binary("server", server))
+    end
+  end
   local sub, plain = tools.for_filetype(ft), tools.for_filetype(base)
   if check(ft .. " has tools of its own", #own > 0, ft) then
     check(ft .. " needs its own tools", has(sub.tools, own), vim.inspect({ own = own, needs = sub.tools }))
     check(base .. " does not need " .. ft .. "'s own tools", none(plain.tools, own), vim.inspect({ own = own, needs = plain.tools }))
   end
-  check(ft .. " keeps " .. base .. "'s servers and linters", #plain.servers > 0 and has(sub.servers, plain.servers) and has(sub.linters, plain.linters),
-    vim.inspect({ sub.servers, plain.servers, sub.linters, plain.linters }))
-  if not own_formatters then
-    check(ft .. " keeps " .. base .. "'s formatters", #plain.formatters > 0 and vim.deep_equal(sub.formatters, plain.formatters),
+  -- a base with no tools (hcl) has none to keep
+  if #plain.servers + #plain.linters > 0 then
+    kept.servers = kept.servers + 1
+    check(ft .. " keeps " .. base .. "'s servers and linters", has(sub.servers, plain.servers) and has(sub.linters, plain.linters),
+      vim.inspect({ sub.servers, plain.servers, sub.linters, plain.linters }))
+  end
+  if not own_formatters and #plain.formatters > 0 then
+    kept.formatters = kept.formatters + 1
+    check(ft .. " keeps " .. base .. "'s formatters", vim.deep_equal(sub.formatters, plain.formatters),
       vim.inspect({ sub.formatters, plain.formatters }))
   end
 end
+check("some sub-filetype has a base's servers, linters and formatters to keep", kept.servers > 0 and kept.formatters > 0, vim.inspect(kept))
 
 -- treesitter parses the first part, so highlighting is unchanged
 vim.fn.writefile({ "on: push" }, ".github/workflows/ci.yml")
