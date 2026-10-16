@@ -108,6 +108,8 @@ How: files that need extra tools get a dotted sub-filetype from `vim.filetype.ad
 |---|---|---|
 | `*/.github/workflows/*.y{a,}ml` | `yaml.github-actions` | jactionlint, zizmor (lint) |
 | `pyproject.toml` | `toml.pyproject` | pyproject-fmt (format) |
+| `compose.y{a,}ml`, `docker-compose.y{a,}ml` and their `.<name>.` overrides (`compose.override.yaml`) | `yaml.docker-compose` | docker-language-server (server) |
+| `docker-bake.hcl`, `docker-bake.override.hcl` | `hcl.docker-bake` | docker-language-server (server) |
 
 Why this works with the existing tools:
 
