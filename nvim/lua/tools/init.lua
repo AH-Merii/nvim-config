@@ -446,6 +446,14 @@ end
 local refresh_reason = "refresh" ---@type "refresh"|"accepted"|"installed"
 local previous = {} ---@type table<string, table<string, tools.Result>> root -> name -> result before the last refresh
 
+--- Whether buf is a file: named, no 'buftype' and no scheme:// name (health://, oil://, fugitive://).
+---@param buf integer
+---@return boolean
+local function is_file(buf)
+  local name = vim.api.nvim_buf_get_name(buf)
+  return name ~= "" and vim.bo[buf].buftype == "" and not name:match("^%a[%w+.-]*://")
+end
+
 --- The project buf belongs to: the nearest dir with a mise config, .venv, node_modules or a language project file,
 --- else the git root; nil outside any project.
 ---@param buf? integer
@@ -471,13 +479,12 @@ function M.project_root(buf)
   return root and norm(root)
 end
 
---- The root used for buf's tools: its project root, else the file's dir.
+--- The root used for buf's tools: its project root, else the file's dir, or the cwd for a buffer that isn't a file.
 ---@param buf? integer
 ---@return string
 function M.root(buf)
   buf = (buf == nil or buf == 0) and vim.api.nvim_get_current_buf() or buf
-  local name = vim.api.nvim_buf_get_name(buf)
-  return M.project_root(buf) or norm(name ~= "" and vim.fs.dirname(name) or vim.fn.getcwd())
+  return M.project_root(buf) or norm(is_file(buf) and vim.fs.dirname(vim.api.nvim_buf_get_name(buf)) or vim.fn.getcwd())
 end
 
 --- The cached result for name in root, or nil if it was never resolved or is being resolved again.
