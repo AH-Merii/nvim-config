@@ -213,7 +213,6 @@ return {
         { "]Q", hidden = true },
         { "]<C-T>", hidden = true },
         { "]<C-Q>", hidden = true },
-        { "]<C-T>", hidden = true },
         { "]<C-L>", hidden = true },
         { "]%", mode = { "n", "x", "o" }, hidden = true },
 
@@ -225,7 +224,6 @@ return {
         { "[Q", hidden = true },
         { "[<C-T>", hidden = true },
         { "[<C-Q>", hidden = true },
-        { "[<C-T>", hidden = true },
         { "[<C-L>", hidden = true },
         { "[%", mode = { "n", "x", "o" }, hidden = true },
 

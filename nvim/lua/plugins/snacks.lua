@@ -267,8 +267,6 @@ return {
         -- Groups
         { "<leader>f", group = "Find", icon = { icon = "󰈞", color = "blue" } },
         { "<leader>s", group = "Search", mode = { "n", "x" }, icon = { icon = "󰞷", color = "cyan" } },
-        { "<leader>G", group = "Git (Actions)", icon = { icon = "", color = "cyan" } },
-        { "<leader>g", group = "Git (Inspect)", icon = { icon = "", color = "cyan" } },
         { "<leader>T", group = "Toggle Features", icon = { icon = "", color = "yellow" } },
         { "<leader>P", group = "Profiler", icon = { icon = "󰓅", color = "orange" } },
 
