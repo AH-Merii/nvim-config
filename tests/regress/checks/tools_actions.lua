@@ -3,7 +3,7 @@
 -- @budget   25
 -- @needs    lua-language-server stylua
 -- The pickers are stubbed: the :Tools list picks the tool under test and the actions picker is recorded and dismissed.
--- Which tools are missing depends on the suite's mise: lua-language-server is there, docker-language-server is not.
+-- Which tools are missing depends on the suite's mise: lua-language-server is there, tinymist is not (no check needs it).
 local tools = require("tools")
 vim.g.install_tools = "off"
 
@@ -45,8 +45,8 @@ local function has(texts, pattern) return vim.iter(texts):any(function(t) return
 -- Re-resolving every tool of the folder is the main list's job, not one tool's
 local function rescans(texts) return has(texts, "^Retry") or has(texts, "[Rr]escan") or has(texts, "[Rr]esolve") end
 
-local offered, result = actions(FIX .. "/dock/Dockerfile", { "FROM scratch" }, "docker-language-server")
-if check("docker-language-server is missing in the suite", result ~= nil and result.path == nil, result and result.source) then
+local offered, result = actions(FIX .. "/doc/main.typ", { "= Title" }, "tinymist")
+if check("tinymist is missing in the suite", result ~= nil and result.path == nil, result and result.source) then
   check("a missing server binary is not offered a start or restart", #offered > 0 and not has(offered, "^Restart") and not has(offered, "^Start"), vim.inspect(offered))
   check("it is offered an install", has(offered, "^Install"), vim.inspect(offered))
   check("its menu does not re-resolve every tool", not rescans(offered), vim.inspect(offered))
