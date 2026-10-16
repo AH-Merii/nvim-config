@@ -189,6 +189,36 @@ function M.setup()
       vim._with({ silent = true }, function() vim.api.nvim_echo({ { value.message or "done" } }, false, opts) end)
     end,
   })
+
+  -- Language servers' colors (vim.lsp.document_color, on by default, redrawn on edits only), drawn as a palette
+  -- symbol at the line's end in the color instead of the built-in's background
+  local color_ns = vim.api.nvim_create_namespace("config.document_color")
+  local drawn = {} ---@type table<integer, integer> buffer -> the version its marks are for
+  vim.lsp.document_color.enable(true, nil, {
+    style = function(buf, range, hex)
+      -- called for each color once per buffer version, after the built-in clears its own marks
+      local version = vim.lsp.util.buf_versions[buf]
+      if drawn[buf] ~= version then
+        vim.api.nvim_buf_clear_namespace(buf, color_ns, 0, -1)
+        drawn[buf] = version
+      end
+      local hl = "LspDocumentColorSymbol_" .. hex:sub(2)
+      vim.api.nvim_set_hl(0, hl, { fg = hex, default = true })
+      vim.api.nvim_buf_set_extmark(buf, color_ns, range.start_row, range.start_col, {
+        virt_text = { { " \u{E22B}", hl } },
+        virt_text_pos = "eol",
+        strict = false,
+      })
+    end,
+  })
+  -- the built-in clears only its own marks when a server goes
+  autocmd("LspDetach", {
+    group = user_group,
+    callback = function(ev)
+      vim.api.nvim_buf_clear_namespace(ev.buf, color_ns, 0, -1)
+      drawn[ev.buf] = nil
+    end,
+  })
 end
 
 return M

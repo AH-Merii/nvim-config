@@ -1,18 +1,7 @@
--- @desc     color previews sit at the end of their colors' lines, in those colors, after scrolling away and back; a language server's colors are drawn once each the same way and go with the server
+-- @desc     a language server's colors are drawn once each, as a symbol at the line's end in the color, and go with the server
 -- @areas    ui
 -- @budget   20
--- The plugin re-renders on WinScrolled; headless nothing scrolls on its own, so the check fires it.
-local lines = {}
-for i = 1, 60 do
-  lines[i] = ("local x%d = true"):format(i)
-end
-vim.list_extend(lines, { 'a = "#ff8800"', "b: rgb(0, 128, 255)", "c: red" })
-for _ = 1, 40 do
-  lines[#lines + 1] = "-- filler"
-end
-vim.fn.writefile(lines, "colors.txt")
-vim.cmd.edit("colors.txt")
-local buf = vim.api.nvim_get_current_buf()
+local buf
 
 --- The end-of-line symbols drawn in buf, as { row (1-based), fg (hex) }, sorted
 local function symbols()
@@ -27,22 +16,8 @@ local function symbols()
   table.sort(out)
   return out
 end
-local function scroll_to(lnum)
-  vim.cmd(("normal! %dGzt"):format(lnum))
-  vim.api.nvim_exec_autocmds("WinScrolled", { buffer = buf })
-end
 
-local want = { "61 ff8800", "62 0080ff", "63 ff0000" }
-scroll_to(61)
-check("after scrolling to them, each color gets its symbol on its line, in its color", vim.deep_equal(symbols(), want), vim.inspect(symbols()))
-scroll_to(1)
-scroll_to(61)
-check("scrolling away and back draws the same symbols", vim.deep_equal(symbols(), want), vim.inspect(symbols()))
-scroll_to(1)
-check("lines like `= true` get none", #vim.tbl_filter(function(s) return tonumber(s:match("^%d+")) <= 60 end, symbols()) == 0,
-  vim.inspect(symbols()))
-
--- A language server's colors: an in-process server that reports two, on a buffer with nothing the plugin matches
+-- A language server's colors: an in-process server that reports two
 vim.fn.writefile({ "first", "second", "third" }, "lsp.txt")
 vim.cmd.edit("lsp.txt")
 buf = vim.api.nvim_get_current_buf()
