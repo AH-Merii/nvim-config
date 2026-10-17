@@ -15,6 +15,7 @@ require("tools.state").file = tmp .. "/state/projects.json"
 
 -- A language with catalog tools: stylua and shfmt format, ruff lints unless the fakesrv server runs, yamllint lints.
 -- A second one only lints, with yamllint.
+-- facts, format and linting read the registry from package.loaded.lang
 local registry = lang._from({
   factlang = {
     filetypes = { "factsft" },
@@ -24,6 +25,7 @@ local registry = lang._from({
   },
   otherlang = { filetypes = { "factsother" }, linters = { yamllint = {} } },
 })
+package.loaded.lang = registry
 
 --- Runs what handlers scheduled; two rounds cover a schedule made from a scheduled callback.
 local function settle()
@@ -53,7 +55,7 @@ local function open(opts)
   local projects = { [dir] = opts.pins }
   local backend = fake({ global = { stylua = "2.0.0", ruff = "0.17.0", yamllint = "1.35.0" }, projects = projects })
   tools.setup({ backend = backend })
-  facts.setup({ lang = registry })
+  facts.setup()
   vim.cmd.edit(dir .. "/a.facts")
   local buf = vim.api.nvim_get_current_buf()
   vim.bo[buf].filetype = "factsft"
@@ -238,7 +240,7 @@ h.case("the git checkout: the folder's .git dir or file above it, none outside o
   local repo, linked, outside = tmp .. "/repo", tmp .. "/linked", tmp .. "/outside"
   vim.fn.mkdir(repo .. "/.git", "p")
   h.write(linked .. "/.git", { "gitdir: " .. repo .. "/.git/worktrees/linked" })
-  facts.setup({ lang = registry })
+  facts.setup()
   for _, case in ipairs({ { repo .. "/sub/a.txt", repo }, { linked .. "/a.txt", linked }, { outside .. "/a.txt", nil } }) do
     vim.cmd.edit(case[1])
     h.eq(facts.get(0).repo, case[2], case[1])
