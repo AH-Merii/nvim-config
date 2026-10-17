@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="Run the unit tests (tests/unit): no plugins, seconds; a regex picks files"
+set -euo pipefail
+exec tests/unit/run.sh "$@"

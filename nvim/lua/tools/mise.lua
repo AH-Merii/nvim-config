@@ -1,24 +1,9 @@
--- Async mise queries and the PATH the resolver searches. Every query runs with stdin closed and calls back on the main loop.
+-- The mise backend: async mise queries, the PATH the resolver searches, and mise's installs. The resolver reaches it
+-- through the tools.Backend interface (tools/init.lua); every query runs with stdin closed and calls back on the main loop.
+
+local proc = require("tools.proc")
 
 local M = {}
-
----@class tools.Run
----@field code integer
----@field stdout string
----@field stderr string
-
---- Runs cmd and calls back with its result on the main loop; a missing executable is code -1.
----@param cmd string[]
----@param opts? { cwd?: string, env?: table<string, string>, timeout?: integer }
----@param on_exit fun(result: tools.Run)
-function M.run(cmd, opts, on_exit)
-  opts = opts or {}
-  local done = vim.schedule_wrap(function(out) on_exit({ code = out.code, stdout = out.stdout or "", stderr = out.stderr or "" }) end)
-  local ok, err = pcall(vim.system, cmd, { cwd = opts.cwd, env = opts.env, timeout = opts.timeout, text = true, stdin = false }, done)
-  if not ok then
-    vim.schedule(function() on_exit({ code = -1, stdout = "", stderr = tostring(err) }) end)
-  end
-end
 
 local function data_dir()
   local xdg = vim.env.XDG_DATA_HOME or vim.fs.joinpath(vim.uv.os_homedir(), ".local/share")
@@ -97,7 +82,7 @@ function M.mise(args, opts, on_exit)
   if not bin then
     return vim.schedule(function() on_exit({ code = -1, stdout = "", stderr = "mise is not installed" }) end)
   end
-  M.run({ bin, unpack(args) }, opts, on_exit)
+  proc.run({ bin, unpack(args) }, opts, on_exit)
 end
 
 ---@param text string
@@ -186,5 +171,34 @@ function M.env(scope, dirs, cb)
     cb(env)
   end)
 end
+
+--- Why installs can't run: mise is not installed; nil when they can.
+---@return string?
+function M.missing() return not M.bin() and "mise is not installed" or nil end
+
+--- `mise use -g <specs>` (into the global config). Specs are full, e.g. "ruff@latest".
+---@param specs string[]
+---@param cb fun(ok: boolean, err?: string)
+function M.use_global(specs, cb)
+  -- cwd /: an untrusted project config with [env] would make mise refuse
+  proc.install({ M.bin(), "use", "-g", unpack(specs) }, { cwd = "/", env = { MISE_YES = "1" } }, cb)
+end
+
+--- `mise install <specs>` from /, e.g. "ruff@0.15.0": a project's pinned versions land in mise's shared store without
+--- trusting the project or changing its config, and the project then finds them.
+---@param specs string[]
+---@param cb fun(ok: boolean, err?: string)
+function M.install(specs, cb) proc.install({ M.bin(), "install", unpack(specs) }, { cwd = "/", env = { MISE_YES = "1" } }, cb) end
+
+--- `mise trust <configs>` in root.
+---@param configs string[]
+---@param root string
+---@param cb fun(ok: boolean, err?: string)
+function M.trust(configs, root, cb) proc.install({ M.bin(), "trust", unpack(configs) }, { cwd = root }, cb) end
+
+--- `mise install` in root: every tool the project's configs pin.
+---@param root string
+---@param cb fun(ok: boolean, err?: string)
+function M.install_project(root, cb) proc.install({ M.bin(), "install" }, { cwd = root, env = { MISE_YES = "1" } }, cb) end
 
 return M
