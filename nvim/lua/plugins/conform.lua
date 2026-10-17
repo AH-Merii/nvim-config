@@ -13,51 +13,6 @@ return {
       fish_indent = { args = { "-c", "builtin fish_indent" } },
     },
 
-    -- A dotted filetype with no key of its own uses its most specific part that has one (yaml.docker-compose -> yaml)
-    formatters_by_ft = {
-      -- Web technologies (Biome for JS/TS/JSON, Prettier for markup/config)
-      javascript = { "biome" },
-      typescript = { "biome" },
-      javascriptreact = { "biome" },
-      typescriptreact = { "biome" },
-      json = { "biome" },
-      jsonc = { "biome" },
-      yaml = { "prettierd" },
-      markdown = { "prettierd" },
-      html = { "prettierd" },
-      css = { "prettierd" },
-      scss = { "prettierd" },
-
-      python = {
-        "ruff_fix",
-        "ruff_format",
-        "ruff_organize_imports",
-      },
-
-      -- Shell
-      sh = { "shfmt" },
-      bash = { "shfmt" },
-      fish = { "fish_indent" },
-
-      -- C/C++
-      c = { "clang-format" },
-      cpp = { "clang-format" },
-
-      go = { "goimports", "gofumpt" },
-      lua = { "stylua" },
-      rust = { "rustfmt" },
-
-      terraform = { "terraform_fmt" },
-      tf = { "terraform_fmt" },
-      ["terraform-vars"] = { "terraform_fmt" },
-
-      cmake = { "gersemi" },
-
-      -- pyproject.toml is toml.pyproject (lua/tools/filetypes.lua)
-      toml = { "tombi" },
-      ["toml.pyproject"] = { "pyproject-fmt" },
-    },
-
     -- Use LSP if no external formatter is configured
     default_format_opts = {
       lsp_format = "fallback",
@@ -67,6 +22,9 @@ return {
   config = function(_, opts)
     local c = require("conform")
     local tools = require("tools")
+    -- Every filetype a language declares, variants included, so conform's lookup by a dotted filetype's parts decides
+    -- nothing for them (lua/lang/)
+    opts.formatters_by_ft = vim.deepcopy(require("lang").views().conform)
 
     -- Run each formatter's binary as the resolver finds it for the buffer's project, keeping the built-in args.
     -- A missing tool gets a command that is not executable, so conform marks it unavailable and LSP formatting takes over.

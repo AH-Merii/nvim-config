@@ -6,32 +6,9 @@ return {
     local tools = require("tools")
     local lint_tools = require("tools.lint")
 
-    -- A dotted filetype with no key of its own gets the linters of all its parts (yaml.github-actions -> yaml + github-actions)
-    lint.linters_by_ft = {
-      -- Go
-      go = { "golangcilint" },
-
-      -- JavaScript/TypeScript/JSON
-      javascript = { "biomejs" },
-      typescript = { "biomejs" },
-      javascriptreact = { "biomejs" },
-      typescriptreact = { "biomejs" },
-      json = { "biomejs" },
-      jsonc = { "biomejs" },
-
-      python = { "ruff" },
-      rust = { "clippy" },
-      toml = { "tombi" },
-
-      -- Other
-      markdown = { "markdownlint-cli2" },
-      yaml = { "yamllint" },
-      -- Workflow files are yaml.github-actions (lua/tools/filetypes.lua)
-      ["github-actions"] = { "jactionlint", "zizmor" },
-      make = { "checkmake" },
-      terraform = { "tflint", "trivy" },
-      dockerfile = { "hadolint" },
-    }
+    -- Every filetype a language declares, variants included, each with its whole list, so nvim-lint's union of a
+    -- dotted filetype's parts decides nothing for them (lua/lang/)
+    lint.linters_by_ft = vim.deepcopy(require("lang").views().lint)
 
     -- jactionlint: jdx's maintained fork of actionlint, with GNU-style options and actionlint's JSON plus a rule id and
     -- a severity. Its default profile adds security rules that zizmor already reports (template-injection,

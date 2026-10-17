@@ -1,5 +1,5 @@
 -- Every LSP server, formatter and linter binary, keyed by the binary's name; replaces Mason's package tables.
--- Which filetypes use a tool stays in after/lsp/, conform's formatters_by_ft and nvim-lint's linters_by_ft.
+-- Which filetypes use a tool, and a server's settings, are in the language files (lua/lang/).
 
 ---@class tools.Entry
 ---@field spec? string mise spec for `mise use -g`, version left out ("latest" is added); nil when only the system provides it

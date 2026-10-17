@@ -8,29 +8,11 @@ local catalog = tools.catalog
 
 local M = {}
 
--- Every server is named here; none is enabled just because its binary happens to be installed
-M.servers = {
-  "pyrefly",
-  "ruff",
-  "tombi",
-  "lua_ls",
-  "tsc",
-  "biome",
-  "yamlls",
-  "marksman",
-  "html",
-  "cssls",
-  "bashls",
-  "fish_lsp",
-  "clangd",
-  "gopls",
-  "rust_analyzer",
-  "terraformls",
-  "tflint",
-  "neocmake",
-  "tinymist",
-  "docker_language_server",
-}
+-- The servers the language files name (lua/lang/), each with its settings; none is enabled just because its binary
+-- happens to be installed
+local configs = require("lang").views().lsp
+M.servers = vim.tbl_keys(configs)
+table.sort(M.servers)
 
 -- Roots computed here instead of by the server's own root_dir; return nil to not attach
 ---@type table<string, fun(buf: integer): string?>
@@ -217,6 +199,8 @@ function M.setup()
       vim.notify(("%s: %s"):format(name, bin and "nvim-lspconfig has no config" or "not in the tool catalog"), vim.log.levels.WARN, { title = "LSP" })
     else
       bins[name] = bin
+      -- Above nvim-lspconfig's lsp/<name>.lua, as after/lsp/<name>.lua would be
+      vim.lsp.config(name, vim.deepcopy(configs[name]))
       wire(name)
     end
   end

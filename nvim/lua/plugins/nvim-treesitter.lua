@@ -1,30 +1,6 @@
-local ensure_installed = {
-  "bash",
-  "c",
-  "html",
-  "javascript",
-  "json",
-  "lua",
-  "luadoc",
-  "luap",
-  "markdown",
-  "markdown_inline",
-  "python",
-  "query",
-  "regex",
-  "tsx",
-  "typescript",
-  "vim",
-  "vimdoc",
-  "yaml",
-  "rust",
-  "go",
-  "gomod",
-  "gowork",
-  "gosum",
-  "terraform",
-  "proto",
-}
+-- Parsers no language in lua/lang/ names: Neovim's own files and injections (query, regex, vim, vimdoc) and proto. A
+-- literal list: tests/regress/refresh.lua reads it, and the languages' parsers, to choose what to install
+local ensure_installed = { "query", "regex", "vim", "vimdoc", "proto" }
 
 -- TS indent can misbehave for these:
 local indent_disabled = { "python", "yaml", "markdown" }
@@ -150,7 +126,7 @@ return {
       -- on the first start lazy runs this config inside its install wait, where the install log raises a hit-enter prompt
       vim.api.nvim_create_autocmd("VimEnter", {
         once = true,
-        callback = function() ts.install(ensure_installed) end,
+        callback = function() ts.install(vim.list_extend(vim.deepcopy(require("lang").views().parsers), ensure_installed)) end,
       })
 
       require("nvim-treesitter-textobjects").setup({

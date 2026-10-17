@@ -946,7 +946,6 @@ function M.setup(opts)
   if opts and opts.backend then
     backend, shared, projects, envs, results, versions, previous = opts.backend, {}, {}, {}, {}, {}, {}
   end
-  require("tools.filetypes").setup()
   local group = vim.api.nvim_create_augroup("tools", { clear = true })
   -- Start the mise queries for a file's project as it opens, so formatters and linters rarely wait
   vim.api.nvim_create_autocmd("FileType", {

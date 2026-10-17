@@ -148,6 +148,9 @@ local function parsers_sync()
   if not block then return fail("parsers: no ensure_installed list in %s", cfg) end
   local list = {}
   for lang in block:gmatch('"([%w_]+)"') do table.insert(list, lang) end
+  -- the languages' parsers (lua/lang/), where the config has them
+  local has_lang, lang = pcall(require, "lang")
+  if has_lang then vim.list_extend(list, lang.views().parsers) end
   local ts = require("nvim-treesitter")
   local ok, err = pcall(function() ts.install(list, { summary = true }):wait(900000) end)
   if not ok then fail("parsers install: %s", err) end

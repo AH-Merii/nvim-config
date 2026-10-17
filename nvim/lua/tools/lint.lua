@@ -5,8 +5,9 @@ local tools = require("tools")
 
 local M = {}
 
--- Linters whose findings a language server also reports, by server name; each runs only where its server is not attached
-M.covering_server = { ruff = "ruff", biomejs = "biome", tflint = "tflint", clippy = "rust_analyzer", tombi = "tombi" }
+-- Linters whose findings a language server also reports, by server name (covered_by in lua/lang/); each runs only where
+-- its server is not attached
+M.covering_server = require("lang").views().covered_by
 
 --- Whether linter name's server is attached to buf, so the linter is skipped there.
 ---@param name string
