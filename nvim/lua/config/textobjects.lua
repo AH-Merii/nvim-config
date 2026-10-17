@@ -314,17 +314,31 @@ local function take(modes, lhs, desc)
   end
 end
 
----@param select_specs table<string, {query: string, desc: string}>
----@param move_specs table<string, table<string, {query: string, desc: string}>> move function -> lhs -> spec
+---@param select_specs table<string, {query: string, desc: string, icon: table}>
+---@param move_specs table<string, table<string, {query: string, desc: string, icon: table}>> move function -> lhs -> spec
 function M.setup(select_specs, move_specs)
-  for lhs, obj in pairs(select_specs) do
+  -- the popup's rows: what the key does here, with the object's icon only where it runs the treesitter key, and
+  -- listed where it runs it or the key has a meaning of its own
+  local key = require("keys").feature("textobjects")
+  local function row(lhs, modes, icon)
+    key({
+      lhs,
+      mode = modes,
+      label = function(mode) return M.label(lhs, mode) end,
+      icon = function(mode) return M.ours(lhs, mode, true) and icon or nil end,
+      listed = function(mode) return M.shown(lhs, mode) end,
+    })
+  end
+  for lhs, obj in vim.spairs(select_specs) do
     selects[lhs] = obj
     take({ "x", "o" }, lhs, obj.desc)
+    row(lhs, { "x", "o" }, obj.icon)
   end
-  for fn, maps in pairs(move_specs) do
-    for lhs, obj in pairs(maps) do
+  for fn, maps in vim.spairs(move_specs) do
+    for lhs, obj in vim.spairs(maps) do
       moves[lhs] = { fn = fn, query = obj.query, desc = obj.desc }
       take({ "n", "x", "o" }, lhs, obj.desc)
+      row(lhs, { "n", "x", "o" }, obj.icon)
     end
   end
 end
@@ -447,7 +461,7 @@ local function native_label(lhs, mode)
   return native_labels[key] or nil
 end
 
---- Whether which-key lists lhs in mode: where it runs the treesitter key, or where the key has a meaning of its own
+--- Whether the popup lists lhs in mode: where it runs the treesitter key, or where the key has a meaning of its own
 ---@param lhs string
 ---@param mode string
 function M.shown(lhs, mode)

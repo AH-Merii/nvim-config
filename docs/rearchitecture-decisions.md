@@ -25,6 +25,7 @@ The full proposal, with its measurements and sources, was written outside the re
   below).
 - Built: step 2, `format/` and `linting/` ("Step 2: format/ and lint/" below).
 - Built: step 4b, neoblocks.nvim's statusline replaces lualine ("Step 4b: neoblocks statusline" below).
+- Built: step 3, `keys/`, with D49 ("Step 3: keys/" below).
 
 ## Target layout
 
@@ -805,3 +806,133 @@ the final `statusline_events.sh`):
 Two pass, as expected: no DirChanged alone (the branch built-in still rebuilds on it), and no VimResized and
 WinResized for `statusline_path_percent`: at 20 columns the stale full path also contains the wanted file name. That
 check is about `%`, so it stays as it was on main.
+
+## Step 3: keys/ (2026-10-17)
+
+Built on `rearch/keys` from `origin/main` 0c1277f (steps 1, 2 and 4 included), then rebased onto 7a98192 (step 4b
+and #37), to D48's interface and mechanism and D49. What was built, and where it departs from D48.
+
+**Built.** `nvim/lua/keys/init.lua` (rows, needs, the maps, `holds`, `menu`, `list`), `keys/which_key.lua` (the only
+code that knows which-key: its setup, one spec per mode and lhs, the filter) and `keys/neovim.lua` (Neovim's own keys
+as rows: groups, labels for built-ins and the runtime's maps, hidden keys, the runtime ftplugins' labels). Owners
+declare their rows where they live: `core/lsp.lua`, `config/keymaps.lua`, `config/textobjects.lua`, and the specs for
+snacks, git, nvim-lint, nvim-treesitter, which-key and PR review (`plugins/extras.lua`). Gone: which-key's spec,
+groups and filter in `plugins/which-key.lua`; core/lsp's key table, sync, `M.map`, handler wrap and K case; nvim-lint's
+key gate; treesitter's per-buffer keys; gitsigns' `on_attach` maps and their `GitSignsUpdate` deletion; the snacks
+toggle wiring and every `_wk` call; lazy `keys` tables; `utils.label_ftplugin_maps` and the five
+`after/ftplugin/{go,markdown,php,python,rust}.lua` that only labelled the runtime's maps (`lua.lua` and `vim.lua`
+keep their own maps).
+
+Not moved, so not every mechanism D48 counts is gone: the text-object dispatch, one global expr map per key that runs
+the treesitter object or the key's own meaning (`config/textobjects.lua:281-315`, labelled through `listed` rows); the
+FileType `q` maps (`config/autocmds.lua:125`) and the `[Output]` buffer's `q` (`config/ui2/messages.lua:149`). Step 5
+inherits them, with two more: the runtime ftplugins' labels in `keys/neovim.lua` belong in the language files under
+D46, and `config/textobjects.lua` still reads which-key's presets (below).
+
+The needs: LSP methods by short or full name (`vim.lsp.protocol.Methods`), `client:pyrefly`, and the words
+`formatter`, `range formatter`, `diagnostics` (`core/lsp.lua:30-33`), `linter`, `uncovered linter`
+(`plugins/nvim-lint.lua:12-13`), `git` (`plugins/git.lua:23`), `git cwd`, `git file`, `git remote`
+(`plugins/snacks.lua:7-24`), `treesitter` (`plugins/nvim-treesitter.lua:117`) and `github` (`plugins/extras.lua:108`).
+Each is a table lookup; what is slow (git, the remote) is cached by its owner from its own events.
+
+**Decisions.**
+
+- *A press:* a row that always acts is a plain map; any other slot is one expr map that returns the first acting
+  row's keys, else the fallback: an echo for a leader key or an `echo` row, else the global map it took over
+  (recorded when the slot is made), else the lhs, Vim's own key (`fallback` and `place` in `keys/init.lua`).
+- *The echo* is `nvim_echo` with history (`M._echo` in `keys/init.lua`), not `vim.notify`: Snacks' notifier opens a float,
+  which `checks/keys_diag_gate.lua` ("opens a window, want nothing") rightly failed.
+- *Toggles* take a Snacks toggle (its `get`, `toggle`, `wk_desc` and icons) or a `{ get, set }` pair, for which keys
+  says "Enabled/Disabled **name**" in Snacks' words; `format.on_save` is passed as such a pair.
+- *One memo per popup rebuild:* the adapter wraps which-key's `Tree.clear`, which runs before each mode's rebuild,
+  on every popup (`which-key/buf.lua` `Mode:update`, `which-key/state.lua` `M.start`), and starts a new memo there
+  (`keys/which_key.lua:63`). A need shared by many rows is tested once, and each key's label and icon are worked out
+  once, from one read of the buffer's maps (`buf_maps`, `M._label`); a toggle's label is read each time, as a press
+  changes it between rebuilds (`checks/toggle_wk_specs.lua` reads it right after a flip). Review measured the first build reading labels
+  unmemoized: with the review's probe (`keys-review/probes/rv_cost.lua`, 17 leader items, desc and icon read twice as
+  which-key's view does) reading them took 477–569 µs before and 136–201 µs after, against 13–16 µs on main, whose
+  labels were mostly static strings; a rebuild is 2.0–2.5 ms on both.
+- *A spec per mode and lhs,* with desc and icon getters over the rows, because which-key calls a getter with no mode.
+  A label-only row is `real` by default (listed only where something maps the key); `native = true` lists a built-in
+  with no map; `group` and `hidden` are which-key's.
+- *A row declared again from the same place replaces itself.* lazy unloads and runs each spec module again after an
+  install or update (`lazy/core/plugin.lua:184`, called from `lazy/core/loader.lua:92` and `lazy/manage/init.lua:92`),
+  so rows declared in a spec file run twice on a fresh home; appending made every such key an expr map with two rows
+  (probe on a fresh sandbox home: two entries for `<leader>ff`). `keys/init.lua` keys an entry by owner, file:line and
+  position, and `list()` reads the slots.
+- *An owner's needs and the events that fill their caches run together.* The same re-run made snacks' git needs read
+  new, empty caches that only the old autocmds, made once in its config, filled: `<leader>gf`, `<leader>gL` and
+  `<leader>GB` stopped acting everywhere until a restart (found in review). The autocmds are now made beside the needs,
+  at module level in a cleared augroup, and a re-run looks the open buffers up again (`plugins/snacks.lua:43-56`). The
+  other owners declare their needs inside `config` or `init`, which lazy does not run again, with their caches.
+  `checks/keys_spec_reload.lua` is new: it reruns the spec load as lazy does, then compares the needs that hold and
+  presses `<leader>gf`; it fails on the first build ("lost: git file", "picker: nil").
+- *Where a buffer's own map wins the press, the popup shows its desc,* not a global row's label or icon; a label-only
+  language row labels only a buffer map with no desc, as `utils.label_ftplugin_maps` did on main. The first build
+  said "Document symbols" for markdown's `gO`, which runs the ftplugin outline, where main says "Show an Outline of the
+  current buffer" (found in review), and "Next heading" for `]]`, where main shows the runtime's "Jump to next
+  section". Both now match main.
+- *A row that takes over a Neovim default deletes it in keys/.* `keys/neovim.lua` deletes Neovim's `grn`, `gra`,
+  `gri`, `grt`, `grx`, `gO` and `grr` and declares the first six as rows with Neovim's own callbacks, so the default
+  is never the fallback; it loads before `core/lsp.lua`, whose `grr` row is the references picker.
+- *A hidden row keeps its spec* so which-key hides the key, whoever maps it (`keys/init.lua`, `M._lists`); filtering
+  the spec out listed Neovim's `]L`, `[Q`, `]%`, … and x `an`/`in`. `checks/wk_hidden.lua` is new for this: it passes
+  on main and on this branch, and fails on the branch without the two lines.
+- *mapleader before rows:* `init.lua` now loads `config.options` before the rows, and `keys` raises for a
+  `<leader>` row added before mapleader is set.
+
+**Departures from D48.**
+
+- *`listed`, `echo`, `native`, `hidden`, `group`, `remap`, `silent`, `nowait` fields.* D48 named the rows' core fields;
+  these carry what the replaced specs said. `listed` is a function the text objects use for "a meaning of its own
+  here" (`config/textobjects.lua`, `M.shown`), a fourth kind of gate beside the three need kinds.
+- *`config/textobjects.lua` still reads `which-key.plugins.presets`* for a native key's label. It is data, not
+  which-key's API, but it means keys/ is not the only file that names which-key. Left for step 5.
+- *The treesitter need covers four keys:* `<leader>v`, x `+` and `-`, `<leader>TT` act where a parser is attached;
+  on main only `<leader>TT` was deleted when a buffer's filetype changed to one without a parser
+  (`git show 0c1277f:nvim/lua/plugins/nvim-treesitter.lua`, line 165).
+- *PR review asks git afresh on each `DirChanged`* and its keys don't act until git answers; main kept the previous
+  cwd's map until then.
+
+**Checks changed.** The gr* case in `checks/keys_lsp_gate.lua` (D49, in its own commit). Removing `echo = true` from
+the gr* rows fails it for all six keys ("grr says it needs textDocument/references (said: "")"). Outside the D48 prep
+list:
+
+- `checks/trouble_maps.lua:56` read `require("core.lsp").keys`, which is gone; it reads `require("keys").list()`.
+- `checks/lsp_codelens.lua` read `maparg("<leader>Tc").buffer == 1` and waited for a buffer `K`; it reads which-key
+  (`wk_lists`, `wk_wait`). The assertions are unchanged.
+- `work/keys/keys_global_regress.lua` called every global map whose desc is "Toggle X" as a toggle. Gated toggles are
+  now global expr maps, whose callback returns keys; it skips expr maps, as it skipped buffer maps before. Its counts
+  match main: 28 find/search maps open pickers, 11 toggles flip; "lazy keys without ft" drops from 94 to 18, as the
+  snacks keys are rows now.
+
+**What `work/keys/` shows.** All four checks pass. `whichkey_ghosts` finds no ghost and no empty group in any of its 9
+buffers. The popup's leaves match main's except git: the hunk keys, `<leader>gb`, `<leader>gd` and `<leader>TG` are
+listed in every buffer where gitsigns has attached (`b:gitsigns_status_dict`); main listed them in 2 or 3 of those 8
+buffers, a different set in each of two runs (`main.go` and `notes.md`, then those and `index.ts`). Unverified why;
+likely its `on_attach` maps were not yet set when the status the check waits for was.
+
+**Keys whose behaviour changed.**
+
+- `grn`, `gra`, `grr`, `gri`, `grt`, `grx` with no server: a message naming the method, not `gr{char}` (D49).
+  `gO` also echoes; its suite case expects "nothing" and still passes.
+- A leader key whose need fails echoes the need (D48), where main had no map: e.g. `<leader>TG` outside git,
+  `<leader>ll` with no linter, `<leader>p` outside a GitHub repo.
+- The map descs of `<leader>w` ("Save file" → "Write") and `<leader>q` ("Quit without saving" → "Quit") now match
+  what the popup showed.
+- `:map`, `maparg` and `<leader>sk` list gated keys in every buffer (D48's accepted cost).
+
+**Cost.** Startup in the regress sandbox, headless on `main.lua`, `--startuptime`, 9 runs per round, rounds
+interleaved (`~/.cache/nvim-config/rearch/keys/bench/startup.sh`): main 94.4 and 89.0 ms median, this branch 88.8 and
+90.1 ms; within noise. The `require('keys…')` lines' self time is 1.66–1.67 ms median, against D48's estimate of
+0.90–1.06 ms for the maps alone; it includes `keys/neovim.lua`'s rows for Neovim's own keys.
+
+**Tests.** `tests/unit/keys_test.lua` (22 cases) drives `keys` through its interface with real presses, fake servers
+and test words: fallbacks, echoes, buffer maps winning the press and the label, the global `K`, toggles, language
+rows, label-only and native rows, the memo, unknown fields, `list()`, and rows declared again. 23 sibling wrong
+implementations and a do-nothing stub fail it (`~/.cache/nvim-config/rearch/keys/mutants/run.py <worktree>`). Three
+suite checks are new: `wk_hidden`, `keys_spec_reload` and `keys_map_desc`, which holds every global row's map to its
+label as desc, so `:map` and `<leader>sk` describe gated keys too (review found no check did once the snacks keys left
+lazy's `keys`). Wrong implementations for them each fail their check
+(`~/.cache/nvim-config/rearch/keys/suite-mutants/run.py <worktree> <regex>`): expr maps or plain maps losing their
+desc, a hidden row's spec filtered out, and the git needs' autocmds made once in config.

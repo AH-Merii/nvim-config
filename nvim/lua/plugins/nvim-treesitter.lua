@@ -7,57 +7,57 @@ local indent_disabled = { "python", "yaml", "markdown" }
 
 local select_textobjects = {
   -- Core text objects (well-supported for selection)
-  ["af"] = { query = "@function.outer", desc = "Around function" },
-  ["if"] = { query = "@function.inner", desc = "Inside function" },
-  ["ac"] = { query = "@class.outer", desc = "Around class" },
-  ["ic"] = { query = "@class.inner", desc = "Inside class" },
-  ["ai"] = { query = "@conditional.outer", desc = "Around conditional" },
-  ["ii"] = { query = "@conditional.inner", desc = "Inside conditional" },
-  ["al"] = { query = "@loop.outer", desc = "Around loop" },
-  ["il"] = { query = "@loop.inner", desc = "Inside loop" },
-  ["ap"] = { query = "@parameter.outer", desc = "Around parameter" },
-  ["ip"] = { query = "@parameter.inner", desc = "Inside parameter" },
-  ["ab"] = { query = "@block.outer", desc = "Around block" },
-  ["ib"] = { query = "@block.inner", desc = "Inside block" },
+  ["af"] = { query = "@function.outer", desc = "Around function", icon = { icon = "󰊕", color = "purple" } },
+  ["if"] = { query = "@function.inner", desc = "Inside function", icon = { icon = "󰊕", color = "purple" } },
+  ["ac"] = { query = "@class.outer", desc = "Around class", icon = { icon = "", color = "purple" } },
+  ["ic"] = { query = "@class.inner", desc = "Inside class", icon = { icon = "", color = "purple" } },
+  ["ai"] = { query = "@conditional.outer", desc = "Around conditional", icon = { icon = "󰙁", color = "purple" } },
+  ["ii"] = { query = "@conditional.inner", desc = "Inside conditional", icon = { icon = "󰙁", color = "purple" } },
+  ["al"] = { query = "@loop.outer", desc = "Around loop", icon = { icon = "", color = "purple" } },
+  ["il"] = { query = "@loop.inner", desc = "Inside loop", icon = { icon = "", color = "purple" } },
+  ["ap"] = { query = "@parameter.outer", desc = "Around parameter", icon = { icon = "", color = "purple" } },
+  ["ip"] = { query = "@parameter.inner", desc = "Inside parameter", icon = { icon = "", color = "purple" } },
+  ["ab"] = { query = "@block.outer", desc = "Around block", icon = { icon = "󰅩", color = "purple" } },
+  ["ib"] = { query = "@block.inner", desc = "Inside block", icon = { icon = "󰅩", color = "purple" } },
 
   -- Additional useful text objects
-  ["a/"] = { query = "@comment.outer", desc = "Around comment" },
-  ["aa"] = { query = "@call.outer", desc = "Around function call" },
-  ["ia"] = { query = "@call.inner", desc = "Inside function call" },
-  ["ar"] = { query = "@return.outer", desc = "Around return" },
-  ["ir"] = { query = "@return.inner", desc = "Inside return" },
+  ["a/"] = { query = "@comment.outer", desc = "Around comment", icon = { icon = "󰅺", color = "grey" } },
+  ["aa"] = { query = "@call.outer", desc = "Around function call", icon = { icon = "󰅪", color = "purple" } },
+  ["ia"] = { query = "@call.inner", desc = "Inside function call", icon = { icon = "󰅪", color = "purple" } },
+  ["ar"] = { query = "@return.outer", desc = "Around return", icon = { icon = "󰌑", color = "purple" } },
+  ["ir"] = { query = "@return.inner", desc = "Inside return", icon = { icon = "󰌑", color = "purple" } },
 }
 
 local move_textobjects = {
   goto_previous_start = {
-    ["[f"] = { query = "@function.outer", desc = "Previous function" },
-    ["[c"] = { query = "@class.outer", desc = "Previous class" },
-    ["[p"] = { query = "@parameter.inner", desc = "Previous parameter" },
-    ["[b"] = { query = "@block.outer", desc = "Previous block" },
-    ["[i"] = { query = "@conditional.outer", desc = "Previous conditional" },
-    ["[l"] = { query = "@loop.outer", desc = "Previous loop" },
-    ["[a"] = { query = "@call.outer", desc = "Previous function call" },
-    ["[r"] = { query = "@return.outer", desc = "Previous return" },
-    ["[/"] = { query = "@comment.outer", desc = "Previous comment" },
+    ["[f"] = { query = "@function.outer", desc = "Previous function", icon = { icon = "󰊕", color = "orange" } },
+    ["[c"] = { query = "@class.outer", desc = "Previous class", icon = { icon = "", color = "orange" } },
+    ["[p"] = { query = "@parameter.inner", desc = "Previous parameter", icon = { icon = "", color = "orange" } },
+    ["[b"] = { query = "@block.outer", desc = "Previous block", icon = { icon = "󰅩", color = "orange" } },
+    ["[i"] = { query = "@conditional.outer", desc = "Previous conditional", icon = { icon = "󰙁", color = "orange" } },
+    ["[l"] = { query = "@loop.outer", desc = "Previous loop", icon = { icon = "", color = "orange" } },
+    ["[a"] = { query = "@call.outer", desc = "Previous function call", icon = { icon = "󰅪", color = "orange" } },
+    ["[r"] = { query = "@return.outer", desc = "Previous return", icon = { icon = "󰌑", color = "orange" } },
+    ["[/"] = { query = "@comment.outer", desc = "Previous comment", icon = { icon = "󰅺", color = "grey" } },
   },
   goto_next_start = {
-    ["]f"] = { query = "@function.outer", desc = "Next function" },
-    ["]c"] = { query = "@class.outer", desc = "Next class" },
-    ["]p"] = { query = "@parameter.inner", desc = "Next parameter" },
-    ["]b"] = { query = "@block.outer", desc = "Next block" },
-    ["]i"] = { query = "@conditional.outer", desc = "Next conditional" },
-    ["]l"] = { query = "@loop.outer", desc = "Next loop" },
-    ["]a"] = { query = "@call.outer", desc = "Next function call" },
-    ["]r"] = { query = "@return.outer", desc = "Next return" },
-    ["]/"] = { query = "@comment.outer", desc = "Next comment" },
+    ["]f"] = { query = "@function.outer", desc = "Next function", icon = { icon = "󰊕", color = "purple" } },
+    ["]c"] = { query = "@class.outer", desc = "Next class", icon = { icon = "", color = "purple" } },
+    ["]p"] = { query = "@parameter.inner", desc = "Next parameter", icon = { icon = "", color = "purple" } },
+    ["]b"] = { query = "@block.outer", desc = "Next block", icon = { icon = "󰅩", color = "purple" } },
+    ["]i"] = { query = "@conditional.outer", desc = "Next conditional", icon = { icon = "󰙁", color = "purple" } },
+    ["]l"] = { query = "@loop.outer", desc = "Next loop", icon = { icon = "", color = "purple" } },
+    ["]a"] = { query = "@call.outer", desc = "Next function call", icon = { icon = "󰅪", color = "purple" } },
+    ["]r"] = { query = "@return.outer", desc = "Next return", icon = { icon = "󰌑", color = "purple" } },
+    ["]/"] = { query = "@comment.outer", desc = "Next comment", icon = { icon = "󰅺", color = "grey" } },
   },
   goto_previous_end = {
-    ["[F"] = { query = "@function.outer", desc = "Previous function end" },
-    ["[B"] = { query = "@block.outer", desc = "Previous block end" },
+    ["[F"] = { query = "@function.outer", desc = "Previous function end", icon = { icon = "󰡱", color = "cyan" } },
+    ["[B"] = { query = "@block.outer", desc = "Previous block end", icon = { icon = "", color = "cyan" } },
   },
   goto_next_end = {
-    ["]F"] = { query = "@function.outer", desc = "Next function end" },
-    ["]B"] = { query = "@block.outer", desc = "Next block end" },
+    ["]F"] = { query = "@function.outer", desc = "Next function end", icon = { icon = "󰡱", color = "cyan" } },
+    ["]B"] = { query = "@block.outer", desc = "Next block end", icon = { icon = "", color = "cyan" } },
   },
 }
 
@@ -73,15 +73,8 @@ local function disable_on_large(lang, buf)
   return is_disabled
 end
 
-local ts_toggle -- set in config: Snacks is not loaded yet when lazy reads this spec
-
-local function set_keymaps(buf)
-  -- incremental selection, on the core `an` (parent node) and `in` (child node)
-  vim.keymap.set("n", "<leader>v", "van", { buf = buf, remap = true, desc = "Start incremental selection" })
-  vim.keymap.set("x", "+", "an", { buf = buf, remap = true, desc = "Grow selection to parent node" })
-  vim.keymap.set("x", "-", "in", { buf = buf, remap = true, desc = "Shrink selection to child node" })
-  ts_toggle:map("<leader>TT", { buf = buf })
-end
+-- The buffers treesitter attached to: where the incremental selection keys and the toggle act
+local attached = {} ---@type table<integer, string>
 
 local function attach(buf, lang)
   if not vim.api.nvim_buf_is_valid(buf) or not vim.treesitter.language.add(lang) then
@@ -96,7 +89,7 @@ local function attach(buf, lang)
   if not vim.list_contains(indent_disabled, lang) and vim.treesitter.query.get(lang, "indents") then
     vim.bo[buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
   end
-  set_keymaps(buf)
+  attached[buf] = lang
 end
 
 return {
@@ -120,9 +113,15 @@ return {
     },
     config = function()
       local ts = require("nvim-treesitter")
-      -- one which-key spec, with the toggle's live label and icon, for the key mapped in every buffer
-      ts_toggle = Snacks.toggle.treesitter({ which_key = false })
-      Snacks.util.on_module("which-key", function() ts_toggle:_wk("<leader>TT", "n") end)
+      local keys = require("keys")
+      keys.need("treesitter", function(buf) return attached[buf] ~= nil end)
+      keys.feature("treesitter", { need = "treesitter" })({
+        -- incremental selection, on the core `an` (parent node) and `in` (child node)
+        { "<leader>v", "van", "Start incremental selection", remap = true, icon = { icon = "󰩭", color = "cyan" } },
+        { "+", "an", "Grow selection to parent node", mode = "x", remap = true, icon = { icon = "󰩭", color = "cyan" } },
+        { "-", "in", "Shrink selection to child node", mode = "x", remap = true, icon = { icon = "󰩭", color = "cyan" } },
+        { "<leader>TT", toggle = Snacks.toggle.treesitter() },
+      })
       -- on the first start lazy runs this config inside its install wait, where the install log raises a hit-enter prompt
       vim.api.nvim_create_autocmd("VimEnter", {
         once = true,
@@ -162,7 +161,7 @@ return {
             attach(args.buf, lang)
             return
           end
-          pcall(vim.keymap.del, "n", "<leader>TT", { buf = args.buf })
+          attached[args.buf] = nil
           if lang and vim.list_contains(ts.get_available(), lang) then
             installs[lang] = installs[lang] or ts.install(lang)
             installs[lang]:await(function()

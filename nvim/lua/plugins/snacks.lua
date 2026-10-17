@@ -1,54 +1,130 @@
---   Git Tools: Interact with branches, logs, and diffs
--- These act on the repo of the cwd
-local git_pickers = {
-  { "<leader>gB", function() Snacks.picker.git_branches() end, desc = "Branches" },
-  { "<leader>gl", function() Snacks.picker.git_log() end, desc = "Log" },
-  { "<leader>gs", function() Snacks.picker.git_status() end, desc = "Status" },
-  { "<leader>gS", function() Snacks.picker.git_stash() end, desc = "Stashes" },
-  { "<leader>gD", function() Snacks.picker.git_diff() end, desc = "Diff (Hunks)" },
-}
--- These act on the buffer's file
-local git_file_logs = {
-  { "<leader>gL", function() Snacks.picker.git_log_line() end, desc = "Log (Line)" },
-  { "<leader>gf", function() Snacks.picker.git_log_file() end, desc = "Log (File)" },
-}
--- This needs a remote on the buffer's repo
-local git_browse = {
-  { "<leader>GB", function() Snacks.gitbrowse() end, desc = "Open in Git Browser" },
-}
+local keys = require("keys")
 
----@param keys table[]
----@param on boolean
----@param buf? integer
-local function set_keys(keys, on, buf)
-  for _, key in ipairs(keys) do
-    if on then
-      vim.keymap.set("n", key[1], key[2], { buf = buf, desc = key.desc })
-    else
-      pcall(vim.keymap.del, "n", key[1], { buf = buf })
+-- The git needs, cached by the events that change them: a need is read on each press and popup rebuild
+local cwd_repo = {} ---@type table<string, boolean> cwd -> in a repo; emptied when the cwd changes
+local file_repo = {} ---@type table<integer, { file: string, repo: boolean, remote?: boolean }> by buffer, for its file
+-- The cwd is in a repo: the pickers act on it
+keys.need("git cwd", function()
+  local cwd = vim.fn.getcwd()
+  if cwd_repo[cwd] == nil then
+    cwd_repo[cwd] = Snacks.git.get_root(cwd) ~= nil
+  end
+  return cwd_repo[cwd]
+end)
+-- The buffer's file is in a repo; that repo has a remote
+keys.need("git file", function(buf)
+  local f = file_repo[buf]
+  return f ~= nil and f.file == vim.api.nvim_buf_get_name(buf) and f.repo
+end)
+keys.need("git remote", function(buf)
+  local f = file_repo[buf]
+  return f ~= nil and f.file == vim.api.nvim_buf_get_name(buf) and f.remote == true
+end)
+
+---@param buf integer
+local function look_up_file(buf)
+  local file = vim.api.nvim_buf_get_name(buf)
+  local root = vim.bo[buf].buftype == "" and file ~= "" and Snacks.git.get_root(file) or nil
+  local entry = { file = file, repo = root ~= nil }
+  file_repo[buf] = entry
+  if root then
+    vim.system({ "git", "-C", root, "remote" }, { text = true }, function(out) entry.remote = out.code == 0 and vim.trim(out.stdout) ~= "" end)
+  end
+end
+
+local function look_up_loaded()
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(buf) then
+      look_up_file(buf)
     end
   end
 end
 
-local function map_git_pickers() set_keys(git_pickers, Snacks.git.get_root(vim.fn.getcwd()) ~= nil) end
-
----@param buf integer
-local function map_git_file_keys(buf)
-  local file = vim.api.nvim_buf_get_name(buf)
-  local root = vim.bo[buf].buftype == "" and file ~= "" and Snacks.git.get_root(file) or nil
-  set_keys(git_file_logs, root ~= nil, buf)
-  if not root then
-    set_keys(git_browse, false, buf)
-    return
-  end
-  vim.system({ "git", "-C", root, "remote" }, { text = true }, function(out)
-    vim.schedule(function()
-      if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_get_name(buf) == file then
-        set_keys(git_browse, out.code == 0 and vim.trim(out.stdout) ~= "", buf)
-      end
-    end)
-  end)
+-- The events that fill the caches are made here with the needs, not in config: lazy runs this module again after an
+-- install or update (lazy/core/plugin.lua:184), and the needs then read the new caches, which only these autocmds
+-- fill. The group is cleared, so the last run's autocmds are the only ones.
+local git_group = vim.api.nvim_create_augroup("SnacksGitKeys", { clear = true })
+vim.api.nvim_create_autocmd("DirChanged", { group = git_group, callback = function() cwd_repo = {} end })
+vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile", "BufFilePost" }, {
+  group = git_group,
+  callback = function(ev) look_up_file(ev.buf) end,
+})
+vim.api.nvim_create_autocmd("BufWipeout", { group = git_group, callback = function(ev) file_repo[ev.buf] = nil end })
+-- run again by lazy: the open buffers' files, for the new cache (on the first run snacks' config does this)
+if package.loaded.snacks then
+  look_up_loaded()
 end
+
+local function icon(glyph, color) return { icon = glyph, color = color } end
+keys.feature("snacks")({
+  { "<leader>f", group = "Find", icon = icon("󰈞", "blue") },
+  { "<leader>s", group = "Search", mode = { "n", "x" }, icon = icon("󰞷", "cyan") },
+  { "<leader>T", group = "Toggle Features", icon = icon("", "yellow") },
+  { "<leader>P", group = "Profiler", icon = icon("󰓅", "orange") },
+
+  --   File Pickers: Access files, buffers, and projects quickly
+  { "<leader>ff", function() Snacks.picker.smart() end, "Find Files", icon = icon("󰈞", "blue") },
+  { "<leader>fb", function() Snacks.picker.buffers() end, "Buffers", icon = icon("", "grey") },
+  { "<leader>fp", function() Snacks.picker.projects() end, "Projects", icon = icon("", "grey") },
+  { "<leader>fr", function() Snacks.picker.recent() end, "Recent Files", icon = icon("", "yellow") },
+
+  -- 󰞷  Search: Grep and search across files and buffers
+  { "<leader>/", function() Snacks.picker.grep() end, "Grep", icon = icon("󰞷", "cyan") },
+  { "<leader>sB", function() Snacks.picker.grep_buffers() end, "Grep (Open Buffers)", icon = icon("󰱼", "cyan") },
+  { "<leader>sw", function() Snacks.picker.grep_word() end, "Grep word or selection", mode = { "n", "x" }, icon = icon("", "cyan") },
+  { "<leader>sb", function() Snacks.picker.lines() end, "Grep (Buffer Lines)", icon = icon("", "cyan") },
+
+  -- 󱦞 Search: System & Editor: Inspect commands, diagnostics, and help
+  { '<leader>s"', function() Snacks.picker.registers() end, "Registers", icon = icon("󰌓", "grey") },
+  { "<leader>sa", function() Snacks.picker.autocmds() end, "Autocommands", icon = icon("󰆍", "grey") },
+  { "<leader>s:", function() Snacks.picker.command_history() end, "Command History", icon = icon("", "yellow") },
+  { "<leader>sc", function() Snacks.picker.commands() end, "Commands", icon = icon("󰘳", "grey") },
+  { "<leader>sD", function() Snacks.picker.diagnostics() end, "Diagnostics (Workspace)", icon = icon("", "orange") },
+  { "<leader>sh", function() Snacks.picker.help() end, "Help Pages", icon = icon("󰘥", "grey") },
+  { "<leader>sH", function() Snacks.picker.highlights() end, "Highlight Groups", icon = icon("", "yellow") },
+  { "<leader>si", function() Snacks.picker.icons() end, "Icons", icon = icon("", "grey") },
+  { "<leader>sj", function() Snacks.picker.jumps() end, "Jump List", icon = icon("󱞰", "yellow") },
+  { "<leader>sk", function() Snacks.picker.keymaps() end, "Keymaps", icon = icon("󰌌", "cyan") },
+  { "<leader>sl", function() Snacks.picker.loclist() end, "Location List", icon = icon("", "yellow") },
+  { "<leader>sm", function() Snacks.picker.marks() end, "Marks", icon = icon("󰈿", "red") },
+  { "<leader>sM", function() Snacks.picker.man() end, "Man Pages", icon = icon("󰮳", "grey") },
+  { "<leader>sp", function() Snacks.picker.lazy() end, "Plugins (Lazy)", icon = icon("󰏖", "purple") },
+  { "<leader>sq", function() Snacks.picker.qflist() end, "Quickfix List", icon = icon("", "yellow") },
+  { "<leader>sR", function() Snacks.picker.resume() end, "Resume", icon = icon("󰑖", "orange") },
+  { "<leader>su", function() Snacks.picker.undo() end, "Undo History", icon = icon("󰕍", "yellow") },
+  { "<leader>sC", function() Snacks.picker.colorschemes() end, "Colorschemes", icon = icon("󰏘", "purple") },
+  { "<leader>ss", function() Snacks.scratch.select() end, "Scratch Buffers", icon = icon("󰎕", "grey") },
+
+  -- Misc
+  { "<leader>n", function() require("config.ui2.history").open() end, "Message History", icon = icon("󰂚", "yellow") },
+  { "<leader>N", function() Snacks.notifier.hide() end, "Dismiss Notifications", icon = icon("󰎟", "yellow") },
+  { "<C-W>z", function() Snacks.zen() end, "Toggle Zen Mode", icon = icon("󰫢", "yellow") },
+  { "<C-W>Z", function() Snacks.zen.zoom() end, "Toggle Zoom", icon = icon("󰘖", "yellow") },
+  { "<leader>.", function() Snacks.scratch({ ft = "markdown" }) end, "Toggle Scratch Buffer", icon = icon("󰎕", "grey") },
+  { "<leader>lR", function() Snacks.rename.rename_file() end, "Rename File", icon = icon("󰑕", "green") },
+
+  -- Profiler
+  { "<leader>Pp", function() Snacks.profiler.toggle() end, "Toggle Profiler" },
+  { "<leader>Ps", function() Snacks.profiler.scratch() end, "Profiler Scratch" },
+  { "<leader>Ph", function() Snacks.profiler.highlight() end, "Profiler Highlight" },
+})
+
+--   Git Tools: Interact with branches, logs, and diffs
+-- These act on the repo of the cwd
+keys.feature("snacks git", { need = "git cwd" })({
+  { "<leader>gB", function() Snacks.picker.git_branches() end, "Branches", icon = icon("", "grey") },
+  { "<leader>gl", function() Snacks.picker.git_log() end, "Log", icon = icon("", "orange") },
+  { "<leader>gs", function() Snacks.picker.git_status() end, "Status", icon = icon("󰊢", "cyan") },
+  { "<leader>gS", function() Snacks.picker.git_stash() end, "Stashes", icon = icon("󰀼", "grey") },
+  { "<leader>gD", function() Snacks.picker.git_diff() end, "Diff (Hunks)", icon = icon("", "cyan") },
+})
+-- These act on the buffer's file
+keys.feature("snacks git", { need = "git file" })({
+  { "<leader>gL", function() Snacks.picker.git_log_line() end, "Log (Line)", icon = icon("", "yellow") },
+  { "<leader>gf", function() Snacks.picker.git_log_file() end, "Log (File)", icon = icon("", "blue") },
+})
+-- This needs a remote on the buffer's repo
+keys.feature("snacks git")({ "<leader>GB", function() Snacks.gitbrowse() end, "Open in Git Browser", need = "git remote", icon = icon("󰖟", "grey") })
 
 return {
   "folke/snacks.nvim",
@@ -121,54 +197,6 @@ return {
       },
     },
     words = { enabled = true },
-  },
-
-  keys = {
-    --   File Pickers: Access files, buffers, and projects quickly
-    { "<leader>ff", function() Snacks.picker.smart() end, desc = "Find Files" },
-    { "<leader>fb", function() Snacks.picker.buffers() end, desc = "Buffers" },
-    { "<leader>fp", function() Snacks.picker.projects() end, desc = "Projects" },
-    { "<leader>fr", function() Snacks.picker.recent() end, desc = "Recent Files" },
-
-    -- 󰞷  Search: Grep and search across files and buffers
-    { "<leader>/", function() Snacks.picker.grep() end, desc = "Grep" },
-    { "<leader>sB", function() Snacks.picker.grep_buffers() end, desc = "Grep (Open Buffers)" },
-    { "<leader>sw", function() Snacks.picker.grep_word() end, desc = "Grep word or selection", mode = { "n", "x" } },
-    { "<leader>sb", function() Snacks.picker.lines() end, desc = "Grep (Buffer Lines)" },
-
-    -- 󱦞 Search: System & Editor: Inspect commands, diagnostics, and help
-    { '<leader>s"', function() Snacks.picker.registers() end, desc = "Registers" },
-    { "<leader>sa", function() Snacks.picker.autocmds() end, desc = "Autocommands" },
-    { "<leader>s:", function() Snacks.picker.command_history() end, desc = "Command History" },
-    { "<leader>sc", function() Snacks.picker.commands() end, desc = "Commands" },
-    { "<leader>sD", function() Snacks.picker.diagnostics() end, desc = "Diagnostics (Workspace)" },
-    { "<leader>sh", function() Snacks.picker.help() end, desc = "Help Pages" },
-    { "<leader>sH", function() Snacks.picker.highlights() end, desc = "Highlight Groups" },
-    { "<leader>si", function() Snacks.picker.icons() end, desc = "Icons" },
-    { "<leader>sj", function() Snacks.picker.jumps() end, desc = "Jump List" },
-    { "<leader>sk", function() Snacks.picker.keymaps() end, desc = "Keymaps" },
-    { "<leader>sl", function() Snacks.picker.loclist() end, desc = "Location List" },
-    { "<leader>sm", function() Snacks.picker.marks() end, desc = "Marks" },
-    { "<leader>sM", function() Snacks.picker.man() end, desc = "Man Pages" },
-    { "<leader>sp", function() Snacks.picker.lazy() end, desc = "Plugins (Lazy)" },
-    { "<leader>sq", function() Snacks.picker.qflist() end, desc = "Quickfix List" },
-    { "<leader>sR", function() Snacks.picker.resume() end, desc = "Resume" },
-    { "<leader>su", function() Snacks.picker.undo() end, desc = "Undo History" },
-    { "<leader>sC", function() Snacks.picker.colorschemes() end, desc = "Colorschemes" },
-    { "<leader>ss", function() Snacks.scratch.select() end, desc = "Scratch Buffers" },
-
-    -- Misc
-    { "<leader>n", function() require("config.ui2.history").open() end, desc = "Message History" },
-    { "<leader>N", function() Snacks.notifier.hide() end, desc = "Dismiss Notifications" },
-    { "<C-W>z", function() Snacks.zen() end, desc = "Toggle Zen Mode" },
-    { "<C-W>Z", function() Snacks.zen.zoom() end, desc = "Toggle Zoom" },
-    { "<leader>.", function() Snacks.scratch({ ft = "markdown" }) end, desc = "Toggle Scratch Buffer" },
-    { "<leader>lR", function() Snacks.rename.rename_file() end, desc = "Rename File" },
-
-    -- Profiler
-    { "<leader>Pp", function() Snacks.profiler.toggle() end, desc = "Toggle Profiler" },
-    { "<leader>Ps", function() Snacks.profiler.scratch() end, desc = "Profiler Scratch" },
-    { "<leader>Ph", function() Snacks.profiler.highlight() end, desc = "Profiler Highlight" },
   },
 
   config = function(_, opts)
@@ -247,99 +275,7 @@ return {
       return num and (row[1] .. "%=" .. num .. " " .. row[2]) or (row[1] .. row[2])
     end
 
-    local git_group = vim.api.nvim_create_augroup("SnacksGitKeys", { clear = true })
-    vim.api.nvim_create_autocmd("DirChanged", { group = git_group, callback = map_git_pickers })
-    vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile", "BufFilePost" }, {
-      group = git_group,
-      callback = function(ev) map_git_file_keys(ev.buf) end,
-    })
-    map_git_pickers()
-    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-      if vim.api.nvim_buf_is_loaded(buf) then
-        map_git_file_keys(buf)
-      end
-    end
-
-    -- Try to register icons with which-key
-    local ok, wk = pcall(require, "which-key")
-    if ok then
-      wk.add({
-        -- Groups
-        { "<leader>f", group = "Find", icon = { icon = "󰈞", color = "blue" } },
-        { "<leader>s", group = "Search", mode = { "n", "x" }, icon = { icon = "󰞷", color = "cyan" } },
-        { "<leader>T", group = "Toggle Features", icon = { icon = "", color = "yellow" } },
-        { "<leader>P", group = "Profiler", icon = { icon = "󰓅", color = "orange" } },
-
-        -- find
-        { "<leader>ff", icon = { icon = "󰈞", color = "blue" } },
-        { "<leader>fb", icon = { icon = "", color = "grey" } },
-        { "<leader>fp", icon = { icon = "", color = "grey" } },
-        { "<leader>fr", icon = { icon = "", color = "yellow" } },
-
-        -- git
-        { "<leader>gB", icon = { icon = "", color = "grey" }, real = true },
-        { "<leader>gl", icon = { icon = "", color = "orange" }, real = true },
-        { "<leader>gL", icon = { icon = "", color = "yellow" }, real = true },
-        { "<leader>gf", icon = { icon = "", color = "blue" }, real = true },
-        { "<leader>gs", icon = { icon = "󰊢", color = "cyan" }, real = true },
-        { "<leader>gS", icon = { icon = "󰀼", color = "grey" }, real = true },
-        { "<leader>gD", icon = { icon = "", color = "cyan" }, real = true },
-
-        -- Grep-in
-        { "<leader>/", icon = { icon = "󰞷", color = "cyan" } },
-        { "<leader>sB", icon = { icon = "󰱼", color = "cyan" } },
-        { "<leader>sw", mode = { "n", "x" }, icon = { icon = "", color = "cyan" } },
-        { "<leader>sb", icon = { icon = "", color = "cyan" } },
-
-        -- Search
-        { '<leader>s"', icon = { icon = "󰌓", color = "grey" } },
-        { "<leader>sa", icon = { icon = "󰆍", color = "grey" } },
-        { "<leader>s:", icon = { icon = "", color = "yellow" } },
-        { "<leader>sc", icon = { icon = "󰘳", color = "grey" } },
-        { "<leader>sd", icon = { icon = "", color = "orange" }, real = true },
-        { "<leader>sD", icon = { icon = "", color = "orange" } },
-        { "<leader>sh", icon = { icon = "󰘥", color = "grey" } },
-        { "<leader>sH", icon = { icon = "", color = "yellow" } },
-        { "<leader>si", icon = { icon = "", color = "grey" } },
-        { "<leader>sj", icon = { icon = "󱞰", color = "yellow" } },
-        { "<leader>sk", icon = { icon = "󰌌", color = "cyan" } },
-        { "<leader>sl", icon = { icon = "", color = "yellow" } },
-        { "<leader>sm", icon = { icon = "󰈿", color = "red" } },
-        { "<leader>sM", icon = { icon = "󰮳", color = "grey" } },
-        { "<leader>sp", icon = { icon = "󰏖", color = "purple" } },
-        { "<leader>sq", icon = { icon = "", color = "yellow" } },
-        { "<leader>sR", icon = { icon = "󰑖", color = "orange" } },
-        { "<leader>su", icon = { icon = "󰕍", color = "yellow" } },
-        { "<leader>sC", icon = { icon = "󰏘", color = "purple" } },
-        { "<leader>ss", icon = { icon = "󰎕", color = "grey" } },
-        { "<leader>sS", icon = { icon = "󱔁", color = "purple" }, real = true },
-
-        -- LSP
-        { "gd", icon = { icon = "󰊕", color = "purple" }, real = true },
-        { "gD", icon = { icon = "󱈸", color = "purple" }, real = true },
-        { "grr", icon = { icon = "", color = "purple" }, real = true },
-        { "gI", icon = { icon = "󰡱", color = "purple" }, real = true },
-        { "gt", icon = { icon = "", color = "purple" }, real = true },
-
-        { "gr", group = "LSP", mode = { "n", "x" }, icon = { icon = "󱍔", color = "purple" } },
-        { "gra", mode = { "n", "x" }, icon = { icon = "󱍔", color = "purple" }, real = true },
-
-        { "gC", group = "calls", icon = { icon = "󰃻", color = "yellow" } },
-        { "gCi", icon = { icon = "󰃺", color = "cyan" }, real = true },
-        { "gCo", icon = { icon = "󰃷", color = "orange" }, real = true },
-
-        -- Misc
-        { "<leader>n", icon = { icon = "󰂚", color = "yellow" } },
-        { "<leader>N", icon = { icon = "󰎟", color = "yellow" } },
-        { "<C-W>z", icon = { icon = "󰫢", color = "yellow" } },
-        { "<C-W>Z", icon = { icon = "󰘖", color = "yellow" } },
-        { "<leader>.", icon = { icon = "󰎕", color = "grey" } },
-        { "<leader>lR", icon = { icon = "󰑕", color = "green" } },
-        { "<leader>GB", icon = { icon = "󰖟", color = "grey" }, real = true },
-      })
-    else
-      vim.notify("which-key.nvim not found. Install it for enhanced keymap icons and descriptions.", vim.log.levels.WARN, { title = "Snacks Config" })
-    end
+    look_up_loaded()
   end,
 
   init = function()
@@ -357,25 +293,12 @@ return {
         _G.dd = function(...) Snacks.debug.inspect(...) end
         _G.bt = function() Snacks.debug.backtrace() end
 
-        -- Formatting on save (lua/format/)
-        local function setup_format_on_save_toggle()
-          local on_save = require("format").on_save
-          Snacks.toggle
-            .new({
-              name = "Format on Save",
-              get = on_save.get,
-              set = on_save.set,
-              map = require("core.lsp").map,
-            })
-            :map("<leader>Tf")
-        end
-
-        local function setup_indent_view_toggle(n_wide, n_compact)
+        local function indent_view_toggle(n_wide, n_compact)
           -- defaults if not provided
           n_wide = n_wide or 8 -- wide visual tab view
           n_compact = n_compact or 2 -- canonical indent
 
-          Snacks.toggle({
+          return Snacks.toggle({
             name = "Indent View (tabstop)",
             get = function() return vim.bo.tabstop == n_wide end,
             set = function(state)
@@ -395,64 +318,60 @@ return {
                 { title = "Snacks" }
               )
             end,
-          }):map("<leader>Ti")
+          })
         end
 
-        -- Toggles
-        Snacks.toggle.option("spell", { name = "Spell Checking" }):map("<leader>Ts")
-        Snacks.toggle.option("wrap", { name = "Wrap" }):map("<leader>Tw")
-        Snacks.toggle.option("relativenumber", { name = "Relative Number" }):map("<leader>TL")
-        Snacks.toggle
-          .diagnostics({
-            wk_desc = { enabled = "Hide ", disabled = "Show " },
-          })
-          :map("<leader>Td")
-        Snacks.toggle.line_number():map("<leader>Tl")
-        Snacks.toggle
-          .option("conceallevel", {
-            name = "Markup Details",
-            off = 0,
-            on = vim.o.conceallevel > 0 and vim.o.conceallevel or 2,
-            wk_desc = { enabled = "Conceal ", disabled = "Show " },
-          })
-          :map("<leader>Tm")
-        Snacks.toggle
-          .inlay_hints({
-            wk_desc = { enabled = "Hide ", disabled = "Show " },
-            map = require("core.lsp").map,
-          })
-          :map("<leader>Th")
-        Snacks.toggle
-          .new({
-            name = "Code Lens",
-            get = function() return vim.lsp.codelens.is_enabled({ bufnr = 0 }) end,
-            set = function(state) vim.lsp.codelens.enable(state, { bufnr = 0 }) end,
-            wk_desc = { enabled = "Hide ", disabled = "Show " },
-            map = require("core.lsp").map,
-          })
-          :map("<leader>Tc")
-        Snacks.toggle
-          .new({
-            name = "Type Errors",
-            get = function()
-              local client = vim.lsp.get_clients({ bufnr = 0, name = "pyrefly" })[1]
-              return client ~= nil and require("config.utils").pyrefly_type_errors(client)
-            end,
-            set = function(state)
-              for _, client in ipairs(vim.lsp.get_clients({ bufnr = 0, name = "pyrefly" })) do
-                require("config.utils").pyrefly_type_errors(client, state)
-              end
-            end,
-            wk_desc = { enabled = "Hide ", disabled = "Show " },
-            map = require("core.lsp").map,
-          })
-          :map("<leader>Te")
-        Snacks.toggle.indent():map("<leader>Tg")
-        Snacks.toggle.dim():map("<leader>TD")
-        Snacks.toggle.option("list", { name = "Hidden Chars" }):map("<leader>TH")
-
-        setup_indent_view_toggle()
-        setup_format_on_save_toggle()
+        -- Toggles: a press flips one, says so, and its label in the popup follows it (lua/keys/)
+        local toggle = require("keys").feature("toggles")
+        local hide_show = { enabled = "Hide ", disabled = "Show " }
+        toggle({
+          { "<leader>Ts", toggle = Snacks.toggle.option("spell", { name = "Spell Checking" }) },
+          { "<leader>Tw", toggle = Snacks.toggle.option("wrap", { name = "Wrap" }) },
+          { "<leader>TL", toggle = Snacks.toggle.option("relativenumber", { name = "Relative Number" }) },
+          { "<leader>Td", toggle = Snacks.toggle.diagnostics({ wk_desc = hide_show }) },
+          { "<leader>Tl", toggle = Snacks.toggle.line_number() },
+          {
+            "<leader>Tm",
+            toggle = Snacks.toggle.option("conceallevel", {
+              name = "Markup Details",
+              off = 0,
+              on = vim.o.conceallevel > 0 and vim.o.conceallevel or 2,
+              wk_desc = { enabled = "Conceal ", disabled = "Show " },
+            }),
+          },
+          { "<leader>Th", toggle = Snacks.toggle.inlay_hints({ wk_desc = hide_show }), need = "inlayHint" },
+          {
+            "<leader>Tc",
+            toggle = Snacks.toggle.new({
+              name = "Code Lens",
+              get = function() return vim.lsp.codelens.is_enabled({ bufnr = 0 }) end,
+              set = function(state) vim.lsp.codelens.enable(state, { bufnr = 0 }) end,
+              wk_desc = hide_show,
+            }),
+            need = "codeLens",
+          },
+          {
+            "<leader>Te",
+            toggle = Snacks.toggle.new({
+              name = "Type Errors",
+              get = function()
+                local client = vim.lsp.get_clients({ bufnr = 0, name = "pyrefly" })[1]
+                return client ~= nil and require("config.utils").pyrefly_type_errors(client)
+              end,
+              set = function(state)
+                for _, client in ipairs(vim.lsp.get_clients({ bufnr = 0, name = "pyrefly" })) do
+                  require("config.utils").pyrefly_type_errors(client, state)
+                end
+              end,
+              wk_desc = hide_show,
+            }),
+            need = "client:pyrefly",
+          },
+          { "<leader>Tg", toggle = Snacks.toggle.indent() },
+          { "<leader>TD", toggle = Snacks.toggle.dim() },
+          { "<leader>TH", toggle = Snacks.toggle.option("list", { name = "Hidden Chars" }) },
+          { "<leader>Ti", toggle = indent_view_toggle() },
+        })
       end,
     })
   end,

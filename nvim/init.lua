@@ -4,8 +4,10 @@ require("lang").setup()
 require("tools").setup()
 -- Install prompts, :Tools and the statusline indicator; prompts need a UI and vim.g.install_tools ~= "off"
 require("tools.ux").setup()
-require("core.lsp")
+-- Options first: the key rows below read mapleader. Neovim's keys before core.lsp, whose grr replaces Neovim's
 require("config.options")
+require("keys.neovim")
+require("core.lsp")
 require("config.keymaps")
 require("config.autocmds").setup()
 

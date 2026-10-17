@@ -92,30 +92,30 @@ return {
       pr_list_limit = 250,
     },
     init = function()
-      -- PR review works on the repo of the cwd, so map it while that repo has a GitHub remote
-      local function map_pr_keys()
+      -- PR review works on the repo of the cwd, so its keys act while that repo has a GitHub remote. git is asked each
+      -- time the cwd changes; until it answers, the new cwd's keys do not act.
+      local github = {} ---@type table<string, boolean>
+      local function look_up()
         local cwd = vim.fn.getcwd()
-        vim.system({ "git", "-C", cwd, "remote", "-v" }, { text = true }, function(out)
-          local github = out.code == 0 and out.stdout:find("github.com", 1, true) ~= nil
-          vim.schedule(function()
-            if vim.fn.getcwd() ~= cwd then
-              return
-            end
-            if github then
-              vim.keymap.set("n", "<leader>p", "<cmd>PRReviewMenu<cr>", { desc = "PR Review Menu" })
-              vim.keymap.set("x", "<leader>p", ":<C-u>'<,'>PRSuggestChange<CR>", { desc = "Suggest change" })
-            else
-              pcall(vim.keymap.del, "n", "<leader>p")
-              pcall(vim.keymap.del, "x", "<leader>p")
-            end
-          end)
-        end)
+        github[cwd] = nil
+        vim.system(
+          { "git", "-C", cwd, "remote", "-v" },
+          { text = true },
+          function(out) github[cwd] = out.code == 0 and out.stdout:find("github.com", 1, true) ~= nil end
+        )
       end
+      local keys = require("keys")
+      keys.need("github", function() return github[vim.fn.getcwd()] == true end)
+      local icon = { icon = "", color = "cyan" }
+      keys.feature("pr review", { need = "github", icon = icon })({
+        { "<leader>p", "<cmd>PRReviewMenu<cr>", "PR Review Menu" },
+        { "<leader>p", ":<C-u>'<,'>PRSuggestChange<CR>", "Suggest change", mode = "x" },
+      })
       vim.api.nvim_create_autocmd("DirChanged", {
         group = vim.api.nvim_create_augroup("PRReviewKeys", { clear = true }),
-        callback = map_pr_keys,
+        callback = look_up,
       })
-      map_pr_keys()
+      look_up()
     end,
   },
 }

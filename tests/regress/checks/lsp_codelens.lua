@@ -48,9 +48,8 @@ local function server(capabilities, asked)
   end
 end
 
-local function has_toggle(buf)
-  return vim.api.nvim_buf_call(buf, function() return vim.fn.maparg("<leader>Tc", "n", false, true).buffer == 1 end)
-end
+-- the toggle is listed by which-key where it acts
+local function has_toggle(buf) return wk_lists(buf, "n", "<leader>Tc") ~= nil end
 
 -- A server without code lenses: asked for none, and its buffer gets no toggle
 vim.fn.writefile({ "alpha", "beta" }, "nolens.txt")
@@ -62,8 +61,8 @@ wait_until(function() return vim.list_contains(plain_asked, "initialize") end, 3
 -- an edit is where lenses are re-requested
 vim.api.nvim_buf_set_lines(plain, 0, 1, false, { "alpha!" })
 vim.cmd.redraw()
--- the hover key is how this config marks an attached server's buffer; wait for it so the gated keys have synced
-wait_until(function() return vim.fn.maparg("K", "n", false, true).buffer == 1 end, 3000)
+-- the hover key is listed once the server has attached
+wk_wait(plain, "n", "K", true, 3000)
 vim.wait(200)
 check("a server without code lenses is asked for none", not vim.list_contains(plain_asked, "textDocument/codeLens"), table.concat(plain_asked, " "))
 check("a buffer whose server has no code lenses gets no <leader>Tc", not has_toggle(plain))
@@ -86,7 +85,7 @@ local drawn = wait_until(function()
 end, 3000)
 check("each lens is drawn above its line", drawn and vim.deep_equal(lenses(buf), want), vim.inspect(lenses(buf)))
 
-if check("the buffer gets <leader>Tc", wait_until(function() return has_toggle(buf) end, 3000)) then
+if check("the buffer gets <leader>Tc", (wk_wait(buf, "n", "<leader>Tc", true, 3000))) then
   feed("<leader>Tc")
   wait_until(function()
     vim.cmd.redraw()

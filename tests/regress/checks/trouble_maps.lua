@@ -40,7 +40,7 @@ local ran = false
 vim.schedule(function() ran = true end)
 wait_until(function() return ran end, 1000)
 
--- the maps in the buffer, plus gated keys whose method lua_ls lacks
+-- the maps in the buffer, plus every key row's action (a gated row's map is an expr map that picks its action)
 local cmds, seen = {}, {}
 local function add(rhs, lhs)
   local cmd = trouble_cmd(rhs)
@@ -53,7 +53,7 @@ for _, mode in ipairs({ "n", "x" }) do
   for _, m in ipairs(vim.api.nvim_get_keymap(mode)) do add(m.rhs, m.lhs) end
   for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, mode)) do add(m.rhs, m.lhs) end
 end
-for _, key in ipairs(require("core.lsp").keys) do add(key[2], key[1]) end
+for _, row in ipairs(require("keys").list()) do add(row.action, row.lhs) end
 if not check("the config maps Trouble commands", #cmds > 0) then return end
 
 -- items for the list modes, and a cursor on M (line 3), which has a definition and references
