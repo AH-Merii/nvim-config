@@ -4,7 +4,7 @@
 -- and Mason's bin dir). Results are cached per (tool, root); User ToolsChanged says when they change.
 
 local catalog = require("tools.catalog")
-local mise = require("tools.mise")
+local proc = require("tools.proc")
 local state = require("tools.state")
 
 local M = {}
@@ -53,6 +53,20 @@ M.event = "ToolsChanged"
 ---@field dirs string[] bin dirs of the project's installed pins
 ---@field all string[] bin dirs of every tool active in root
 
+---@class tools.Backend where tools come from and how they are installed: tools.mise, or a fake in tests/unit
+---@field bin_paths fun(scope: "/", cb: fun(dirs?: string[], err?: string)) bin dirs of the global tools, in PATH order
+---@field scan_project fun(root: string, cb: fun(scan: tools.ProjectScan)) what the project's configs pin in root
+---@field env fun(scope: string, dirs: string[], cb: fun(env: table<string, string>)) env for a tool that needs a runtime
+---@field install_version fun(path: string): string? the version of a binary in the backend's install dir
+---@field clean_path fun(): string[] Neovim's PATH without the backend's shims and install dirs (the system layer)
+---@field missing fun(): string? why installs can't run, nil when they can
+---@field use_global fun(specs: string[], cb: fun(ok: boolean, err?: string)) global install, e.g. "ruff@latest"
+---@field install fun(specs: string[], cb: fun(ok: boolean, err?: string)) a pinned version, e.g. "ruff@0.15.0"
+---@field trust fun(configs: string[], root: string, cb: fun(ok: boolean, err?: string))
+---@field install_project fun(root: string, cb: fun(ok: boolean, err?: string)) every tool the project pins
+
+local backend = require("tools.mise") ---@type tools.Backend
+
 ---@class tools.Slot
 ---@field done? boolean
 ---@field value? any
@@ -100,7 +114,7 @@ local function norm(root) return vim.fs.normalize(vim.fs.abspath(root)) end
 ---@param cb fun(dirs: string[])
 local function global_dirs(cb)
   memo(shared, "global", function(done)
-    mise.bin_paths("/", function(dirs) done(dirs or {}) end)
+    backend.bin_paths("/", function(dirs) done(dirs or {}) end)
   end, cb)
 end
 
@@ -108,7 +122,7 @@ end
 ---@param cb fun(project: tools.Project)
 local function scan(root, cb)
   memo(projects, root, function(done)
-    mise.scan_project(root, function(s)
+    backend.scan_project(root, function(s)
       -- A config that pins no tools (one that only sets [env], say) changes nothing here and is not asked about,
       -- unless it is untrusted: then mise refuses every call in root until it is trusted
       local configs = (s.untrusted or next(s.pins)) and s.configs or {}
@@ -135,7 +149,7 @@ local function scope_env(project, cb)
     -- mise leaves a pinned tool that is not installed out of the project's bin dirs, global copy included;
     -- the global dirs after them make that pin fall back to global (node, go)
     local path = project.active and vim.list_extend(vim.list_slice(project.all), dirs) or dirs
-    memo(envs, scope, function(done) mise.env(scope, path, done) end, cb)
+    memo(envs, scope, function(done) backend.env(scope, path, done) end, cb)
   end)
 end
 
@@ -202,7 +216,7 @@ local function first_accepted(entry, env, candidates, cb)
     if not candidate or not entry.min then
       return cb(candidate, skipped)
     end
-    mise.run({ candidate.path, "--version" }, { env = env, timeout = version_timeout }, function(out)
+    proc.run({ candidate.path, "--version" }, { env = env, timeout = version_timeout }, function(out)
       local version = out.code == 0 and parse_version(out.stdout) or nil
       local parsed = version and vim.version.parse(version, { strict = false })
       if parsed and vim.version.ge(parsed, entry.min) then
@@ -245,7 +259,7 @@ local function find_conflict(name, entry, project, env_path, mise_path, env, cb)
   if not (project.active and env_path and mise_path and pinned) then
     return cb(nil)
   end
-  mise.run({ env_path, "--version" }, { env = env, timeout = version_timeout }, function(out)
+  proc.run({ env_path, "--version" }, { env = env, timeout = version_timeout }, function(out)
     local version = parse_version(out.stdout)
     if not version or version == pinned.version then
       return cb(nil)
@@ -313,7 +327,7 @@ local function compute(name, root, done)
           if mise_path and not mise_first then
             table.insert(candidates, { path = mise_path, source = "project-mise" })
           end
-          for _, layer in ipairs({ { "global-mise", gdirs }, { "system", mise.clean_path() } }) do
+          for _, layer in ipairs({ { "global-mise", gdirs }, { "system", backend.clean_path() } }) do
             local path = find_in(layer[2], name)
             if path then
               table.insert(candidates, { path = path, source = layer[1] })
@@ -366,7 +380,7 @@ local function compute(name, root, done)
               end
               result.path = entry.run and vim.fs.joinpath(vim.fs.dirname(found.path), entry.run) or found.path
               result.source, result.env = found.source, run_env
-              result.version = result.version or found.version or mise.install_version(found.path)
+              result.version = result.version or found.version or backend.install_version(found.path)
               -- The project pins a version that is not installed while another copy is used: offer the pinned one
               result.offers = for_project and found.source ~= "project-env" and { for_project } or nil
               done(result)
@@ -380,7 +394,7 @@ local function compute(name, root, done)
             if not rustup then
               return missing("rustup not found", { kind = "global", runtime = "rust", component = entry.component })
             end
-            mise.run({ rustup, "which", name }, { cwd = root, env = env }, function(out)
+            proc.run({ rustup, "which", name }, { cwd = root, env = env }, function(out)
               if out.code ~= 0 then
                 return missing(vim.trim(out.stderr):match("[^\n]*"), { kind = "component", component = entry.component, toolchain = pinned_toolchain(root) })
               end
@@ -409,7 +423,7 @@ function M.version(result, cb)
   if versions[path] ~= nil then
     return cb(versions[path] or nil)
   end
-  mise.run({ path, "--version" }, { env = result.env, timeout = version_timeout }, function(out)
+  proc.run({ path, "--version" }, { env = result.env, timeout = version_timeout }, function(out)
     versions[path] = parse_version(out.stdout) or parse_version(out.stderr) or false
     cb(versions[path] or nil)
   end)
@@ -620,19 +634,13 @@ end
 --- Whether installs may run: never with vim.g.install_tools = "off" or without a UI (headless, tests).
 function M.can_install() return vim.g.install_tools ~= "off" and #vim.api.nvim_list_uis() > 0 end
 
----@param cmd string[]
----@param opts { cwd?: string, env?: table<string, string> }
+---@param start fun(cb: fun(ok: boolean, err?: string)) runs the install
 ---@param cb fun(ok: boolean, err?: string)
-local function install_run(cmd, opts, cb)
+local function install_run(start, cb)
   if not M.can_install() then
     return vim.schedule(function() cb(false, "installs are off (vim.g.install_tools or no UI)") end)
   end
-  mise.run(cmd, opts, function(out)
-    if out.code ~= 0 then
-      return cb(false, ("%s: %s"):format(table.concat(cmd, " "), vim.trim(out.stderr ~= "" and out.stderr or out.stdout)))
-    end
-    cb(true)
-  end)
+  start(cb)
 end
 
 ---@param cb? fun(ok: boolean, err?: string)
@@ -652,12 +660,11 @@ end
 ---@param specs string[]
 ---@param cb? fun(ok: boolean, err?: string)
 function M.install_global(specs, cb)
-  local bin = mise.bin()
-  if not bin then
-    return reporter(cb, "Tools")(false, "mise is not installed")
+  local missing = backend.missing()
+  if missing then
+    return reporter(cb, "Tools")(false, missing)
   end
-  -- cwd /: an untrusted project config with [env] would make mise refuse
-  install_run({ bin, "use", "-g", unpack(specs) }, { cwd = "/", env = { MISE_YES = "1" } }, reporter(cb, "Tools"))
+  install_run(function(done) backend.use_global(specs, done) end, reporter(cb, "Tools"))
 end
 
 --- `mise install <specs>` from /, then refresh. For a project's pinned versions, e.g. "ruff@0.15.0": they land in
@@ -665,11 +672,11 @@ end
 ---@param specs string[]
 ---@param cb? fun(ok: boolean, err?: string)
 function M.install_pinned(specs, cb)
-  local bin = mise.bin()
-  if not bin then
-    return reporter(cb, "Tools")(false, "mise is not installed")
+  local missing = backend.missing()
+  if missing then
+    return reporter(cb, "Tools")(false, missing)
   end
-  install_run({ bin, "install", unpack(specs) }, { cwd = "/", env = { MISE_YES = "1" } }, reporter(cb, "Tools"))
+  install_run(function(done) backend.install(specs, done) end, reporter(cb, "Tools"))
 end
 
 --- `rustup component add <components>` in root, so they land in the toolchain root uses, then refresh.
@@ -685,7 +692,7 @@ function M.install_component(components, root, cb)
       if not rustup then
         return reporter(cb, "Tools")(false, "rustup not found")
       end
-      install_run({ rustup, "component", "add", unpack(components) }, { cwd = root, env = env }, reporter(cb, "Tools"))
+      install_run(function(done) proc.install({ rustup, "component", "add", unpack(components) }, { cwd = root, env = env }, done) end, reporter(cb, "Tools"))
     end)
   end)
 end
@@ -697,9 +704,9 @@ end
 function M.install_project(root, cb)
   root = norm(root)
   local report = reporter(cb, "Tools")
-  local bin = mise.bin()
-  if not bin then
-    return report(false, "mise is not installed")
+  local missing = backend.missing()
+  if missing then
+    return report(false, missing)
   end
   local trusted = {} ---@type table<string, true>
   local choice ---@type tools.Choice?
@@ -725,12 +732,12 @@ function M.install_project(root, cb)
       if choice then
         state.set(project.configs, choice)
       end
-      install_run({ bin, "install" }, { cwd = root, env = { MISE_YES = "1" } }, report)
+      install_run(function(done) backend.install_project(root, done) end, report)
     end
     if #pending == 0 then
       return next_step()
     end
-    install_run({ bin, "trust", unpack(pending) }, { cwd = root }, function(ok, err)
+    install_run(function(done) backend.trust(pending, root, done) end, function(ok, err)
       if not ok then
         return report(false, err)
       end
@@ -933,7 +940,12 @@ end
 --- File patterns of the mise configs a project may have; writing one refreshes everything
 M.config_patterns = { "mise.toml", ".mise.toml", "mise.local.toml", ".tool-versions", "*/mise/config.toml", "*/.mise/config.toml", "*/.config/mise.toml" }
 
-function M.setup()
+--- opts.backend replaces where tools come from (default tools.mise) and drops every cached answer.
+---@param opts? { backend?: tools.Backend }
+function M.setup(opts)
+  if opts and opts.backend then
+    backend, shared, projects, envs, results, versions, previous = opts.backend, {}, {}, {}, {}, {}, {}
+  end
   require("tools.filetypes").setup()
   local group = vim.api.nvim_create_augroup("tools", { clear = true })
   -- Start the mise queries for a file's project as it opens, so formatters and linters rarely wait
