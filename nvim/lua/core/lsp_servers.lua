@@ -34,6 +34,7 @@ local bins = {} ---@type table<string, string> server -> catalog binary
 local wrapped = {} ---@type table<string, function> server -> the root_dir set by wire
 local rootless = {} ---@type table<string, string> server -> resolver root of its client without a root_dir, which all such buffers share
 local running = {} ---@type table<string, string> server .. "\0" .. root -> binary its client was started with
+local processes = setmetatable({}, { __mode = "k" }) ---@type table<vim.lsp.rpc.PublicClient, true> every server process started
 
 ---@param root string
 local function norm(root) return vim.fs.normalize(vim.fs.abspath(root)) end
@@ -96,7 +97,9 @@ local function wiring(name, bin, base)
         error(("%s: no %s binary for %s"):format(name, bin, root or "this buffer"))
       end
       running[name .. "\0" .. norm(root)] = result.path
-      return vim.lsp.rpc.start({ result.path, unpack(catalog.server_args(name) or {}) }, dispatchers, { cwd = root, env = result.env })
+      local rpc = vim.lsp.rpc.start({ result.path, unpack(catalog.server_args(name) or {}) }, dispatchers, { cwd = root, env = result.env })
+      processes[rpc] = true
+      return rpc
     end,
     -- Once root_dir is set root_markers is ignored, so it finds the root itself and then waits for the binary
     root_dir = function(buf, on_dir)
@@ -228,6 +231,28 @@ function M.setup()
     end,
   })
   vim.lsp.enable(vim.tbl_keys(bins))
+
+  -- vim.lsp's exit handler (made when vim.lsp loaded, so it runs before this one) stops the initialized clients and
+  -- waits up to their exit_timeout, then Neovim exits and closes the pipes of every server still running. tflint then
+  -- dies of SIGPIPE without stopping its plugin child (tflint --act-as-bundled-plugin), which runs on, orphaned. So
+  -- terminate what Client:stop would have, had Neovim stayed: a server still initializing (vim.lsp.get_clients() lists
+  -- none), and one that outlived its exit_timeout; then wait for them to exit.
+  vim.api.nvim_create_autocmd("VimLeavePre", {
+    group = group,
+    callback = function()
+      local spared = {} -- exit_timeout false: Client:stop never kills it
+      for _, client in ipairs(vim.lsp.get_clients()) do
+        spared[client.rpc] = client.exit_timeout == false or nil
+      end
+      local left = vim.tbl_filter(function(rpc) return not (spared[rpc] or rpc.is_closing()) end, vim.tbl_keys(processes))
+      for _, rpc in ipairs(left) do
+        rpc.terminate()
+      end
+      vim.wait(1000, function()
+        return vim.iter(left):all(function(rpc) return rpc.is_closing() end)
+      end, 10)
+    end,
+  })
 
   -- A binary that turned up or moved after an install, an accepted project config or a refresh: start its servers,
   -- and restart the ones in that root running another binary. First resolutions ("resolved") need nothing, the

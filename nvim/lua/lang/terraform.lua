@@ -5,7 +5,8 @@ return {
   parsers = { "terraform" },
   servers = {
     terraformls = { filetypes = { "terraform", "terraform-vars" } },
-    -- Killed at once on exit, tflint never stops its --act-as-bundled-plugin child, which is orphaned
+    -- Without an exit_timeout Neovim doesn't wait for it on exit: its pipes close, it dies of SIGPIPE and its
+    -- --act-as-bundled-plugin child is orphaned (core/lsp_servers.lua's VimLeavePre handler covers the rest)
     tflint = { filetypes = { "terraform" }, exit_timeout = 500 },
   },
   formatters = { "terraform_fmt" },
