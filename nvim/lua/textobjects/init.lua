@@ -3,6 +3,62 @@
 local M = {}
 local ts = vim.treesitter
 
+local select_textobjects = {
+  -- Core text objects (well-supported for selection)
+  ["af"] = { query = "@function.outer", desc = "Around function", icon = { icon = "󰊕", color = "purple" } },
+  ["if"] = { query = "@function.inner", desc = "Inside function", icon = { icon = "󰊕", color = "purple" } },
+  ["ac"] = { query = "@class.outer", desc = "Around class", icon = { icon = "", color = "purple" } },
+  ["ic"] = { query = "@class.inner", desc = "Inside class", icon = { icon = "", color = "purple" } },
+  ["ai"] = { query = "@conditional.outer", desc = "Around conditional", icon = { icon = "󰙁", color = "purple" } },
+  ["ii"] = { query = "@conditional.inner", desc = "Inside conditional", icon = { icon = "󰙁", color = "purple" } },
+  ["al"] = { query = "@loop.outer", desc = "Around loop", icon = { icon = "", color = "purple" } },
+  ["il"] = { query = "@loop.inner", desc = "Inside loop", icon = { icon = "", color = "purple" } },
+  ["ap"] = { query = "@parameter.outer", desc = "Around parameter", icon = { icon = "", color = "purple" } },
+  ["ip"] = { query = "@parameter.inner", desc = "Inside parameter", icon = { icon = "", color = "purple" } },
+  ["ab"] = { query = "@block.outer", desc = "Around block", icon = { icon = "󰅩", color = "purple" } },
+  ["ib"] = { query = "@block.inner", desc = "Inside block", icon = { icon = "󰅩", color = "purple" } },
+
+  -- Additional useful text objects
+  ["a/"] = { query = "@comment.outer", desc = "Around comment", icon = { icon = "󰅺", color = "grey" } },
+  ["aa"] = { query = "@call.outer", desc = "Around function call", icon = { icon = "󰅪", color = "purple" } },
+  ["ia"] = { query = "@call.inner", desc = "Inside function call", icon = { icon = "󰅪", color = "purple" } },
+  ["ar"] = { query = "@return.outer", desc = "Around return", icon = { icon = "󰌑", color = "purple" } },
+  ["ir"] = { query = "@return.inner", desc = "Inside return", icon = { icon = "󰌑", color = "purple" } },
+}
+
+local move_textobjects = {
+  goto_previous_start = {
+    ["[f"] = { query = "@function.outer", desc = "Previous function", icon = { icon = "󰊕", color = "orange" } },
+    ["[c"] = { query = "@class.outer", desc = "Previous class", icon = { icon = "", color = "orange" } },
+    ["[p"] = { query = "@parameter.inner", desc = "Previous parameter", icon = { icon = "", color = "orange" } },
+    ["[b"] = { query = "@block.outer", desc = "Previous block", icon = { icon = "󰅩", color = "orange" } },
+    ["[i"] = { query = "@conditional.outer", desc = "Previous conditional", icon = { icon = "󰙁", color = "orange" } },
+    ["[l"] = { query = "@loop.outer", desc = "Previous loop", icon = { icon = "", color = "orange" } },
+    ["[a"] = { query = "@call.outer", desc = "Previous function call", icon = { icon = "󰅪", color = "orange" } },
+    ["[r"] = { query = "@return.outer", desc = "Previous return", icon = { icon = "󰌑", color = "orange" } },
+    ["[/"] = { query = "@comment.outer", desc = "Previous comment", icon = { icon = "󰅺", color = "grey" } },
+  },
+  goto_next_start = {
+    ["]f"] = { query = "@function.outer", desc = "Next function", icon = { icon = "󰊕", color = "purple" } },
+    ["]c"] = { query = "@class.outer", desc = "Next class", icon = { icon = "", color = "purple" } },
+    ["]p"] = { query = "@parameter.inner", desc = "Next parameter", icon = { icon = "", color = "purple" } },
+    ["]b"] = { query = "@block.outer", desc = "Next block", icon = { icon = "󰅩", color = "purple" } },
+    ["]i"] = { query = "@conditional.outer", desc = "Next conditional", icon = { icon = "󰙁", color = "purple" } },
+    ["]l"] = { query = "@loop.outer", desc = "Next loop", icon = { icon = "", color = "purple" } },
+    ["]a"] = { query = "@call.outer", desc = "Next function call", icon = { icon = "󰅪", color = "purple" } },
+    ["]r"] = { query = "@return.outer", desc = "Next return", icon = { icon = "󰌑", color = "purple" } },
+    ["]/"] = { query = "@comment.outer", desc = "Next comment", icon = { icon = "󰅺", color = "grey" } },
+  },
+  goto_previous_end = {
+    ["[F"] = { query = "@function.outer", desc = "Previous function end", icon = { icon = "󰡱", color = "cyan" } },
+    ["[B"] = { query = "@block.outer", desc = "Previous block end", icon = { icon = "", color = "cyan" } },
+  },
+  goto_next_end = {
+    ["]F"] = { query = "@function.outer", desc = "Next function end", icon = { icon = "󰡱", color = "cyan" } },
+    ["]B"] = { query = "@block.outer", desc = "Next block end", icon = { icon = "", color = "cyan" } },
+  },
+}
+
 local selects = {} ---@type table<string, {query: string, desc: string}>
 local moves = {} ---@type table<string, {fn: string, query: string, desc: string}>
 local shadowed = {} ---@type table<string, table> mode .. lhs -> the global map the dispatcher took over
@@ -314,9 +370,31 @@ local function take(modes, lhs, desc)
   end
 end
 
----@param select_specs table<string, {query: string, desc: string, icon: table}>
----@param move_specs table<string, table<string, {query: string, desc: string, icon: table}>> move function -> lhs -> spec
-function M.setup(select_specs, move_specs)
+--- Sets up nvim-treesitter-textobjects, wraps its lookups and makes one map per key; nvim-treesitter's config calls it
+function M.setup()
+  require("nvim-treesitter-textobjects").setup({
+    select = {
+      lookahead = true,
+      selection_modes = {
+        ["@parameter.outer"] = "v",
+        ["@parameter.inner"] = "v",
+        ["@function.outer"] = "v",
+        ["@conditional.outer"] = "v",
+        ["@loop.outer"] = "v",
+        ["@class.outer"] = "<c-v>",
+        ["@block.outer"] = "v",
+        ["@call.outer"] = "v",
+        ["@comment.outer"] = "v",
+        ["@assignment.outer"] = "v",
+        ["@return.outer"] = "v",
+      },
+      include_surrounding_whitespace = true,
+    },
+    move = {
+      set_jumps = true,
+    },
+  })
+  local select_specs, move_specs = select_textobjects, move_textobjects
   -- the popup's rows: what the key does here, with the object's icon only where it runs the treesitter key, and
   -- listed where it runs it or the key has a meaning of its own
   local key = require("keys").feature("textobjects")

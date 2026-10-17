@@ -13,7 +13,7 @@ lua/tools/ux.lua                  ui
 lua/ui/*                          ui tools lint
 lua/format/*                      format keys
 lua/linting/*                     lint keys ui
-lua/plugins/nvim-treesitter.lua   treesitter keys which-key
+lua/features/treesitter.lua       treesitter keys which-key
 lua/plugins/git.lua               git keys which-key
 lua/plugins/blink.lua             completion
 lua/keys/*                        keys which-key lsp git lint format treesitter

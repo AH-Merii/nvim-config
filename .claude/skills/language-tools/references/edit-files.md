@@ -171,7 +171,7 @@ Before and after for gofumpt (`nvim/lua/lang/go.lua`):
 
 Check that a parser exists: `ls ~/.local/share/nvimt2/lazy/nvim-treesitter/runtime/queries/<lang>`. If it does, add `"<lang>"` to the language's `parsers`.
 
-Neovim would install the parser on first use anyway. The list matters for the suite: `tests/regress/refresh.lua` installs every language's `parsers` (through `lang.views()`) plus the literal `ensure_installed` list in `nvim/lua/plugins/nvim-treesitter.lua`, which holds only the parsers no language names.
+Neovim would install the parser on first use anyway. The list matters for the suite: `tests/regress/refresh.lua` installs every language's `parsers` (through `lang.views()`) plus the literal `ensure_installed` list in `nvim/lua/features/treesitter.lua`, which holds only the parsers no language names.
 
 ## Areas
 
