@@ -1,8 +1,9 @@
 -- palletes
 local function get_onedark_palette()
-  local ok, onedark = pcall(require, "onedark.palette")
-  if ok then
-    local c = onedark
+  -- onedark.palette holds one table per style
+  local ok, palettes = pcall(require, "onedark.palette")
+  local c = ok and vim.g.onedark_config and palettes[vim.g.onedark_config.style]
+  if c then
     return {
       bg = c.bg0 or "#282c34",
       fg = c.fg or "#abb2bf",
