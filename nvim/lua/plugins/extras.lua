@@ -17,7 +17,7 @@ return {
     event = "VeryLazy",
     opts = {},
     init = function()
-      -- diffview and lualine's filetype icons require nvim-web-devicons; mini.icons stands in for it
+      -- diffview's filetype icons require nvim-web-devicons; mini.icons stands in for it
       package.preload["nvim-web-devicons"] = function()
         require("mini.icons").mock_nvim_web_devicons()
         return package.loaded["nvim-web-devicons"]

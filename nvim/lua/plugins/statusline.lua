@@ -17,7 +17,7 @@ local function get_onedark_palette()
       violet = c.violet or "#a9a1e1",
     }
   else
-    vim.notify("Unable to Load onedark pallette in lualine", vim.log.levels.WARN)
+    vim.notify("Unable to Load onedark pallette in the statusline", vim.log.levels.WARN)
     -- Fallback OneDark colors (from official theme)
     return {
       bg = "#282c34",
@@ -37,10 +37,10 @@ end
 local function get_colors() return get_onedark_palette() end
 
 return {
-  "nvim-lualine/lualine.nvim",
+  "AH-Merii/neoblocks.nvim",
   event = "VeryLazy",
   config = function()
-    local lualine = require("lualine")
+    local sl = require("neoblocks.statusline")
     -- What the segments show of a buffer's servers, tools and checkout (lua/ui/facts.lua); this spec only draws it
     local facts = require("ui.facts")
 
@@ -57,10 +57,10 @@ return {
     ---------------------------------------------------------------------------
     local function define_highlights(c)
       local set_hl = function(name, opts) vim.api.nvim_set_hl(0, name, opts) end
-      set_hl("LualineNormal", { fg = c.fg })
-      set_hl("LualineProjectRoot", { fg = c.magenta, bold = true })
-      set_hl("LualinePath", { fg = c.fg })
-      set_hl("LualineFilename", { fg = c.blue, bold = true })
+      set_hl("StatuslineNormal", { fg = c.fg })
+      set_hl("StatuslineProjectRoot", { fg = c.magenta, bold = true })
+      set_hl("StatuslinePath", { fg = c.fg })
+      set_hl("StatuslineFilename", { fg = c.blue, bold = true })
     end
 
     ---------------------------------------------------------------------------
@@ -88,7 +88,7 @@ return {
       pattern = facts.event,
       callback = function(ev)
         if ev.data.buf == vim.api.nvim_get_current_buf() or ev.data.buf == last_file then
-          lualine.refresh({ place = { "statusline" } })
+          sl.refresh()
         end
       end,
     })
@@ -99,7 +99,7 @@ return {
     -- The path is drawn as a statusline string, where a % in a name would start an item
     local function escape(text) return (text:gsub("%%", "%%%%")) end
 
-    --- Adaptive filepath component for lualine.
+    --- Adaptive filepath component.
     --- Shows full path when space allows, then progressively shortens:
     ---   1. Abbreviate intermediate dirs (a/b/c)
     ---   2. Shorten project name (my..example)
@@ -134,10 +134,10 @@ return {
         middle_path = table.concat(vim.list_slice(parts, 1, #parts - 1), "/")
       end
 
-      local hl_project = "%#LualineProjectRoot#"
-      local hl_middle = "%#LualinePath#"
-      local hl_file = "%#LualineFilename#"
-      local hl_reset = "%#LualineNormal#"
+      local hl_project = "%#StatuslineProjectRoot#"
+      local hl_middle = "%#StatuslinePath#"
+      local hl_file = "%#StatuslineFilename#"
+      local hl_reset = "%#StatuslineNormal#"
 
       local function shorten_project_name(name)
         local words = {}
@@ -202,208 +202,147 @@ return {
     -- })
 
     ---------------------------------------------------------------------------
-    -- Macro recording component
-    ---------------------------------------------------------------------------
-    local function macro_recording()
-      local reg = vim.fn.reg_recording()
-      if reg == "" then
-        return ""
-      end
-      return " @" .. reg
-    end
-
-    ---------------------------------------------------------------------------
-    -- lualine setup
-    ---------------------------------------------------------------------------
-    local config = {
-      options = {
-        component_separators = "",
-        section_separators = "",
-        globalstatus = true,
-        -- lualine's default events without CursorMoved/CursorMovedI, which rebuilt the whole statusline on every j
-        -- (about 1.8 ms; docs/profiling-scrolling.md). What follows the cursor is drawn by Neovim instead: the
-        -- location and progress below are statusline expressions, and searchcount refreshes on its own.
-        refresh = {
-          events = {
-            "WinEnter",
-            "BufEnter",
-            "BufWritePost",
-            "SessionLoadPost",
-            "FileChangedShellPost",
-            "VimResized",
-            "Filetype",
-            "ModeChanged",
-            "DiagnosticChanged",
-            -- the macro recording and progress segments
-            "RecordingEnter",
-            "RecordingLeave",
-            "Progress",
-          },
-        },
-        theme = {
-          normal = { c = { fg = colors.fg } },
-          inactive = { c = { fg = colors.fg } },
-        },
-      },
-      sections = {
-        lualine_a = {},
-        lualine_b = {},
-        lualine_y = {},
-        lualine_z = {},
-        lualine_c = {},
-        lualine_x = {},
-      },
-      inactive_sections = {
-        lualine_a = {},
-        lualine_b = {},
-        lualine_y = {},
-        lualine_z = {},
-        lualine_c = {},
-        lualine_x = {},
-      },
-    }
-
-    local function ins_left(component) table.insert(config.sections.lualine_c, component) end
-    local function ins_right(component) table.insert(config.sections.lualine_x, component) end
-
-    ---------------------------------------------------------------------------
     -- LEFT side
     ---------------------------------------------------------------------------
-    ins_left({
-      function() return "" end,
-      color = function()
-        local mode_color = {
-          n = colors.fg,
-          i = colors.green,
-          v = colors.blue,
-          V = colors.blue,
-          c = colors.magenta,
-          s = colors.orange,
-          S = colors.orange,
-          R = colors.violet,
-          t = colors.red,
-        }
-        return { fg = mode_color[vim.fn.mode()] or colors.red }
-      end,
-      padding = { right = 1 },
-    })
-
-    ins_left({
-      function() return filepath_component(0.4) end,
-      cond = conditions.buffer_not_empty,
-    })
-
-    -- lualine's location and progress, as expressions Neovim evaluates whenever it draws the statusline
-    ins_left({ function() return "%3l:%-2{charcol('.')}" end })
-    ins_left({
-      function() return "%{line('.') == 1 ? 'Top' : line('.') == line('$') ? 'Bot' : printf('%2d%%', line('.') * 100 / line('$'))}" end,
-      color = { fg = colors.fg, gui = "bold" },
-    })
-    -- diagnostics
-    ins_left({
-      "diagnostics",
-      sources = { "nvim_diagnostic" },
-      symbols = { error = " ", warn = " ", info = " " },
-      diagnostics_color = {
-        error = { fg = colors.red },
-        warn = { fg = colors.yellow },
-        info = { fg = colors.cyan },
+    local left = {
+      {
+        function() return "" end,
+        color = sl.mode_color({
+          n = { fg = colors.fg },
+          i = { fg = colors.green },
+          v = { fg = colors.blue },
+          V = { fg = colors.blue },
+          c = { fg = colors.magenta },
+          s = { fg = colors.orange },
+          S = { fg = colors.orange },
+          R = { fg = colors.violet },
+          t = { fg = colors.red },
+        }, { fg = colors.red }),
+        padding = { right = 1 },
       },
-    })
-    ins_left({ function() return "%=" end })
-
-    ins_left({
-      function()
-        local buf = shown_buf()
-        return buf and (#facts.get(buf).servers > 0 and list("servers") or "No Active LSP") or ""
-      end,
-      icon = "󱍔 LSP:",
-      color = { fg = colors.yellow, gui = "bold" },
-    })
-
-    -- The formatters and linters that will run
-    ins_left({
-      function() return list("formatters") end,
-      icon = "󰁨 ",
-      color = { fg = colors.magenta, gui = "bold" },
-    })
-
-    ins_left({
-      function() return list("linters") end,
-      icon = " ",
-      color = { fg = colors.orange, gui = "bold" },
-    })
-
-    -- Tools: a wrench with the number of missing tools and "?" for an unanswered project mise config, hidden
-    -- otherwise (lualine leaves out the icon of an empty component); click for :Tools
-    ins_left({
-      function() return require("tools.ux").status() end,
-      icon = "󰖷",
-      color = { fg = colors.orange, gui = "bold" },
-      on_click = function() vim.cmd("Tools") end,
-    })
+      {
+        function() return filepath_component(0.4) end,
+        cond = conditions.buffer_not_empty,
+      },
+      -- the location and progress are expressions Neovim evaluates whenever it draws the statusline
+      "%3l:%-2{charcol('.')}",
+      {
+        "%{line('.') == 1 ? 'Top' : line('.') == line('$') ? 'Bot' : printf('%2d%%', line('.') * 100 / line('$'))}",
+        color = { fg = colors.fg, bold = true },
+      },
+      {
+        "diagnostics",
+        symbols = { error = " ", warn = " ", info = " " },
+        diagnostics_color = {
+          error = { fg = colors.red },
+          warn = { fg = colors.yellow },
+          info = { fg = colors.cyan },
+        },
+      },
+      "%=",
+      {
+        function()
+          local buf = shown_buf()
+          return buf and (#facts.get(buf).servers > 0 and list("servers") or "No Active LSP") or ""
+        end,
+        icon = "󱍔 LSP:",
+        color = { fg = colors.yellow, bold = true },
+      },
+      -- The formatters and linters that will run
+      {
+        function() return list("formatters") end,
+        icon = "󰁨 ",
+        color = { fg = colors.magenta, bold = true },
+      },
+      {
+        function() return list("linters") end,
+        icon = " ",
+        color = { fg = colors.orange, bold = true },
+      },
+      -- Tools: a wrench with the number of missing tools and "?" for an unanswered project mise config, hidden
+      -- otherwise (an empty component draws no icon); click for :Tools
+      {
+        function() return require("tools.ux").status() end,
+        icon = "󰖷",
+        color = { fg = colors.orange, bold = true },
+        on_click = function() vim.cmd("Tools") end,
+      },
+    }
 
     ---------------------------------------------------------------------------
     -- RIGHT side
     ---------------------------------------------------------------------------
-    -- Git Branch
-    ins_right({
-      "branch",
-      icon = "",
-      color = { fg = colors.cyan, gui = "bold" },
-      cond = conditions.check_git_workspace,
-    })
-    -- Git Changes, counted by gitsigns: without a source lualine runs its own git diff on every BufEnter and write
-    ins_right({
-      "diff",
-      source = function()
-        local status = vim.b.gitsigns_status_dict
-        if status then
-          return { added = status.added, modified = status.changed, removed = status.removed }
-        end
-      end,
-      symbols = { added = "󰐖 ", modified = "󰦓 ", removed = "󰍵 " },
-      diff_color = {
-        added = { fg = colors.green },
-        modified = { fg = colors.orange },
-        removed = { fg = colors.red },
+    local right = {
+      -- Git Branch, read from HEAD and watched
+      {
+        "branch",
+        icon = "",
+        color = { fg = colors.cyan, bold = true },
+        cond = conditions.check_git_workspace,
       },
-      cond = conditions.hide_in_width,
-    })
-    -- Running progress-messages (LSP work, :checkhealth), e.g. "40%(2)"; % escaped, "%(" opens a statusline group
-    ins_right({
-      function() return (vim.ui.progress_status():gsub("%%", "%%%%")) end,
-      icon = "󰔟",
-      color = { fg = colors.violet },
-    })
-    -- Search count, e.g. "[2/3]": ui2 draws it on the cmdline, which is hidden since 'cmdheight' is 0
-    -- the count follows the cursor, so refresh on moves while a search is highlighted
-    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
-      callback = function()
-        if vim.v.hlsearch == 1 then
-          lualine.refresh({ place = { "statusline" } })
-        end
-      end,
-    })
-    ins_right({
-      "searchcount",
-      color = { fg = colors.fg },
-    })
-    -- Macro Status
-    ins_right({
-      macro_recording,
-      color = { fg = colors.yellow, gui = "bold" },
-    })
-    -- Pending keys (e.g. a count), shown here since 'cmdheight' is 0: through config.ui2.showcmd, which leaves out
-    -- keys whose command runs at once, or Neovim's own %S without ui2
-    ins_right({
-      function() return require("config.ui2.showcmd").active and "%{v:lua.require'config.ui2.showcmd'.get()}" or "%S" end,
-      color = { fg = colors.fg },
-    })
+      -- Git Changes, counted by gitsigns (b:gitsigns_status_dict)
+      {
+        "diff",
+        symbols = { added = "󰐖 ", modified = "󰦓 ", removed = "󰍵 " },
+        diff_color = {
+          added = { fg = colors.green },
+          modified = { fg = colors.orange },
+          removed = { fg = colors.red },
+        },
+        cond = conditions.hide_in_width,
+      },
+      -- Running progress-messages (LSP work, :checkhealth), e.g. "40%(2)"
+      {
+        "progress_status",
+        icon = "󰔟",
+        color = { fg = colors.violet },
+      },
+      -- Search count, e.g. "[2/3]": ui2 draws it on the cmdline, which is hidden since 'cmdheight' is 0. It follows
+      -- the cursor while a search is highlighted, without rebuilding the line
+      {
+        "searchcount",
+        color = { fg = colors.fg },
+      },
+      -- Macro Status
+      {
+        "recording",
+        icon = "",
+        color = { fg = colors.yellow, bold = true },
+      },
+      -- Pending keys (e.g. a count), shown here since 'cmdheight' is 0: through config.ui2.showcmd, which leaves out
+      -- keys whose command runs at once, or Neovim's own %S without ui2
+      {
+        function() return require("config.ui2.showcmd").active and "%{v:lua.require'config.ui2.showcmd'.get()}" or "%S" end,
+        color = { fg = colors.fg },
+      },
+    }
 
     ---------------------------------------------------------------------------
     -- go live
     ---------------------------------------------------------------------------
-    lualine.setup(config)
+    require("neoblocks").setup({
+      statusline = {
+        color = { fg = colors.fg },
+        left = left,
+        right = right,
+        -- Rebuilt on these and on what the built-ins need (DiagnosticChanged, Progress, the recording events, HEAD),
+        -- never on a cursor move: what follows the cursor is drawn by Neovim. The server and tool lists redraw on
+        -- FactsChanged above. There is no timer, so the path follows a rename (BufFilePost), a :cd (DirChanged) and
+        -- its width budget a window resize (WinResized) on their events
+        events = {
+          "WinEnter",
+          "BufEnter",
+          "BufFilePost",
+          "DirChanged",
+          "BufWritePost",
+          "SessionLoadPost",
+          "FileChangedShellPost",
+          "VimResized",
+          "WinResized",
+          "FileType",
+          "ModeChanged",
+        },
+      },
+    })
   end,
 }

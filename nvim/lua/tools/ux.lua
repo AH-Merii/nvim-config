@@ -603,7 +603,8 @@ end
 --------------------------------------------------------------------------------
 
 --- Statusline text: empty when every tool buf runs is found and its project config is answered; otherwise
---- the number of missing tools and "?" for an unanswered project config, e.g. "2" or "?" (lualine adds the icon).
+--- the number of missing tools and "?" for an unanswered project config, e.g. "2" or "?" (the statusline adds the
+--- icon).
 --- Only for a file buffer, and only with a UI, where the prompts that resolve the missing tools can run.
 ---@param buf? integer default current
 ---@return string

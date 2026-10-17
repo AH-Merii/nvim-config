@@ -10,8 +10,9 @@ through [mise](https://mise.jdx.dev). It supports Go, Rust, Python, Lua, TypeScr
   from.
 - **Completion and LSP** with blink.cmp; formatting with conform.nvim on save, linting with nvim-lint.
 - **Neovim's own UI for messages and the command line** (ui2), in place of noice.nvim.
-- **snacks.nvim** for pickers, notifications, indent guides and smooth scrolling; lualine, which-key, gitsigns,
-  diffview, trouble, flash and treesitter.
+- **snacks.nvim** for pickers, notifications, indent guides and smooth scrolling; the statusline from
+  [neoblocks.nvim](https://github.com/AH-Merii/neoblocks.nvim); which-key, gitsigns, diffview, trouble, flash and
+  treesitter.
 
 ## Requirements
 

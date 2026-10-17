@@ -96,14 +96,18 @@ nvim/
 - A variant (a dotted filetype such as `yaml.github-actions`) gets its base's servers and linters plus its own, and its
   own formatters if it names any, else its base's. One with `match` rules needs an `example` path
 
-**The statusline** (`plugins/lualine.lua`, step 4 in `docs/rearchitecture-decisions.md`)
+**The statusline** (`plugins/statusline.lua`, steps 4 and 4b in `docs/rearchitecture-decisions.md`)
 - `require("ui.facts").get(buf)` holds a buffer's servers running, the formatters and linters that will run, the
   missing tools (and whether the project's mise config waits for an answer), its tools root and its git checkout. What
   will run is `format.plan(buf).run` and `linting.plan(buf).run`; the rest is built from `lang.of`, the resolver's
   results and the attached clients. It is cached per buffer, and `User FactsChanged` fires when it changes
-- lualine's spec only draws it: the LSP, formatter and linter lists, the tools indicator (`tools.ux.status`), the
-  branch's condition and the path's project come from the facts. A segment that needs something new about a buffer
-  gets it added to the facts, not computed in the spec. `:Status` reads its LSP and formatter lines there too
+- The spec, neoblocks.nvim's statusline, only draws it: the LSP, formatter and linter lists, the tools indicator
+  (`tools.ux.status`), the branch's condition and the path's project come from the facts. A segment that needs
+  something new about a buffer gets it added to the facts, not computed in the spec. `:Status` reads its LSP and
+  formatter lines there too
+- The line is rebuilt on events only (the spec's `events`, what neoblocks' built-ins need, and `User FactsChanged`),
+  never on a cursor move: the location and progress are statusline expressions Neovim evaluates on each draw. Only
+  the search count is recounted on a move, while a search is highlighted
 
 ### Adding a language or a tool
 

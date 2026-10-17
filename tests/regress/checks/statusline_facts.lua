@@ -49,11 +49,13 @@ vim.cmd.close()
 wait_until(function() return statusline():find("a.py", 1, true) ~= nil end, 1000)
 
 -- A change: ruff detaches, so its server goes and ruff's linting, which it covered, comes back. Only FactsChanged may
--- redraw the line: a timer that redraws it every second (lualine had one) is stopped, and the detach's
--- DiagnosticChanged and the servers' progress messages are ignored
+-- redraw the line: every repeating timer is paused until the line follows (a statusline could redraw on one, as
+-- lualine did every second), and the detach's DiagnosticChanged and the servers' progress messages are ignored
+local paused = {}
 vim.uv.walk(function(handle)
-  if handle:get_type() == "timer" and handle:get_repeat() == 1000 then
+  if handle:get_type() == "timer" and handle:is_active() and handle:get_repeat() > 0 then
     handle:stop()
+    table.insert(paused, handle)
   end
 end)
 vim.o.eventignore = "DiagnosticChanged,Progress"
@@ -64,6 +66,9 @@ check("the facts lose the detached server", not vim.list_contains(f.servers, "ru
 check("the line follows on FactsChanged", wait_until(function() return shows(facts.get(buf)) end, 2000),
   vim.inspect({ want = drawn(facts.get(buf)), line = statusline() }))
 vim.o.eventignore = ""
+for _, timer in ipairs(paused) do
+  timer:again()
+end
 
 -- Missing tools: the Dockerfile's are not in the suite
 vim.fn.mkdir(FIX .. "/dock", "p")

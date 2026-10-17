@@ -13,7 +13,7 @@ These files get a **dotted sub-filetype**, `<base>.<part>`, declared as a varian
 | nvim-lint, conform | Their own key for the variant, with the whole list (`lang.views()`) | Their rules for dotted filetypes never decide anything |
 | LSP servers | The variant in each server's `filetypes` | The base's servers keep attaching without any edit |
 | treesitter | The first part | Nothing to do |
-| install offer, `:Tools`, lualine, `:Status` | `lang.of(ft)` | Nothing to do |
+| install offer, `:Tools`, the statusline, `:Status` | `lang.of(ft)` | Nothing to do |
 
 ## Steps
 

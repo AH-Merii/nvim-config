@@ -144,8 +144,8 @@ function M.setup()
   local group = vim.api.nvim_create_augroup("ui.facts", { clear = true })
   local au = vim.api.nvim_create_autocmd
   au({ "FileType", "BufFilePost", "LspAttach" }, { group = group, callback = function(ev) touch(ev.buf) end })
-  -- A checkout made since (git init) shows on the next visit, as lualine's branch looks again then. Only the checkout
-  -- is looked up again: the whole facts cost about 15 times as much, mostly tools.root
+  -- A checkout made since (git init) shows on the next visit, as the statusline's branch looks again then. Only the
+  -- checkout is looked up again: the whole facts cost about 15 times as much, mostly tools.root
   au("BufEnter", {
     group = group,
     callback = function(ev)

@@ -1,6 +1,6 @@
 -- noice-like message routing on top of ui2 (:h ui2). Messages become snacks.notifier toasts (errors stay
 -- until dismissed, except routine search and navigation ones), output taller than a toast opens in a split
--- below (noice's long_message_to_split), and progress (lualine shows it) and the kinds noice never showed
+-- below (noice's long_message_to_split), and progress (the statusline shows it) and the kinds noice never showed
 -- (undo, quickfix, ...) are dropped.
 -- Dialogs, search, block mode and the pager stay with ui2.
 --
@@ -326,7 +326,8 @@ local function route(kind, content, replace_last, append, id, trigger)
     end
     return false
   end
-  -- Quiet kinds are dropped. Progress shows in lualine (vim.ui.progress_status()); only `:w`'s "written" is a message.
+  -- Quiet kinds are dropped. Progress shows in the statusline (vim.ui.progress_status()); only `:w`'s "written" is a
+  -- message.
   if quiet[kind] or kind == "progress" and not (type(id) == "string" and id:match("^nvim%.bufwrite")) then
     return true
   end

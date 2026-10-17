@@ -17,7 +17,7 @@ Work down the table. For each row, either make the edit or note why it does not 
 | 7 | `nvim/lua/core/lsp_servers.lua`, `roots` | nvim-lspconfig's `root_dir` runs the tool from PATH or checks its version | Custom root |
 | 8 | `definitions` in `nvim/lua/format/conform.lua` or `nvim/lua/linting/nvim_lint.lua` | Only a formatter's extra args, or a definition conform or nvim-lint lacks | Formatter, Linter |
 
-You never edit these: `:Tools`, the install prompts, lualine, `:Status`, `nvim/lua/plugins/lspconfig.lua`, conform's `formatters_by_ft`, nvim-lint's `linters_by_ft`, the server list. They are built from, or ask, `nvim/lua/lang/` (`lang.views()`, `lang.of()`).
+You never edit these: `:Tools`, the install prompts, the statusline, `:Status`, `nvim/lua/plugins/lspconfig.lua`, conform's `formatters_by_ft`, nvim-lint's `linters_by_ft`, the server list. They are built from, or ask, `nvim/lua/lang/` (`lang.views()`, `lang.of()`).
 
 ## A language file
 

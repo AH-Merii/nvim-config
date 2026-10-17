@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @desc     in the TUI ui2 behaves like noice did: ':' in a bordered popup with lualine kept on the last row, '/' over the last row without moving the layout, :echo and errors as titled toasts (errors stay, search and navigation errors time out), undo messages silent, long (also wrapped) output in a split that is not entered (a typed command's output measured as a whole, other messages one at a time), g< opens the pager, and ui2's own cmdline window comes back afterwards
+# @desc     in the TUI ui2 behaves like noice did: ':' in a bordered popup with the statusline kept on the last row, '/' over the last row without moving the layout, :echo and errors as titled toasts (errors stay, search and navigation errors time out), undo messages silent, long (also wrapped) output in a split that is not entered (a typed command's output measured as a whole, other messages one at a time), g< opens the pager, and ui2's own cmdline window comes back afterwards
 # @areas    ui
 # @budget   60
 # @args     app.conf
@@ -136,7 +136,7 @@ if ! is "hooked()" true; then
 fi
 pass "config.ui2 hooks ui2's cmdline"
 
-# ':' in noice's command palette: a bordered popup titled Cmdline, the last row stays lualine, cmdheight stays 0
+# ':' in noice's command palette: a bordered popup titled Cmdline, the last row stays the statusline, cmdheight stays 0
 reset
 send :
 if wait_for 3000 is "cmd()" "editor|Cmdline|0"; then
