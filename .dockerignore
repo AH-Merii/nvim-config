@@ -1,0 +1,12 @@
+# The build context of the test image (tests/image/Dockerfile): the config and the tests only. The suite's local
+# sandbox (several GB), results, .git and any worktrees under .claude/ stay out.
+*
+!nvim
+!tests
+tests/regress/data
+tests/regress/run
+tests/regress/last
+tests/regress/state
+tests/regress/bin
+tests/regress/cache-seed
+tests/regress/shared-cache

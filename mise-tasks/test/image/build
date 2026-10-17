@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#MISE description="Build the test image (tests/image/Dockerfile): pinned nightly, the suite's tools, plugins, parsers"
+# $NVR_ENGINE picks podman or docker (default: podman when installed); $NVR_IMAGE names the image. Extra args go to
+# the build. GITHUB_TOKEN, when set, reaches the tools install as a build secret, never a layer.
+set -euo pipefail
+engine=${NVR_ENGINE:-$(command -v podman >/dev/null && echo podman || echo docker)}
+args=(build -f tests/image/Dockerfile -t "${NVR_IMAGE:-nvim-config-test}")
+# capped like the suite's local runs; docker's BuildKit has no per-build memory cap
+[ "$engine" = podman ] && args+=(--memory 3g --memory-swap 3584m)
+[ -n "${GITHUB_TOKEN:-}" ] && args+=(--secret "id=github_token,env=GITHUB_TOKEN")
+exec "$engine" "${args[@]}" "$@" .

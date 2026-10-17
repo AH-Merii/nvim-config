@@ -79,6 +79,27 @@ add a line when a new config file appears.
 - No `sleep N` waits, no sleep-then-check loops, no long foreground calls.
 - Read results with `tail`/`grep` on the log, not by loading it whole.
 
+### In the test image
+
+`tests/image/Dockerfile` builds an image with a pinned nightly and the suite's tools, plugins and parsers,
+installed by `suite.sh --refresh-only` at build time; CI (`.github/workflows/test.yml`) runs both tiers in it.
+
+```sh
+mise run test:image:build          # podman (or docker, NVR_ENGINE=docker); cached, a config change rebuilds plugins only
+mise run test:image                # builds, then tests/unit/run.sh and the full suite
+mise run test:image suite lsp      # suite.sh args; `unit [args]` for the unit tier, or any command (bash)
+```
+
+- The checkout is mounted read-only and copied into the container beside the image's `data/`; the container is
+  capped at 2 GB. Failed checks' output lands in `last/image/` (`$NVR_OUT`).
+- `nv.sh` and `tests/unit/run.sh` take the nvim binary from `$NVR_NVIM` (the image sets it), else the user's
+  mise nightly.
+- `--refresh-only` refreshes and runs nothing; `NVR_REFRESH_STEPS` picks the steps (`lazy tools resolve parsers`,
+  the default, in that order).
+- Behaves differently in the container: the hygiene assertions on the live nvim, mise and rustup dirs hold
+  trivially (they don't exist there), `--changed` has no git history (`.git` is not copied), and `cache-seed/` is
+  empty, so Go caches start cold. `gui.sh` stays host-only: it drives the QEMU VM.
+
 ## Layout
 
 | path | what |
