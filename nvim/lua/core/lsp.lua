@@ -71,8 +71,8 @@ key({
   { "<leader>xX", "<cmd>Trouble diagnostics toggle filter.buf=0<cr>", "Buffer Diagnostics (Trouble)", need = "diagnostics" },
   { "<leader>sd", function() Snacks.picker.diagnostics_buffer() end, "Diagnostics (Buffer)", need = "diagnostics", icon = { icon = "", color = "orange" } },
   { "<leader>sS", function() Snacks.picker.lsp_workspace_symbols() end, "Workspace symbols", need = "workspace/symbol", icon = purple("󱔁") },
-  -- Neovim's gr* default is vim.lsp.buf.references; the picker instead
-  { "grr", function() Snacks.picker.lsp_references() end, "References", need = "references", icon = purple("") },
+  -- Neovim's gr* default is vim.lsp.buf.references; the picker instead (D49: no gr{char} where no server can act)
+  { "grr", function() Snacks.picker.lsp_references() end, "References", need = "references", echo = true, icon = purple("") },
 })
 
 -- Neovim's own gr* keys are rows in keys/neovim.lua
