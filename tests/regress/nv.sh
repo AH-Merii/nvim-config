@@ -4,7 +4,8 @@
 # suite's data/). Without NVR_HOME a scratch home is built from $CFG and removed on exit.
 S=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 case "$1" in
-  nightly) BIN=$HOME/.local/share/mise/installs/neovim/nightly/bin/nvim ;;
+  # NVR_NVIM: another build, e.g. the test image's pinned nightly (tests/image/Dockerfile)
+  nightly) BIN=${NVR_NVIM:-$HOME/.local/share/mise/installs/neovim/nightly/bin/nvim} ;;
   *) echo "usage: nv.sh nightly [nvim args...]" >&2; exit 2 ;;
 esac
 shift

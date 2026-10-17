@@ -172,6 +172,7 @@ server silently edits text.
   `origin/main`, and lands as one PR once the full suite passes and review findings are answered.
 - A GitHub release is tagged after each step lands.
 - Each step records its own decisions and deviations in a section of this file.
+- A step merges only after its CI run (.github/workflows/test.yml) is green (D52).
 
 ## Unit tier and tool backend seam (2026-10-17)
 

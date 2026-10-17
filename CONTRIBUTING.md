@@ -282,6 +282,13 @@ resolver runs there on a fake tool backend instead of mise, and LSP code on an i
 `tests/regress/suite.sh` runs the config headless against fixtures, on nightly, without touching your own Neovim
 dirs; `tests/regress/README.md` has the options and how to write a check. Run the whole suite before a branch lands.
 
+### Test image and CI
+
+`mise run test:image` runs both tiers in a container with a pinned nightly and the suite's tools, built from
+`tests/image/Dockerfile`; nothing from your own setup is needed. CI runs the same image on every pull request
+(`.github/workflows/test.yml`), and a pull request merges once its `test` job is green.
+`docs/test-image-decisions.md` has how the image is built, pinned and bumped.
+
 ## Notes
 
 - Diagnostic signs use Nerd Font icons

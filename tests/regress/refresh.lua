@@ -1,6 +1,9 @@
 -- suite.sh --refresh: sync data/ to the config under test. Lazy to the lockfile, the suite's mise and rustup to
 -- every check's @needs (it never uninstalls), parsers to the config's list.
 -- NVR_REFRESH_DRY=1 (suite.sh --refresh-dry-run): only print the tools wanted and which of them do not resolve.
+-- NVR_REFRESH_STEPS picks the steps, in order (default: all four): lazy, tools (the suite's mise and rustup installs),
+-- resolve (every need resolves through the config's resolver), parsers. The test image runs tools alone on a stub
+-- config, so a config change doesn't reinstall them (tests/image/Dockerfile).
 local failed = false
 local dry = vim.env.NVR_REFRESH_DRY == "1"
 local suite = vim.fs.dirname(vim.fs.normalize(debug.getinfo(1, "S").source:sub(2)))
@@ -48,10 +51,8 @@ local function run(cmd, env)
 end
 local function first_line(res) return vim.trim(res.stderr ~= "" and res.stderr or res.stdout):match("[^\n]*$") end
 
--- The suite's tools: every @needs is a catalog binary (lua/tools/catalog.lua). mise tools go into the suite's
--- own global config with `mise use -g` (MISE_* point into data/mise, see lib.sh mise_env), rustup components
--- into data/rustup. Then each need must resolve through the config's own resolver.
-local function tools_sync()
+-- The keep-list: every @needs, plus the binaries they call; nil after a failure.
+local function keep_list()
   local catalog = require("tools.catalog")
   local needs, nfiles = suite_needs()
   local keep = vim.tbl_keys(needs)
@@ -65,6 +66,16 @@ local function tools_sync()
     end
   end
   table.sort(keep)
+  return keep
+end
+
+-- The suite's tools: every @needs is a catalog binary (lua/tools/catalog.lua). mise tools go into the suite's
+-- own global config with `mise use -g` (MISE_* point into data/mise, see lib.sh mise_env), rustup components
+-- into data/rustup. Needs only the catalog, not the rest of the config.
+local function tools_sync()
+  local catalog = require("tools.catalog")
+  local keep = keep_list()
+  if not keep then return end
   local specs, components, system = {}, {}, {}
   for _, name in ipairs(keep) do
     local entry = catalog.tools[name]
@@ -106,8 +117,13 @@ local function tools_sync()
     if res.code ~= 0 then fail("tools: rustup default stable: %s", first_line(res)) end
     vim.env.RUSTUP_HOME = home
   end
+end
 
-  -- every need must now resolve, from the suite's mise or the system, never a shim or a live dir
+-- Every need must now resolve through the config's own resolver, from the suite's mise or the system, never a
+-- shim or a live dir.
+local function tools_resolve()
+  local keep = keep_list()
+  if not keep then return end
   local tools = require("tools")
   tools.refresh()
   local root = vim.fn.getcwd()
@@ -150,8 +166,11 @@ vim.api.nvim_create_autocmd("VimEnter", {
         vim.g.did_very_lazy = true
         vim.api.nvim_exec_autocmds("User", { pattern = "VeryLazy", modeline = false })
       end
-      for _, step in ipairs(dry and { tools_sync } or { lazy_sync, tools_sync, parsers_sync }) do
-        local ok, err = xpcall(step, debug.traceback)
+      local all = { lazy = lazy_sync, tools = tools_sync, resolve = tools_resolve, parsers = parsers_sync }
+      local names = dry and "tools resolve" or vim.env.NVR_REFRESH_STEPS or "lazy tools resolve parsers"
+      for name in names:gmatch("%S+") do
+        local ok, err = true, nil
+        if all[name] then ok, err = xpcall(all[name], debug.traceback) else fail("unknown refresh step %s", name) end
         if not ok then fail("%s", err) end
       end
       say("REFRESH%s %s", dry and " DRY-RUN" or "", failed and "FAIL" or "OK")

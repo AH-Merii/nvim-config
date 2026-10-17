@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# usage: suite.sh [-v] [--refresh] [--refresh-dry-run] [--list] [--selftest] [--area a,b] [--changed <git-range>] [--work <feature>]
+# usage: suite.sh [-v] [--refresh] [--refresh-only] [--refresh-dry-run] [--list] [--selftest] [--area a,b] [--changed <git-range>] [--work <feature>]
 #                 [name-filter]
 # See README.md.
 set -u
@@ -11,10 +11,11 @@ unset WAYLAND_DISPLAY DISPLAY TMUX
 . "$S/lib.sh"
 export CFG
 
-FILTER= AREAS= RANGE= WORK= REFRESH=0 DRY=0 LIST=0 SELFTEST=0 VERBOSE=0
+FILTER= AREAS= RANGE= WORK= REFRESH=0 ONLY=0 DRY=0 LIST=0 SELFTEST=0 VERBOSE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --refresh) REFRESH=1 ;;
+    --refresh-only) REFRESH=1 ONLY=1 ;;
     --refresh-dry-run) REFRESH=1 DRY=1 ;;
     --list) LIST=1 ;;
     --selftest) SELFTEST=1 ;;
@@ -107,7 +108,8 @@ if [ $REFRESH = 1 ]; then
     data=$H/data log=$S/last/refresh-dry-run.log
     mkdir -p "$data"; cp -a --reflink=auto "$S/data/nvim" "$data/nvim"
   else
-    echo "refresh: lazy, tools (the suite's mise and rustup) and parsers in $S/data for $CFG"
+    steps=${NVR_REFRESH_STEPS:-"lazy, tools (the suite's mise and rustup) and parsers"}
+    echo "refresh: $steps in $S/data for $CFG"
   fi
   ( cd "$H" && exec env NVR_HOME="$H" NVR_DATA="$data" NVR_REFRESH_DRY=$DRY NVIM_REGRESS_TAG="$RUNID/refresh/" \
       timeout 1200 setsid "$S/nv.sh" nightly --headless -c "luafile $S/refresh.lua" ) >"$log" 2>&1
@@ -119,6 +121,7 @@ if [ $REFRESH = 1 ]; then
   [ $DRY = 1 ] && exit $rc
   repoint_data
   [ $rc = 0 ] || { echo "refresh failed (exit $rc), see last/refresh.log" >&2; exit 1; }
+  [ $ONLY = 1 ] && exit 0
 fi
 
 refs=$(foreign_refs)

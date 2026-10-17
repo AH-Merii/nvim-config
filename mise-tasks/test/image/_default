@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#MISE description="Run the tests in the test image: unit, suite [suite.sh args], or both (default); builds it first"
+#MISE depends=["test:image:build"]
+# Mounts this checkout read-only and caps the container at 2 GB, like the suite's local runs. Failed checks' output
+# lands in $NVR_OUT (default tests/regress/last/image). CI runs this file with bash, after building the image itself.
+set -euo pipefail
+engine=${NVR_ENGINE:-$(command -v podman >/dev/null && echo podman || echo docker)}
+out=${NVR_OUT:-tests/regress/last/image}
+rm -rf "$out" && mkdir -p "$out" && chmod 0777 "$out"
+args=(run --rm --memory 2g --memory-swap 2560m -v "$PWD:/src:ro" -v "$(cd "$out" && pwd):/out")
+# rootless podman: the container's user (uid 1000) is the caller, so /out stays the caller's
+[ "$engine" = podman ] && args+=("--userns=keep-id:uid=1000,gid=1000")
+exec "$engine" "${args[@]}" "${NVR_IMAGE:-nvim-config-test}" "$@"
