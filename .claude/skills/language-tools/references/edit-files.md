@@ -14,7 +14,7 @@ Work down the table. For each row, either make the edit or note why it does not 
 | 4 | `nvim/lua/lang/<lang>.lua`, `linters` | Each new linter | Linter |
 | 5 | `nvim/lua/lang/<lang>.lua`, `variants` | The tool runs only on some files of a filetype | `sub-filetypes.md` |
 | 6 | `nvim/lua/lang/<lang>.lua`, `parsers` | A new language with a tree-sitter parser | Treesitter |
-| 7 | `nvim/lua/core/lsp_servers.lua`, `roots` | nvim-lspconfig's `root_dir` runs the tool from PATH or checks its version | Custom root |
+| 7 | `nvim/lua/lsp/init.lua`, `roots` | nvim-lspconfig's `root_dir` runs the tool from PATH or checks its version | Custom root |
 | 8 | `definitions` in `nvim/lua/format/conform.lua` or `nvim/lua/linting/nvim_lint.lua` | Only a formatter's extra args, or a definition conform or nvim-lint lacks | Formatter, Linter |
 
 You never edit these: `:Tools`, the install prompts, the statusline, `:Status`, `nvim/lua/plugins/lspconfig.lua`, conform's `formatters_by_ft`, nvim-lint's `linters_by_ft`, the server list. They are built from, or ask, `nvim/lua/lang/` (`lang.views()`, `lang.of()`).
@@ -76,7 +76,7 @@ If the catalog lacks a name, nothing fails. The tool then runs from Neovim's PAT
 
 ## Server
 
-Add the nvim-lspconfig name (not the binary name) under `servers`. Its value is a table of `vim.lsp.Config` fields, merged over nvim-lspconfig's `lsp/<name>.lua` with `vim.lsp.config(name, ...)` (`core/lsp_servers.lua`); `{}` when nvim-lspconfig's config is enough:
+Add the nvim-lspconfig name (not the binary name) under `servers`. Its value is a table of `vim.lsp.Config` fields, merged over nvim-lspconfig's `lsp/<name>.lua` with `vim.lsp.config(name, ...)` (`lsp/init.lua`); `{}` when nvim-lspconfig's config is enough:
 
 ```lua
 -- before
@@ -87,7 +87,7 @@ Add the nvim-lspconfig name (not the binary name) under `servers`. Its value is 
 
 A server is configured in one language only; another language or a variant that also wants it names it without settings (a variant lists it in its `servers` list, see `sub-filetypes.md`).
 
-- A name with no catalog entry, or with no nvim-lspconfig config, warns at startup (`core/lsp_servers.lua`, `setup`), and `checks/startup.lua` fails on that warning. `tests/unit/lang_test.lua` fails on the first case too.
+- A name with no catalog entry, or with no nvim-lspconfig config, warns at startup (`lsp/init.lua`, `setup`), and `checks/startup.lua` fails on that warning. `tests/unit/lang_test.lua` fails on the first case too.
 - A catalog server no language names fails `tests/unit/lang_test.lua` ("catalog server ... is named by a language").
 
 Fields you may need:
@@ -101,9 +101,9 @@ Do not set `cmd` (`wiring()` replaces it with the resolved binary plus the catal
 
 ## Custom root
 
-Add a custom root only when nvim-lspconfig's `root_dir` runs the tool or a version check from PATH. tsc's `root_dir` runs `tsc --version`, so `roots.tsc` in `nvim/lua/core/lsp_servers.lua` replaces it, and the version check moved to the catalog's `min`.
+Add a custom root only when nvim-lspconfig's `root_dir` runs the tool or a version check from PATH. tsc's `root_dir` runs `tsc --version`, so `roots.tsc` in `nvim/lua/lsp/init.lua` replaces it, and the version check moved to the catalog's `min`.
 
-A `root_dir` that runs the language's toolchain (`go env`, `cargo metadata`) already runs with the tool's PATH (the `root_dir` that `wiring()` returns in `core/lsp_servers.lua`), so it needs no root entry.
+A `root_dir` that runs the language's toolchain (`go env`, `cargo metadata`) already runs with the tool's PATH (the `root_dir` that `wiring()` returns in `lsp/init.lua`), so it needs no root entry.
 
 ## Formatter
 
@@ -175,4 +175,4 @@ Neovim would install the parser on first use anyway. The list matters for the su
 
 ## Areas
 
-`tests/regress/areas.map` already maps `lua/lang/*`, `lua/tools/*` and `lua/core/lsp_servers.lua`. Add a line only for a new config file outside those globs. An unmapped file makes `--changed` run every area.
+`tests/regress/areas.map` already maps `lua/lang/*`, `lua/tools/*` and `lua/lsp/init.lua`. Add a line only for a new config file outside those globs. An unmapped file makes `--changed` run every area.

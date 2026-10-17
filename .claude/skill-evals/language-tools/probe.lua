@@ -11,7 +11,7 @@
 require("lazy").load({ plugins = { "conform.nvim", "nvim-lint", "nvim-lspconfig" } })
 local lang, catalog = require("lang"), require("tools.catalog")
 local conform, lint = require("conform"), require("lint")
-local enabled = require("core.lsp_servers").servers
+local enabled = require("lsp").servers
 local function out(...) io.stdout:write(table.concat({ ... }, "\t") .. "\n") end
 local function keys(t)
   local k = vim.tbl_keys(t or {})

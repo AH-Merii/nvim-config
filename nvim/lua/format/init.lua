@@ -2,7 +2,7 @@
 -- language names its formatters (lua/lang/), the resolver finds their binaries (lua/tools/), and conform runs them,
 -- through format/conform.lua, the only file that knows the plugin. Where none runs, an attached server formats.
 --
--- Requiring this module loads no plugin: core/lsp.lua requires it at startup, and its key gates read M.has.
+-- Requiring this module loads no plugin: lsp/buffer.lua requires it at startup, and its key gates read M.has.
 
 local tools = require("tools")
 

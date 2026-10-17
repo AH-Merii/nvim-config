@@ -3,8 +3,8 @@
 init.lua                          startup tools
 lazy-lock.json                    startup installer lsp format lint treesitter git completion which-key ui editing tools
 lua/core/lazy.lua                 startup installer
-lua/core/lsp.lua                  lsp keys which-key
-lua/core/lsp_servers.lua          lsp tools
+lua/lsp/buffer.lua                lsp keys which-key
+lua/lsp/init.lua                  lsp tools
 lua/lang/*                        lsp tools format lint treesitter editing
 after/ftplugin/*                  lsp format editing
 lua/tools/*                       tools lsp format lint

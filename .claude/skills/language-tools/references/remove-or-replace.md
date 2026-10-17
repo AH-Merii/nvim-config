@@ -19,7 +19,7 @@ grep -rn -i "<binary>\|<server name>\|<formatter name>\|<linter name>" nvim/lua 
 Then remove, and tick off each item:
 
 1. The catalog entry in `nvim/lua/tools/catalog.lua`, unless another entry lists it in `requires`. Example: shellcheck stays, because bash-language-server requires it.
-2. The server under `servers` in its language file (`nvim/lua/lang/<lang>.lua`), with its settings, any variant's `servers` list naming it, and any `roots.<name>` in `nvim/lua/core/lsp_servers.lua`.
+2. The server under `servers` in its language file (`nvim/lua/lang/<lang>.lua`), with its settings, any variant's `servers` list naming it, and any `roots.<name>` in `nvim/lua/lsp/init.lua`.
 3. The formatter in the language's `formatters` (and a variant's), and any `definitions.<name>` in `nvim/lua/format/conform.lua`. A filetype left with no formatter falls back to LSP formatting.
 4. The linter in the language's `linters` (and a variant's), plus any `keep_cwd` entry and `definitions.<name>` in `nvim/lua/linting/nvim_lint.lua`.
 5. A variant that only existed for this tool: its entry under `variants`, and its cases in `checks/tools_subfiletypes.lua`.
