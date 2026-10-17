@@ -3,6 +3,7 @@
 init.lua                          startup tools
 lazy-lock.json                    startup installer lsp format lint treesitter git completion which-key ui editing tools
 lua/core/lazy.lua                 startup installer
+lua/features/init.lua             startup installer
 lua/lsp/buffer.lua                lsp keys which-key
 lua/lsp/init.lua                  lsp tools
 lua/lang/*                        lsp tools format lint treesitter editing
@@ -10,15 +11,11 @@ after/ftplugin/*                  lsp format editing
 lua/tools/*                       tools lsp format lint
 lua/tools/ux.lua                  ui
 lua/ui/*                          ui tools lint
-lua/plugins/lspconfig.lua         lsp
 lua/format/*                      format keys
 lua/linting/*                     lint keys ui
-lua/plugins/conform.lua           format
-lua/plugins/nvim-lint.lua         lint keys
 lua/plugins/nvim-treesitter.lua   treesitter keys which-key
 lua/plugins/git.lua               git keys which-key
 lua/plugins/blink.lua             completion
-lua/plugins/which-key.lua         which-key keys
 lua/keys/*                        keys which-key lsp git lint format treesitter
 lua/textobjects/*                 treesitter keys which-key
 lua/plugins/auto-pairs-tags-comments.lua editing
