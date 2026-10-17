@@ -16,6 +16,10 @@
 ---@field linters? table<string, lang.Linter> nvim-lint names
 ---@field variants? table<string, lang.Variant> dotted filetype -> what it adds to its base, the first part
 ---@field options? table<string, any> buffer options set on FileType
+---@field keys? lang.Keys buffer-local key rows (keys.language), e.g. labels for the runtime ftplugin's maps
+
+---@class lang.Keys: keys.Row[]
+---@field filetypes? string[] where they apply instead of the language's filetypes; a dotted filetype gets its parts'
 
 ---@class lang.Server: vim.lsp.Config
 ---@field filetypes? string[] where it attaches instead of the language's filetypes; their variants get it too
@@ -53,6 +57,7 @@
 ---@field parsers string[]
 ---@field covered_by table<string, string> linter -> the server that covers it
 ---@field variants table<string, { lang: string, base: string, about: string, example?: string }>
+---@field keys table<string, keys.Row[]> filetype -> its language's key rows, for keys.language
 
 ---@class lang.Registry
 ---@field of fun(ft: string): lang.Answer?
@@ -123,7 +128,7 @@ function M._from(specs, problems)
   local owner = {} ---@type table<string, string> filetype -> language
   local raw = {} ---@type table<string, table> filetype -> its answer before finish
   local configs = {} ---@type table<string, { lang: string, config: lang.Server }>
-  local views = { conform = {}, lint = {}, lsp = {}, filetypes = { filename = {}, pattern = {} }, parsers = {}, covered_by = {}, variants = {} } ---@type lang.Views
+  local views = { conform = {}, lint = {}, lsp = {}, filetypes = { filename = {}, pattern = {} }, parsers = {}, covered_by = {}, variants = {}, keys = {} } ---@type lang.Views
 
   --- The answer being built for ft, or nil when another language declared ft first.
   ---@param lang string
@@ -187,6 +192,12 @@ function M._from(specs, problems)
       end
     end
     covering(spec.linters or {}, lang)
+    local rows = spec.keys or {}
+    for _, ft in ipairs(rows.filetypes or (#rows > 0 and spec.filetypes) or {}) do
+      if entry(lang, ft) then
+        views.keys[ft] = { unpack(rows) }
+      end
+    end
     for _, parser in ipairs(spec.parsers or {}) do
       add(views.parsers, parser)
     end

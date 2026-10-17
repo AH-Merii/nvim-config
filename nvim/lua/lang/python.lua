@@ -20,6 +20,8 @@ local function run(argv, cwd)
   vim.fn.jobstart(argv, { term = true, cwd = cwd })
 end
 
+local NXO = { "n", "x", "o" }
+
 ---@type lang.Spec
 return {
   filetypes = { "python" },
@@ -93,4 +95,16 @@ return {
   },
   formatters = { "ruff_fix", "ruff_format", "ruff_organize_imports" },
   linters = { ruff = { covered_by = "ruff" } },
+  -- Labels for the runtime ftplugin's motions, which it maps without a desc, so the popup would show their rhs
+  keys = {
+    { "]]", label = "Next top-level def/class", mode = NXO },
+    { "[[", label = "Previous top-level def/class", mode = NXO },
+    { "][", label = "Next top-level block end", mode = NXO },
+    { "[]", label = "Previous top-level block end", mode = NXO },
+    { "]m", label = "Next def/class line", mode = NXO },
+    { "[m", label = "Previous def/class line", mode = NXO },
+    { "]M", label = "Next def/class end", mode = NXO },
+    { "[M", label = "Previous def/class end", mode = NXO },
+    filetypes = { "python" },
+  },
 }
