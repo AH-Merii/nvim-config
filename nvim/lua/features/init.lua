@@ -9,7 +9,7 @@
 --   }
 --
 -- setup() runs before any plugin loads, so what needs a plugin (a Snacks toggle, gitsigns' own table) goes in that
--- plugin's spec, or in a VeryLazy callback the feature makes. The adapters and ui modules bring the plugins they
+-- plugin's spec, or in a callback it gives M.at_very_lazy. The adapters and ui modules bring the plugins they
 -- wrap the same way, as a `plugins` list; their setup is their own and the plugin's config calls it.
 local M = {}
 
@@ -18,7 +18,7 @@ local M = {}
 M.adapters = { "ui.theme", "ui.icons", "ui.snacks", "ui.statusline", "lsp", "format.conform", "linting.nvim_lint", "keys.which_key" }
 
 -- The features, in the order their setup() runs.
-M.features = { "editing", "search", "git", "completion", "diagnostics", "treesitter" }
+M.features = { "editing", "search", "git", "completion", "diagnostics", "treesitter", "lsp_status" }
 
 --- Every module's plugins, adapters first, as one list of lazy.nvim specs (core/lazy.lua).
 ---@return LazySpec[]
@@ -41,6 +41,38 @@ function M.setup()
       feature.setup()
     end
   end
+end
+
+local later = {} ---@type function[]?
+
+---@param fn function
+local function at_very_lazy(fn)
+  vim.api.nvim_create_autocmd("User", {
+    group = vim.api.nvim_create_augroup("features.very_lazy", { clear = false }),
+    pattern = "VeryLazy",
+    once = true,
+    callback = function() fn() end,
+  })
+end
+
+--- Runs fn at VeryLazy, after the plugins that load then (snacks' toggles need snacks). Listeners run in the order
+--- they were made (:h autocmd-define), and lazy makes its VeryLazy listener in its setup
+--- (lazy/core/handler/event.lua:68), after setup() above has run, so fn's listener is made by M.after_lazy().
+---@param fn function
+function M.at_very_lazy(fn)
+  if later then
+    table.insert(later, fn)
+  else
+    at_very_lazy(fn)
+  end
+end
+
+--- Makes the VeryLazy listeners at_very_lazy was given, in order; init.lua calls it once lazy is set up.
+function M.after_lazy()
+  for _, fn in ipairs(later or {}) do
+    at_very_lazy(fn)
+  end
+  later = nil
 end
 
 return M

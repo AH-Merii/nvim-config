@@ -10,12 +10,9 @@ require("keys.neovim")
 require("lsp.buffer")
 require("config.keymaps")
 require("config.autocmds").setup()
+-- Each feature's rows, needs, autocmds and options (lua/features/)
+require("features").setup()
 
 require("core.lazy")
-
--- Late-load overrides after plugins are ready
-vim.api.nvim_create_autocmd("User", {
-  pattern = "VeryLazy",
-  once = true,
-  callback = function() require("config.helpers") end,
-})
+-- The features' VeryLazy callbacks, after lazy's own VeryLazy listener
+require("features").after_lazy()
