@@ -407,8 +407,8 @@ project-root cache filled by a `git rev-parse` process per folder (`:71-90`), an
 (`config/helpers.lua:291`), and the tools indicator kept its own per-buffer table (`tools/ux.lua:18,626-660`).
 
 **Built.** `nvim/lua/ui/facts.lua`, a module whose interface is `facts.get(buf)` (a `ui.Facts`: `root`, `repo`,
-`servers`, `formatters`, `linters`, `missing`, `unanswered`), `facts.linting(buf)`, `facts.event` (`"FactsChanged"`)
-and `facts.setup(opts)`. `plugins/lualine.lua` is now an adapter that draws the facts. The indicator
+`servers`, `formatters`, `linters`, `missing`, `unanswered`), `facts.event` (`"FactsChanged"`) and
+`facts.setup(opts)`. `plugins/lualine.lua` is now an adapter that draws the facts. The indicator
 (`tools.ux.status`) and `:Status` read them too.
 
 **Decisions.**
@@ -420,9 +420,10 @@ and `facts.setup(opts)`. `plugins/lualine.lua` is now an adapter that draws the 
   (`plugins/conform.lua:36-39`) and `tools/lint.lua:43-46`. No language's formatter has a `condition` or `require_cwd`
   in conform's definitions (`grep -n 'require_cwd\|condition'` over the 16 formatters in `conform/formatters/`: none), so
   conform's answer was the binary check alone.
-- *What will run is one function,* `plan(buf, found, root, servers)` (`ui/facts.lua:53`). Step 2 exposes
-  `format.plan(buf)` and `lint.plan(buf)`; switching to them replaces its body with
-  `return require("format").plan(buf), require("lint").plan(buf)`.
+- *What will run is one function,* `plan(buf, found, root, servers)` (`ui/facts.lua:53`). Step 2's modules are
+  `format` and `linting` (not `lint`, which would shadow nvim-lint), and their plans are tables whose `run` field is the
+  list of names. Switching to them replaces the function's body with
+  `return require("format").plan(buf).run, require("linting").plan(buf).run`.
 - *Missing tools* are the binaries `catalog.needed(found)` lists (`tools/catalog.lua:155`) that resolved without a
   path. The function moved out of `tools/ux.lua`'s `needed` unchanged, requires included, so the prompts and the facts
   count the same binaries. A tool still resolving counts as neither found nor missing.
@@ -435,18 +436,34 @@ and `facts.setup(opts)`. `plugins/lualine.lua` is now an adapter that draws the 
   Rejected: firing on every invalidation, which redraws the line on each of those events whether anything changed;
   recomputing on every BufEnter, which costs 206-242 µs per buffer switch for nothing (cost below).
 - *The facts wait for what they left pending.* ToolsChanged fires only for a result that differs from the one before a
-  refresh (`tools/init.lua:434-460`). So facts read while a refresh re-resolves the same tools would keep "still
+  refresh (`tools/init.lua:434-462`). So facts read while a refresh re-resolves the same tools would keep "still
   resolving". A computation that finds a tool resolving, or the project scan missing, waits on `tools.resolve_all`
-  and `tools.project` itself, then marks the buffer stale (`:97-105`).
+  and `tools.project` itself, then marks the buffer stale (`:98-106`).
   Rejected: relying on ToolsChanged alone. Main's lualine hid the same gap by recomputing on every BufEnter.
-- *Running servers.* A server is listed when its client is attached, not stopping (`client:is_stopped()`, which
-  `Client:stop` sets before any event, runtime `lua/vim/lsp/client.lua:924,1123-1125`) and not in its LspDetach. The
-  detaching client stays in `attached_buffers` until `_on_detach` ends (`client.lua:1435-1468`), so LspDetach records
-  its id and a read during that event leaves it out.
-- *`linting` is read live, not cached.* nvim-lint fires no event when a run starts or ends. Its list changes in a libuv
-  exit callback (`lint.lua:415-421`), and publishing the diagnostics is a separate step that can come before or after
-  it. No segment draws it today. Once `lint/` (step 2) owns the runs and fires an event, it can become a cached field.
-  Rejected: caching it until DiagnosticChanged, which races with the exit.
+- *ToolsChanged also fires when a project's prompt state changes.* A refresh scans every root it scanned before again,
+  with or without tools. ToolsChanged then fires for a root, with an empty tool list, when its configs, its answer to
+  the project prompt or its trust differ from the last scan (`tools.refresh`, `tools/init.lua:616-647`). Before this,
+  an answer that changes no tool's result ("No, use my global tools" with the same versions), or a new mise config that
+  pins only tools the buffer doesn't run, fired nothing. The indicator's `?` then stayed as it was. Review found it
+  with a probe: after the answer, no ToolsChanged and `facts.unanswered` still true. On main, `tools.ux.status` read
+  `tools.project` on every draw, so the `?` changed with the next lualine rebuild.
+  The listeners of ToolsChanged that act on tools (servers, nvim-lint) filter by its tool list, so an empty list does
+  nothing there. Rejected: reading `unanswered` live on each draw again. The facts then wouldn't hold everything the
+  indicator shows, and a rebuild would ask tools again.
+- *Running servers, defined once.* `core.lsp_servers.running(buf, name?)` (`core/lsp_servers.lua:172`) is the
+  clients attached to a buffer and not stopping (`client:is_stopped()`, which `Client:stop` sets before any event,
+  runtime `lua/vim/lsp/client.lua:924,1123-1125`). It lives in the module that starts and restarts the servers, the
+  lsp module of the target layout. The facts list it, and `tools.lint.covered` (`tools/lint.lua:15`) skips a linter by
+  it, so after `:LspStop ruff` both say ruff's linter runs again. On main, the covered check counted a stopping
+  client. Step 2's `linting` plan should ask it too. The facts also leave out a client in its LspDetach: it stays in
+  `attached_buffers` until `_on_detach` ends (`client.lua:1435-1468`), so LspDetach records its id and a read during
+  that event leaves it out.
+- *The linters running now are not a fact yet.* No segment draws them, and nvim-lint fires no event when a run starts or
+  ends: its list changes in a libuv exit callback (`lint.lua:415-421`), and publishing the diagnostics is a separate
+  step that can come before or after it. Once step 2's `linting` owns the runs and fires an event, they can become a
+  cached fact. Rejected: a live read of nvim-lint's list in the facts (the first build). It had no caller and was the
+  only place the facts knew nvim-lint's shape (review). Also rejected: caching it until DiagnosticChanged, which races
+  with the exit.
 - *The branch name and the diff counts stay outside the facts.* lualine's branch component reads HEAD and watches it,
   and gitsigns already caches the counts in `b:gitsigns_status_dict` (neoblocks decisions 8 and 9 read them the same
   way). The facts hold `repo`, the checkout found with `vim.fs.root(folder, ".git")` (a `.git` file too, as #22 made the
@@ -455,8 +472,8 @@ and `facts.setup(opts)`. `plugins/lualine.lua` is now an adapter that draws the 
   per folder, else the cwd (`plugins/lualine.lua:78` on 30877d7). Now it is `repo`, else the cwd. They differ for a
   path reached through a symlink (git resolves it, `vim.fs.root` walks the path as named) and for a file inside `.git/`
   (git fails there, `vim.fs.root` finds the checkout above).
-- *`unanswered` is a fact.* With it in the compared facts, a ToolsChanged that flips the indicator's `?` redraws the line
-  even when no tool's state changed.
+- *`unanswered` is a fact.* With it in the compared facts, the ToolsChanged that a changed project prompt state fires
+  redraws the line, even when no tool's state changed.
 - *The adapter.* Segments draw `facts.get`. The lists show the current buffer, or the last file buffer while the
   current one isn't a file, as main's cache skipped `buftype ~= ""` (`plugins/lualine.lua:108` on 30877d7). Being per
   buffer fixes main's shared cache: an LspAttach or a write in another buffer overwrote the lists shown for this one
@@ -476,8 +493,10 @@ and `facts.setup(opts)`. `plugins/lualine.lua` is now an adapter that draws the 
 `statusline_cursor`, `statusline_linters` and `tools_indicator` (`git grep -l lualine cf220c8 -- tests/regress/checks`).
 Only `statusline_linters` judged what the facts now hold. It became `checks/ui_facts.lua` (the facts with real tools
 and servers: a found linter runs, a missing one doesn't and its binary is missing, a linter covered by an attached
-server doesn't) and `checks/statusline_facts.lua` (the line draws the facts, and redraws on FactsChanged alone, with
-lualine's 1 s timer stopped and DiagnosticChanged and Progress ignored). `statusline_cursor` (cursor and search count,
+server doesn't, and the formatters are the ones conform's own `list_formatters_to_run` gives, so drift from the plugin
+fails) and `checks/statusline_facts.lua` (the line draws the facts, keeps the file buffer's while a non-file buffer is
+current, and redraws on FactsChanged alone, with lualine's 1 s timer stopped and DiagnosticChanged and Progress
+ignored). `statusline_cursor` (cursor and search count,
 drawn by Neovim's expressions) and `tools_indicator` (the wrench, its count and `?`) stay as they were.
 `statusline_branch`, `statusline_palette` and `statusline_path_percent` are unchanged too.
 
@@ -497,14 +516,21 @@ A rebuild now reads the facts and does no lookups of its own (main ran `vim.fs.r
 each one). Most of the remaining rebuild is lualine itself, so the ≤ 100 µs budget waits for neoblocks.
 `tools.root` is most of a computation. It runs once per change instead of on every event.
 
-**Tests.** `tests/unit/facts_test.lua` (fixture language, fake backend, fake servers; 11 cases): what will run and what
-is missing, a server on attach and detach and its covered linter, a server with two clients listed once, a stopping
-server and one read inside LspDetach, cache identity and fresh reads after ToolsChanged and an attach, one
-FactsChanged per change and none for FileType or BufEnter that change nothing, a tool still resolving, a refresh that
-finds the same tools, a rename, and the checkout (dir, `.git` file, none, `git init` then a visit). 18 sibling wrong
-implementations of `ui/facts.lua` each fail it
-(`~/.cache/nvim-config/rearch/ui-facts/mutants/mutants.py <worktree>`). Two siblings left out pass because their
-bug costs time and nothing a reader can see: recomputing on ToolsChanged for any root, and on every BufEnter. Both
-checks were run against configs with one bug each: an adapter without the FactsChanged listener fails
-`statusline_facts`, facts that run a covered linter fail `ui_facts`, and an indicator count off by one fails
-`statusline_facts` and `tools_indicator`.
+**Tests.** `tests/unit/facts_test.lua` (fixture languages, fake backend, fake servers; 14 cases): what will run and what
+is missing, a new filetype's tools, the project prompt's `?` set by a new config and cleared by an answer that change
+no tool, a buffer that isn't a file following a `:cd`, a server on attach and detach and its covered linter, a server
+with two clients listed once, a stopping server and one read inside LspDetach, a read with no event since serving the
+facts as they were (a client attached with every event ignored stays unlisted) and fresh reads after ToolsChanged and
+an attach, one FactsChanged per change and none for FileType or BufEnter that change nothing, a tool still resolving, a
+refresh that finds the same tools, a rename, and the checkout (dir, `.git` file, none, `git init` then a visit).
+24 sibling wrong implementations of `ui/facts.lua`, of the prompt-state event in `tools/init.lua` and of
+`core.lsp_servers.running` each fail it (`~/.cache/nvim-config/rearch/ui-facts/mutants/mutants.py <worktree>`).
+Three siblings are left out because they pass, and none of the three changes anything a reader can see. Two only
+cost time: recomputing on ToolsChanged for any root, and on every BufEnter. The third keeps a wiped buffer's entry:
+`get` answers an invalid buffer without the cache and the flush skips it (`ui/facts.lua:148-152,116`), so only the
+memory shows it. The regress checks were run against configs with one bug each:
+- an adapter without the FactsChanged listener fails `statusline_facts`;
+- an adapter that shows the current buffer's lists in a non-file buffer fails `statusline_facts`;
+- facts that run a covered linter fail `ui_facts`;
+- facts whose formatters are in another order than conform's fail `ui_facts`;
+- an indicator count off by one fails `statusline_facts` and `tools_indicator`.

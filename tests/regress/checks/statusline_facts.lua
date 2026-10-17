@@ -1,4 +1,4 @@
--- @desc     the statusline draws the shown buffer's facts: its servers, the formatters and linters that will run, and the count of missing tools; it redraws on its own when they change
+-- @desc     the statusline draws the shown buffer's facts (the last file buffer while the current one isn't a file): its servers, the formatters and linters that will run, and the count of missing tools; it redraws on its own when they change
 -- @areas    ui tools
 -- @budget   30
 -- @needs    ruff pyrefly
@@ -39,6 +39,12 @@ wait_until(function() return #facts.get(buf).formatters > 0 and shows(facts.get(
 local f = facts.get(buf)
 check("the facts have servers and formatters to draw", #f.servers > 0 and #f.formatters > 0, vim.inspect(f))
 check("the line draws them", shows(f), vim.inspect({ want = drawn(f), line = statusline() }))
+
+-- A window on a buffer that isn't a file (a picker, a terminal) keeps the file's lists
+vim.cmd("new | setlocal buftype=nofile")
+wait_until(function() return statusline():find("No Active LSP", 1, true) ~= nil end, 300)
+check("a non-file buffer shows the last file buffer's facts", shows(f), vim.inspect({ want = drawn(f), line = statusline() }))
+vim.cmd.close()
 
 -- A change: ruff detaches, so its server goes and ruff's linting, which it covered, comes back. Only FactsChanged may
 -- redraw the line: lualine's 1 s timer is stopped, and the detach's DiagnosticChanged and the servers' progress

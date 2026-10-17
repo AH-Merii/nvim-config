@@ -1,4 +1,4 @@
--- @desc     a buffer's facts with the real tools and servers: a linter runs only where its binary is found and no server that covers it is attached, a missing binary is listed as missing, and the attached servers are listed
+-- @desc     a buffer's facts with the real tools and servers: a linter runs only where its binary is found and no server that covers it is attached, a missing binary is listed as missing, the attached servers are listed, and the formatters are conform's
 -- @areas    ui lint tools
 -- @budget   30
 -- @needs    jactionlint ruff
@@ -56,6 +56,10 @@ if check("the ruff server attaches and is listed", vim.list_contains(f.servers, 
       table.insert(covered, linter)
     end
   end
+  -- conform decides on its own which formatters run; the facts must agree with the real plugin
+  local conform = vim.tbl_map(function(x) return x.name end, require("conform").list_formatters_to_run(0))
+  check("the formatters that will run are the ones conform runs", #conform > 0 and vim.deep_equal(f.formatters, conform),
+    vim.inspect({ facts = f.formatters, conform = conform }))
   check("python has a linter that an attached server covers", #covered > 0, vim.inspect(f.servers))
   for _, linter in ipairs(covered) do
     check(("%s, covered by an attached server, will not run"):format(linter), not vim.list_contains(f.linters, linter), vim.inspect(f.linters))
