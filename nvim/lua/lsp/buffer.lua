@@ -77,6 +77,41 @@ key({
 
 -- Neovim's own gr* keys are rows in keys/neovim.lua
 
+-- Its toggles, once snacks is loaded: a press flips one, says so, and its label in the popup follows it
+require("features").at_very_lazy(function()
+  local hide_show = { enabled = "Hide ", disabled = "Show " }
+  require("keys").feature("lsp")({
+    { "<leader>Th", toggle = Snacks.toggle.inlay_hints({ wk_desc = hide_show }), need = "inlayHint" },
+    {
+      "<leader>Tc",
+      toggle = Snacks.toggle.new({
+        name = "Code Lens",
+        get = function() return vim.lsp.codelens.is_enabled({ bufnr = 0 }) end,
+        set = function(state) vim.lsp.codelens.enable(state, { bufnr = 0 }) end,
+        wk_desc = hide_show,
+      }),
+      need = "codeLens",
+    },
+    {
+      "<leader>Te",
+      toggle = Snacks.toggle.new({
+        name = "Type Errors",
+        get = function()
+          local client = vim.lsp.get_clients({ bufnr = 0, name = "pyrefly" })[1]
+          return client ~= nil and require("config.utils").pyrefly_type_errors(client)
+        end,
+        set = function(state)
+          for _, client in ipairs(vim.lsp.get_clients({ bufnr = 0, name = "pyrefly" })) do
+            require("config.utils").pyrefly_type_errors(client, state)
+          end
+        end,
+        wk_desc = hide_show,
+      }),
+      need = "client:pyrefly",
+    },
+  })
+end)
+
 -- Linked editing: renaming a tag renames its pair, where the server supports it (html, and tsc in JSX/TSX)
 vim.api.nvim_create_autocmd("LspAttach", {
   group = vim.api.nvim_create_augroup("core.lsp.linked_editing", { clear = true }),

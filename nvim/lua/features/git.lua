@@ -113,6 +113,67 @@ table.insert(specs, {
 M.plugins = specs
 
 function M.setup()
+  local keys = require("keys")
+
+  -- The git needs, cached by the events that change them: a need is read on each press and popup rebuild
+  local cwd_repo = {} ---@type table<string, boolean> cwd -> in a repo; emptied when the cwd changes
+  local file_repo = {} ---@type table<integer, { file: string, repo: boolean, remote?: boolean }> by buffer, for its file
+  -- The cwd is in a repo: the pickers act on it
+  keys.need("git cwd", function()
+    local cwd = vim.fn.getcwd()
+    if cwd_repo[cwd] == nil then
+      cwd_repo[cwd] = Snacks.git.get_root(cwd) ~= nil
+    end
+    return cwd_repo[cwd]
+  end)
+  -- The buffer's file is in a repo; that repo has a remote
+  keys.need("git file", function(buf)
+    local f = file_repo[buf]
+    return f ~= nil and f.file == vim.api.nvim_buf_get_name(buf) and f.repo
+  end)
+  keys.need("git remote", function(buf)
+    local f = file_repo[buf]
+    return f ~= nil and f.file == vim.api.nvim_buf_get_name(buf) and f.remote == true
+  end)
+
+  ---@param buf integer
+  local function look_up_file(buf)
+    local file = vim.api.nvim_buf_get_name(buf)
+    local root = vim.bo[buf].buftype == "" and file ~= "" and Snacks.git.get_root(file) or nil
+    local entry = { file = file, repo = root ~= nil }
+    file_repo[buf] = entry
+    if root then
+      vim.system({ "git", "-C", root, "remote" }, { text = true }, function(out) entry.remote = out.code == 0 and vim.trim(out.stdout) ~= "" end)
+    end
+  end
+
+  -- The events that fill the caches, made once with the needs and their caches
+  local git_group = vim.api.nvim_create_augroup("SnacksGitKeys", { clear = true })
+  vim.api.nvim_create_autocmd("DirChanged", { group = git_group, callback = function() cwd_repo = {} end })
+  vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile", "BufFilePost" }, {
+    group = git_group,
+    callback = function(ev) look_up_file(ev.buf) end,
+  })
+  vim.api.nvim_create_autocmd("BufWipeout", { group = git_group, callback = function(ev) file_repo[ev.buf] = nil end })
+
+  local function icon(glyph, color) return { icon = glyph, color = color } end
+  --   Git Tools: Interact with branches, logs, and diffs
+  -- These act on the repo of the cwd
+  keys.feature("git", { need = "git cwd" })({
+    { "<leader>gB", function() Snacks.picker.git_branches() end, "Branches", icon = icon("", "grey") },
+    { "<leader>gl", function() Snacks.picker.git_log() end, "Log", icon = icon("", "orange") },
+    { "<leader>gs", function() Snacks.picker.git_status() end, "Status", icon = icon("󰊢", "cyan") },
+    { "<leader>gS", function() Snacks.picker.git_stash() end, "Stashes", icon = icon("󰀼", "grey") },
+    { "<leader>gD", function() Snacks.picker.git_diff() end, "Diff (Hunks)", icon = icon("", "cyan") },
+  })
+  -- These act on the buffer's file
+  keys.feature("git", { need = "git file" })({
+    { "<leader>gL", function() Snacks.picker.git_log_line() end, "Log (Line)", icon = icon("", "yellow") },
+    { "<leader>gf", function() Snacks.picker.git_log_file() end, "Log (File)", icon = icon("", "blue") },
+  })
+  -- This needs a remote on the buffer's repo
+  keys.feature("git")({ "<leader>GB", function() Snacks.gitbrowse() end, "Open in Git Browser", need = "git remote", icon = icon("󰖟", "grey") })
+
   -- PR review works on the repo of the cwd, so its keys act while that repo has a GitHub remote. git is asked each
   -- time the cwd changes; until it answers, the new cwd's keys do not act.
   local github = {} ---@type table<string, boolean>
@@ -125,7 +186,6 @@ function M.setup()
       function(out) github[cwd] = out.code == 0 and out.stdout:find("github.com", 1, true) ~= nil end
     )
   end
-  local keys = require("keys")
   keys.need("github", function() return github[vim.fn.getcwd()] == true end)
   local icon = { icon = "", color = "cyan" }
   keys.feature("pr review", { need = "github", icon = icon })({

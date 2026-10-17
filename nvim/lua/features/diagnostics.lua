@@ -192,4 +192,16 @@ local trouble = {
 }
 table.insert(specs, trouble)
 
-return { plugins = specs }
+local M = { plugins = specs }
+
+function M.setup()
+  -- Its toggles, once snacks is loaded: a press flips one, says so, and its label in the popup follows it
+  require("features").at_very_lazy(function()
+    local hide_show = { enabled = "Hide ", disabled = "Show " }
+    require("keys").feature("diagnostics")({
+      { "<leader>Td", toggle = Snacks.toggle.diagnostics({ wk_desc = hide_show }) },
+    })
+  end)
+end
+
+return M
