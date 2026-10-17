@@ -163,6 +163,16 @@ local function start(name, buf)
   end)
 end
 
+--- The clients running on buf: attached and not stopping. `:LspStop` and a restart stop a client a while before it
+--- detaches, and a stopping client answers nothing. The one definition of a running server, for the statusline's
+--- facts and for skipping the linters a server covers.
+---@param buf integer
+---@param name? string only this server's clients
+---@return vim.lsp.Client[]
+function M.running(buf, name)
+  return vim.tbl_filter(function(client) return not client:is_stopped() end, vim.lsp.get_clients({ bufnr = buf, name = name }))
+end
+
 --- Stops clients and starts their servers again, from the binaries resolved now, on the buffers they served.
 ---@param clients vim.lsp.Client[]
 function M.restart(clients)

@@ -28,13 +28,13 @@ local detaching = {} ---@type table<integer, table<integer, true>> buf -> client
 local waiting = {} ---@type table<integer, true> buffers waiting for a tool or project scan their facts left pending
 local queued = false
 
---- The servers running on buf: attached, not stopping and not detaching from it.
+--- The servers running on buf (core.lsp_servers.running), less those in their LspDetach from it, by name.
 ---@param buf integer
 ---@return string[]
 local function running(buf)
   local names, seen, skip = {}, {}, detaching[buf] or {}
-  for _, client in ipairs(vim.lsp.get_clients({ bufnr = buf })) do
-    if not seen[client.name] and not skip[client.id] and not client:is_stopped() then
+  for _, client in ipairs(require("core.lsp_servers").running(buf)) do
+    if not seen[client.name] and not skip[client.id] then
       seen[client.name] = true
       names[#names + 1] = client.name
     end
@@ -43,8 +43,8 @@ local function running(buf)
 end
 
 --- What will run on buf: the formatters and linters its language names whose binaries the resolver found (a name
---- outside the catalog always runs), less each linter whose covering server is running. Step 2's format.plan(buf) and
---- lint.plan(buf) answer this; switching to them replaces this body.
+--- outside the catalog always runs), less each linter whose covering server is running. Step 2's format.plan(buf).run
+--- and linting.plan(buf).run answer this; switching to them replaces this body.
 ---@param buf integer
 ---@param found lang.Answer
 ---@param root string
@@ -154,16 +154,6 @@ function M.get(buf)
     cache[buf], stale[buf] = compute(buf), nil
   end
   return cache[buf]
-end
-
---- The linters running on buf now, read from nvim-lint each time: it fires no event when a run starts or ends.
----@param buf? integer default current
----@return string[]
-function M.linting(buf)
-  local lint = package.loaded["lint"]
-  local names = lint and lint.get_running((buf == nil or buf == 0) and vim.api.nvim_get_current_buf() or buf) or {}
-  table.sort(names)
-  return names
 end
 
 --- Drops every cached answer and (re)makes the handlers that mark facts stale. opts.lang, for tests, replaces the

@@ -9,12 +9,12 @@ local M = {}
 -- its server is not attached
 M.covering_server = require("lang").views().covered_by
 
---- Whether linter name's server is attached to buf, so the linter is skipped there.
+--- Whether linter name's server is running on buf, so the linter is skipped there.
 ---@param name string
 ---@param buf integer
 function M.covered(name, buf)
   local server = M.covering_server[name]
-  return server ~= nil and #vim.lsp.get_clients({ bufnr = buf, name = server }) > 0
+  return server ~= nil and #require("core.lsp_servers").running(buf, server) > 0
 end
 
 --- The binary the resolver looks up for a linter: its catalog binary, else its command when that is a bare name.
