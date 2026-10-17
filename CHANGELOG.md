@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/AH-Merii/nvim-config/compare/v0.4.0...v0.5.0) (2026-10-17)
+
+
+### Restructuring
+
+* **ui:** the statusline is neoblocks.nvim's, drawn as lualine drew it ([#36](https://github.com/AH-Merii/nvim-config/issues/36)) ([7a98192](https://github.com/AH-Merii/nvim-config/commit/7a981921f48f41555956f14dab47e373277723b5))
+
 ## [0.4.0](https://github.com/AH-Merii/nvim-config/compare/v0.3.0...v0.4.0) (2026-10-17)
 
 
