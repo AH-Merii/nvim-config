@@ -1,5 +1,5 @@
 -- Message history picker, like noice's `:Noice history`: vim.notify calls (snacks.notifier's history)
--- and the ui2 messages config.ui2.messages saw (toasts, split output and what ui2 kept), newest first,
+-- and the ui2 messages ui.messages.messages saw (toasts, split output and what ui2 kept), newest first,
 -- filterable by level, title and text. Toasts of ui2 messages skip snacks' history (history = false),
 -- so nothing is listed twice. g< and :messages still open ui2's pager.
 local M = {}
@@ -20,7 +20,7 @@ function M.open()
   for _, n in ipairs(Snacks.notifier.get_history()) do
     add(n, "markdown")
   end
-  for _, e in ipairs(require("config.ui2.messages").entries()) do
+  for _, e in ipairs(require("ui.messages.messages").entries()) do
     e.title = e.title or e.kind
     add(e)
   end

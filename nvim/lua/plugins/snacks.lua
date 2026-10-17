@@ -96,7 +96,7 @@ keys.feature("snacks")({
   { "<leader>ss", function() Snacks.scratch.select() end, "Scratch Buffers", icon = icon("󰎕", "grey") },
 
   -- Misc
-  { "<leader>n", function() require("config.ui2.history").open() end, "Message History", icon = icon("󰂚", "yellow") },
+  { "<leader>n", function() require("ui.messages.history").open() end, "Message History", icon = icon("󰂚", "yellow") },
   { "<leader>N", function() Snacks.notifier.hide() end, "Dismiss Notifications", icon = icon("󰎟", "yellow") },
   { "<C-W>z", function() Snacks.zen() end, "Toggle Zen Mode", icon = icon("󰫢", "yellow") },
   { "<C-W>Z", function() Snacks.zen.zoom() end, "Toggle Zoom", icon = icon("󰘖", "yellow") },
@@ -177,7 +177,7 @@ return {
     notifier = {
       enabled = true,
       -- Errors stay until dismissed (<leader>N), like ui2 message errors, except the routine ones
-      -- config/ui2/messages.lua marks (a search that found nothing); the rest is snacks' default keep
+      -- ui/messages/messages.lua marks (a search that found nothing); the rest is snacks' default keep
       -- (snacks/notifier.lua:131-133).
       keep = function(n) return n.level == "error" and not n.routine or vim.fn.getcmdpos() > 0 end,
     },

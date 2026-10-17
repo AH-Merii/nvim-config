@@ -15,10 +15,10 @@ function M.setup()
   end
   for _, name in ipairs({ "cmdline", "messages", "showcmd" }) do
     -- setup() returns false when a ui2 internal it hooks is missing (renamed in a nightly): say so too.
-    local loaded, res = pcall(function() return require("config.ui2." .. name).setup(ui) end)
+    local loaded, res = pcall(function() return require("ui.messages." .. name).setup(ui) end)
     if not loaded or res == false then
       local why = loaded and "a ui2 internal it hooks is missing, using plain ui2" or tostring(res)
-      vim.schedule(function() vim.notify(("config.ui2.%s: %s"):format(name, why), vim.log.levels.WARN) end)
+      vim.schedule(function() vim.notify(("ui.messages.%s: %s"):format(name, why), vim.log.levels.WARN) end)
     end
   end
 end

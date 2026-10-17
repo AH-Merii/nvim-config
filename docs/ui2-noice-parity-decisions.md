@@ -65,10 +65,10 @@ Runtime refs: `R` = nightly runtime (NVIM v0.13.0-dev-1808+g561857c4a8), `N` = n
 
 | File | Does |
 |---|---|
-| `config/ui2/init.lua` | Called from `options.lua` right after `ui2.enable()`. Returns early with no UI; runs each module's `setup(ui)` in pcall and warns if one fails or returns false |
-| `config/ui2/cmdline.lua` | `:` and `input()` popup; `/` `?` at the bottom |
-| `config/ui2/messages.lua` | Routes messages to toasts or the split; keeps a ring of every message |
-| `config/ui2/history.lua` | `<leader>n` picker over the ring plus `vim.notify` history |
+| `ui/messages/init.lua` | Called from `options.lua` right after `ui2.enable()`. Returns early with no UI; runs each module's `setup(ui)` in pcall and warns if one fails or returns false |
+| `ui/messages/cmdline.lua` | `:` and `input()` popup; `/` `?` at the bottom |
+| `ui/messages/messages.lua` | Routes messages to toasts or the split; keeps a ring of every message |
+| `ui/messages/history.lua` | `<leader>n` picker over the ring plus `vim.notify` history |
 | `plugins/snacks.lua` | `notifier.keep` keeps errors; `<leader>n` history, `<leader>N` dismiss; removed the `vim._print` → `dd` override, which sent every `:lua =expr` to a debug toast |
 
 ### `:` popup (cmdline.lua)

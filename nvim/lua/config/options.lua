@@ -49,7 +49,7 @@ vim.opt.listchars = {
 
 vim.opt.cmdheight = 0
 vim.o.showcmd = true
-vim.o.showcmdloc = "statusline" -- partial commands in the statusline; config.ui2.showcmd makes it "last" and draws them there itself
+vim.o.showcmdloc = "statusline" -- partial commands in the statusline; ui.messages.showcmd makes it "last" and draws them there itself
 
 -- Floats that set no border of their own (LSP hover and signature help, diagnostic floats, ui2's
 -- message window) get a rounded one. blink, gitsigns and snacks also fall back to it where this
@@ -58,15 +58,15 @@ vim.o.showcmdloc = "statusline" -- partial commands in the statusline; config.ui
 vim.o.winborder = "rounded"
 
 -- Neovim's built-in message and cmdline UI (:h ui2), enabled before plugins so it sees every message.
--- config.ui2 then hooks it to behave like noice did: ':' in a popup near the top, messages as
--- snacks.notifier toasts, long output in a split (lua/config/ui2/). Until snacks is set up, and for
+-- ui.messages then hooks it to behave like noice did: ':' in a popup near the top, messages as
+-- snacks.notifier toasts, long output in a split (lua/ui/messages/). Until snacks is set up, and for
 -- anything the hooks pass on, these targets apply: messages go to the msg window (bottom-right float,
 -- cleared after the 'messagesopt' timeout) and output of a typed command to the cmdline. g< opens the
 -- pager with the whole history. Does nothing headless (no UI attached).
 require("vim._core.ui2").enable({
   msg = { targets = { default = "msg", typed_cmd = "cmd" } },
 })
-require("config.ui2").setup()
+require("ui.messages").setup()
 
 -- 󰞷 Editing & Indentation
 vim.opt.expandtab = true
