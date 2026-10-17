@@ -15,6 +15,11 @@ function M.setup()
     _G.dd = function(...) Snacks.debug.inspect(...) end
     _G.bt = function() Snacks.debug.backtrace() end
   end)
+
+  require("keys").feature("lua-dev")({
+    -- The Lua ftplugin's <leader>! (after/ftplugin/lua.lua)
+    { "<leader>!", mode = { "n", "x" }, icon = { icon = "", color = "red" } },
+  })
 end
 
 return M

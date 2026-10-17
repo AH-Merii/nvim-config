@@ -1,4 +1,4 @@
--- Search and jump: flash, and snacks' pickers
+-- Search and jump: flash, snacks' pickers, and clearing the search highlight
 local M = {}
 
 local spec = {
@@ -94,6 +94,11 @@ function M.setup()
     { "<leader>su", function() Snacks.picker.undo() end, "Undo History", icon = icon("󰕍", "yellow") },
     { "<leader>sC", function() Snacks.picker.colorschemes() end, "Colorschemes", icon = icon("󰏘", "purple") },
     { "<leader>ss", function() Snacks.scratch.select() end, "Scratch Buffers", icon = icon("󰎕", "grey") },
+  })
+
+  require("keys").feature("search")({
+    -- Clear search highlight
+    { "<Esc>", ":nohlsearch<CR>", "Clear search highlight", silent = true },
   })
 end
 
