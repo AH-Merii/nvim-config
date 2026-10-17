@@ -22,8 +22,9 @@ lua/features/editing.lua          editing keys which-key
 lua/features/diagnostics.lua      ui lsp
 lua/ui/snacks.lua                 ui keys git
 lua/features/search.lua           keys editing
-lua/plugins/extras.lua            ui editing keys
-lua/plugins/dap.lua               keys
+lua/features/windows.lua          keys editing
+lua/features/folds.lua            editing treesitter
+lua/features/lua_dev.lua          editing lsp
 lua/config/keymaps.lua            keys which-key
 lua/config/options.lua            editing ui
 lua/config/autocmds.lua           editing ui

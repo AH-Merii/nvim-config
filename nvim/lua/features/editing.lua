@@ -1,4 +1,4 @@
--- Editing: pairs and their rules (nvim-autopairs)
+-- Editing: pairs and their rules (nvim-autopairs), and comments (todo-comments)
 
 --------------------------------------------------------------------------
 -- Custom rule snippets (pure helpers + lazy requires inside builders)
@@ -307,5 +307,10 @@ local specs = {
     end,
   },
 }
+table.insert(specs, {
+  "folke/todo-comments.nvim",
+  dependencies = { "nvim-lua/plenary.nvim" },
+  opts = {},
+})
 
 return { plugins = specs }
