@@ -52,6 +52,7 @@ local KEYS = {
   { "<leader>cs", need = { "textDocument/documentSymbol" } },
   { "<leader>cl", need = { DEF, REF, IMPL, TYPE, DECL, CALLS } },
   { "<leader>Th", need = { "textDocument/inlayHint" }, sends = "inlay" },
+  { "<leader>Tc", need = { "textDocument/codeLens" }, sends = "codelens" },
   { "<leader>sS", need = { "workspace/symbol" } },
   { "grn", need = { "textDocument/rename" }, sends = "textDocument/prepareRename" },
   { "gra", need = { "textDocument/codeAction" } },
@@ -196,7 +197,7 @@ local function reset(buf)
 end
 
 -- press key in buf from the x on line 3; what it did: the requests it made, where the cursor went, the tab page,
--- 'keywordprg' runs, inlay hints flipped, and whether the text changed. `acts`: whether it should act, so a press
+-- 'keywordprg' runs, inlay hints or code lenses flipped, and whether the text changed. `acts`: whether it should act, so a press
 -- that should waits for its request and one that should not only lets what it scheduled run
 local function press(buf, key, acts)
   reset(buf)
@@ -211,7 +212,8 @@ local function press(buf, key, acts)
   vim.api.nvim_win_set_cursor(0, key[1] == "]]" and { 2, 4 } or { 3, 4 })
   -- a second tab page, for gt to go to
   vim.cmd("tab split | tabprevious")
-  local tabs, hints, nkw = vim.fn.tabpagenr(), vim.lsp.inlay_hint.is_enabled({ bufnr = buf }), #kw
+  local tabs, nkw = vim.fn.tabpagenr(), #kw
+  local hints, lenses = vim.lsp.inlay_hint.is_enabled({ bufnr = buf }), vim.lsp.codelens.is_enabled({ bufnr = buf })
   feed((mode == "x" and "v" or "") .. key[1])
   local r = { cursor = vim.api.nvim_win_get_cursor(0), tab = vim.fn.tabpagenr() ~= tabs, keyword = #kw > nkw }
   local want = key.sends ~= nil and key.sends:find("/") and { key.sends } or key.need
@@ -226,6 +228,9 @@ local function press(buf, key, acts)
     r.acted = wait_until(function() return vim.lsp.inlay_hint.is_enabled({ bufnr = buf }) ~= hints end, ms)
     -- back as it was
     if r.acted then vim.lsp.inlay_hint.enable(hints, { bufnr = buf }) end
+  elseif key.sends == "codelens" then
+    r.acted = wait_until(function() return vim.lsp.codelens.is_enabled({ bufnr = buf }) ~= lenses end, ms)
+    if r.acted then vim.lsp.codelens.enable(lenses, { bufnr = buf }) end
   elseif key.sends == "jump" then
     -- Snacks.words jumps from the x on line 2 or 3 to the next or previous one, not where Vim's ]] or [[ go
     r.acted = r.cursor[1] == (key[1] == "]]" and 3 or 2) and r.cursor[2] == 4
