@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/AH-Merii/nvim-config/compare/v0.5.0...v0.6.0) (2026-10-17)
+
+
+### Features
+
+* **lsp:** gr* keys say which method no server supports instead of editing text ([baaae96](https://github.com/AH-Merii/nvim-config/commit/baaae96fe7bb3b5cb47ca8a001007c342c92e401))
+
+
+### Restructuring
+
+* **keys:** declare every key as a row in keys/, gated by needs ([da61a27](https://github.com/AH-Merii/nvim-config/commit/da61a27e9f80cb911b021ee4037104f05707d4f3))
+
 ## [0.5.0](https://github.com/AH-Merii/nvim-config/compare/v0.4.0...v0.5.0) (2026-10-17)
 
 
