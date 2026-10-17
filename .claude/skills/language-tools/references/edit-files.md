@@ -9,16 +9,31 @@ Work down the table. For each row, either make the edit or note why it does not 
 | # | File | When | Section |
 |---|---|---|---|
 | 1 | `nvim/lua/tools/catalog.lua` | Always: one entry per binary | Catalog |
-| 2 | `nvim/lua/core/lsp_servers.lua`, `M.servers` | Each new server | Server |
-| 3 | `nvim/after/lsp/<server>.lua` | The server needs settings or a different filetype list, shares a filetype with pyrefly, or must attach on a sub-filetype | Server overrides |
-| 4 | `nvim/lua/core/lsp_servers.lua`, `roots` | nvim-lspconfig's `root_dir` runs the tool from PATH or checks its version | Custom root |
-| 5 | `nvim/lua/plugins/conform.lua` | Each new formatter. Skip it if the server formats and LSP formatting is enough (Typst: tinymist) | Formatter |
-| 6 | `nvim/lua/plugins/nvim-lint.lua` | Each new linter | Linter |
-| 7 | `nvim/lua/tools/filetypes.lua` | The tool runs only on some files of a filetype | `sub-filetypes.md` |
-| 8 | `nvim/lua/plugins/nvim-treesitter.lua`, `ensure_installed` | A new language with a tree-sitter parser | Treesitter |
-| 9 | `tests/regress/areas.map` | Only a new config file that no glob there matches | Areas |
+| 2 | `nvim/lua/lang/<lang>.lua`, `servers` | Each new server, with its settings | Server |
+| 3 | `nvim/lua/lang/<lang>.lua`, `formatters` | Each new formatter. Skip it if the server formats and LSP formatting is enough (Typst: tinymist) | Formatter |
+| 4 | `nvim/lua/lang/<lang>.lua`, `linters` | Each new linter | Linter |
+| 5 | `nvim/lua/lang/<lang>.lua`, `variants` | The tool runs only on some files of a filetype | `sub-filetypes.md` |
+| 6 | `nvim/lua/lang/<lang>.lua`, `parsers` | A new language with a tree-sitter parser | Treesitter |
+| 7 | `nvim/lua/core/lsp_servers.lua`, `roots` | nvim-lspconfig's `root_dir` runs the tool from PATH or checks its version | Custom root |
+| 8 | `nvim/lua/plugins/conform.lua`, `nvim/lua/plugins/nvim-lint.lua` | Only a formatter's extra args, or a definition conform or nvim-lint lacks | Formatter, Linter |
 
-You never edit these: `:Tools`, the install prompts, lualine, `:Status`, `nvim/lua/plugins/lspconfig.lua`. They all read the tables above.
+You never edit these: `:Tools`, the install prompts, lualine, `:Status`, `nvim/lua/plugins/lspconfig.lua`, conform's `formatters_by_ft`, nvim-lint's `linters_by_ft`, the server list. They are built from, or ask, `nvim/lua/lang/` (`lang.views()`, `lang.of()`).
+
+## A language file
+
+One file per language, `nvim/lua/lang/<lang>.lua`, returns data; its fields are documented at the top of `nvim/lua/lang/init.lua` (`lang.Spec`). A new language is a new file; `lang/init.lua` reads every file in the directory. A language with one server, one formatter and one linter (`nvim/lua/lang/toml.lua`):
+
+```lua
+---@type lang.Spec
+return {
+  filetypes = { "toml" },
+  servers = { tombi = {} },
+  formatters = { "tombi" },
+  linters = { tombi = { covered_by = "tombi" } },
+}
+```
+
+The keys are the Neovim filetypes (`:set ft?` in a file of that language), not file extensions. Each filetype belongs to one language; two files declaring one fail at startup.
 
 ## Catalog
 
@@ -61,80 +76,53 @@ If the catalog lacks a name, nothing fails. The tool then runs from Neovim's PAT
 
 ## Server
 
-Add the nvim-lspconfig name (not the binary name) to `M.servers` in `nvim/lua/core/lsp_servers.lua`. Put it next to its language's neighbours:
+Add the nvim-lspconfig name (not the binary name) under `servers`. Its value is a table of `vim.lsp.Config` fields, merged over nvim-lspconfig's `lsp/<name>.lua` with `vim.lsp.config(name, ...)` (`core/lsp_servers.lua`); `{}` when nvim-lspconfig's config is enough:
 
 ```lua
 -- before
-  "neocmake",
-  "tinymist",
-  "docker_language_server",
-}
+  servers = { gopls = { ... } },
 -- after
-  "neocmake",
-  "tinymist",
-  "docker_language_server",
-  "<nvim-lspconfig name>",
-}
+  servers = { gopls = { ... }, ["<nvim-lspconfig name>"] = {} },
 ```
 
-Both directions are enforced:
+A server is configured in one language only; another language or a variant that also wants it names it without settings (a variant lists it in its `servers` list, see `sub-filetypes.md`).
 
-- A listed name with no catalog entry, or with no nvim-lspconfig config, warns at startup (`lsp_servers.lua:213-222`), and `checks/startup.lua` fails on that warning.
-- A catalog server missing from the list fails `checks/lsp_attach.lua` ("every catalog server is enabled").
+- A name with no catalog entry, or with no nvim-lspconfig config, warns at startup (`core/lsp_servers.lua`, `setup`), and `checks/startup.lua` fails on that warning. `tests/unit/lang_test.lua` fails on the first case too.
+- A catalog server no language names fails `tests/unit/lang_test.lua` ("catalog server ... is named by a language").
 
-## Server overrides: `nvim/after/lsp/<server>.lua`
+Fields you may need:
 
-The file name must be the nvim-lspconfig server name. `checks/lsp_configs.lua` fails on a file that extends no nvim-lspconfig server. The file returns a table that is merged over nvim-lspconfig's. Use it only for the cases below:
+- **`filetypes`**: where the server attaches, when that differs from the language's `filetypes`. Narrow it when nvim-lspconfig lists filetypes another language owns, or widen it to keep nvim-lspconfig's extras (`nvim/lua/lang/c.lua`: clangd also serves objc and cuda). Variants of the listed filetypes get the server too, so a variant never needs listing here. Leaving it out gives the language's filetypes, which replace nvim-lspconfig's list (`nvim/lua/lang/web.lua`: biome serves only JS, TS and JSON).
+- **Share one position encoding** when the server shares a filetype with pyrefly (`ruff` in `nvim/lua/lang/python.lua`). `checks/lsp_attach.lua` fails when one buffer's clients use mixed encodings.
+- **Settings**: `settings`, `capabilities`, `root_markers`, `on_init`, `commands`, `handlers`; see gopls (`go.lua`), rust_analyzer (`rust.lua`) and pyrefly (`python.lua`).
+- **`exit_timeout`** for a server that orphans children (tflint in `terraform.lua`).
 
-- **Narrow the filetypes** when nvim-lspconfig lists filetypes that other servers own. Otherwise the install offer names the server there too (`nvim/after/lsp/biome.lua`):
-
-  ```lua
-  return {
-    filetypes = { "javascript", "javascriptreact", "typescript", "typescriptreact", "json", "jsonc" },
-  }
-  ```
-
-- **Attach on a sub-filetype.** Servers match the filetype exactly, so list the dotted name. Start from nvim-lspconfig's own list, because this replaces it (`nvim/after/lsp/tombi.lua`):
-
-  ```lua
-  return {
-    filetypes = { "toml", "toml.pyproject" },
-  }
-  ```
-
-- **Share one position encoding** when the server shares a filetype with pyrefly (`nvim/after/lsp/ruff.lua`). `checks/lsp_attach.lua` fails when one buffer's clients use mixed encodings.
-- **Settings**: see `gopls.lua`, `rust_analyzer.lua` and `pyrefly.lua`.
-- **`exit_timeout`** for a server that orphans children (`tflint.lua`).
-
-Do not set `cmd` (`wiring()` replaces it with the resolved binary plus the catalog args). Do not merge blink capabilities either; blink sets them for every server. The README's older "LSP Server Config Pattern" shows both, but it predates the resolver.
+Do not set `cmd` (`wiring()` replaces it with the resolved binary plus the catalog args). Do not merge blink capabilities either; blink sets them for every server through `vim.lsp.config('*')` (`blink.cmp/plugin/blink-cmp.lua:1-7`).
 
 ## Custom root
 
 Add a custom root only when nvim-lspconfig's `root_dir` runs the tool or a version check from PATH. tsc's `root_dir` runs `tsc --version`, so `roots.tsc` in `nvim/lua/core/lsp_servers.lua` replaces it, and the version check moved to the catalog's `min`.
 
-A `root_dir` that runs the language's toolchain (`go env`, `cargo metadata`) already runs with the tool's PATH (`lsp_servers.lua:127-140`), so it needs no root entry.
+A `root_dir` that runs the language's toolchain (`go env`, `cargo metadata`) already runs with the tool's PATH (the `root_dir` that `wiring()` returns in `core/lsp_servers.lua`), so it needs no root entry.
 
-## Formatter: `nvim/lua/plugins/conform.lua`
+## Formatter
 
-Add a key to `formatters_by_ft`. The value **must be a plain list of names**: the adapter loop (`conform.lua:71-72`) calls `ipairs` on every value.
+List conform names under `formatters`, in the order they run. The value **must be a plain list of names**; conform's own function form and nested alternatives are not supported (the adapter loop in `nvim/lua/plugins/conform.lua` wires each name to the resolver).
 
-- A function value raises `bad argument #1 to 'ipairs' (table expected, got function)` and empties every formatter.
-- A nested list of alternatives is never wired to the resolver.
+To pick a formatter per file, use a variant (`sub-filetypes.md`). That is how the old pyproject.toml chooser function was replaced.
 
-To pick a formatter per file, use a sub-filetype instead (`sub-filetypes.md`). That is how the old pyproject.toml chooser function was replaced.
-
-Before and after for gofumpt:
+Before and after for gofumpt (`nvim/lua/lang/go.lua`):
 
 ```lua
 -- before
-      go = { "goimports" },
+  formatters = { "goimports", filetypes = { "go" } },
 -- after
-      go = { "goimports", "gofumpt" },
+  formatters = { "goimports", "gofumpt", filetypes = { "go" } },
 ```
 
-For a new language, add one line, `<filetype> = { "<conform name>" },`, near related entries. The key is the Neovim filetype (`:set ft?` in a file of that language), not the file extension.
+`filetypes` on the list limits it to some of the language's filetypes (Go formats only `go`; `gomod` falls back to LSP formatting).
 
-- **Extra args** go under `opts.formatters.<name>`. The resolver wrapper keeps them (`conform.lua:75`):
+- **Extra args** still go under `opts.formatters.<name>` in `nvim/lua/plugins/conform.lua`. The resolver wrapper keeps them (the `tbl_extend` in `conform.lua`'s config):
 
   ```lua
     formatters = {
@@ -146,23 +134,26 @@ For a new language, add one line, `<filetype> = { "<conform name>" },`, near rel
 
 - **A formatter conform does not ship** needs a full definition under `opts.formatters.<name>` (`command = "<bare binary name>"`, `args`, `stdin`), plus its catalog entry. The wrapper replaces `command` with the resolved path. Check first that no conform file runs the same binary (`grep -l 'command = "<binary>"' $L/conform.nvim/lua/conform/formatters/*.lua`): if one does, use its name. `check.sh` fails on a definition that duplicates a built-in.
 
-## Linter: `nvim/lua/plugins/nvim-lint.lua`
+## Linter
 
-1. Add the name to `lint.linters_by_ft`, keyed by filetype. For an existing filetype, append to its list; this one runs two linters on workflow files:
-
-   ```lua
-         ["github-actions"] = { "jactionlint", "zizmor" },
-   ```
-
-   For a filetype with no linters yet, add a line: `<filetype> = { "<nvim-lint name>" },`.
-2. **Covered by a server?** Some servers report the same findings as a linter, because they run the same tool: ruff, biome, tombi, tflint, and rust_analyzer for clippy. For those, add the pair to `covering_server` (`nvim-lint.lua:68`):
+1. Add the nvim-lint name under `linters`, with a table of options (`{}` for none). For a variant, add it to the variant's `linters`; the base's linters still run there:
 
    ```lua
-   local covering_server = { ruff = "ruff", biomejs = "biome", tflint = "tflint", clippy = "rust_analyzer", tombi = "tombi" }
+       ["yaml.github-actions"] = {
+         ...
+         linters = { jactionlint = {}, zizmor = {} },
+       },
    ```
 
-   The linter then stays quiet while that server is attached. Leave the pair out when the server's diagnostics are different rules from the linter's: for example, yamlls and yamllint.
-3. **No nvim-lint definition?** Only then write one. Check both the name and the binary: `ls $L/nvim-lint/lua/lint/linters/<name>.lua` and `grep -l "cmd = .<binary>." $L/nvim-lint/lua/lint/linters/*.lua`. If either finds a file, use that linter's name and don't define `lint.linters.<name>`; to change its args, set `lint.linters.<name>.args` on the built-in. If both are empty, define one inline, as jactionlint is (`nvim-lint.lua:35-60`). Set `cmd` to the **bare binary name**; `wrap_linter` swaps in the resolved path (`nvim-lint.lua:155`). Write the parser for the JSON the tool prints, which you saw in `verify.md` section 2:
+   `filetypes = { ... }` limits a linter to some of the language's filetypes (tflint and trivy run only on `terraform`).
+2. **Covered by a server?** Some servers report the same findings as a linter, because they run the same tool: ruff, biome, tombi, tflint, and rust_analyzer for clippy. For those, name the server (`nvim/lua/lang/python.lua`):
+
+   ```lua
+     linters = { ruff = { covered_by = "ruff" } },
+   ```
+
+   The linter then stays quiet while that server is attached (`tools.lint.covering_server` is built from these). Leave it out when the server's diagnostics are different rules from the linter's: for example, yamlls and yamllint.
+3. **No nvim-lint definition?** Only then write one. Check both the name and the binary: `ls $L/nvim-lint/lua/lint/linters/<name>.lua` and `grep -l "cmd = .<binary>." $L/nvim-lint/lua/lint/linters/*.lua`. If either finds a file, use that linter's name and don't define `lint.linters.<name>`; to change its args, set `lint.linters.<name>.args` on the built-in. If both are empty, define one inline, as jactionlint is (`lint.linters.jactionlint` in `nvim-lint.lua`). Set `cmd` to the **bare binary name**; `wrap_linter` in `nvim-lint.lua` swaps in the resolved path. Write the parser for the JSON the tool prints, which you saw in `verify.md` section 2:
 
    ```lua
        lint.linters.jactionlint = {
@@ -175,15 +166,15 @@ For a new language, add one line, `<filetype> = { "<conform name>" },`, near rel
    ```
 
 4. **Rare cases:**
-   - `keep_cwd[name] = true` is for a parser that matches paths relative to Neovim's cwd (tflint).
-   - Rebuild a linter's args per resolved binary when its nvim-lint module runs the tool from PATH while loading. golangcilint does this (`nvim-lint.lua:95-109`); read the module's top lines to check.
+   - `keep_cwd[name] = true` in `nvim-lint.lua` is for a parser that matches paths relative to Neovim's cwd (tflint).
+   - Rebuild a linter's args per resolved binary when its nvim-lint module runs the tool from PATH while loading. golangcilint does this (`golangcilint_args` in `nvim-lint.lua`); read the module's top lines to check.
 
-## Treesitter: `nvim/lua/plugins/nvim-treesitter.lua`
+## Treesitter
 
-Check that a parser exists: `ls ~/.local/share/nvimt2/lazy/nvim-treesitter/runtime/queries/<lang>`. If it does, add `"<lang>"` to `local ensure_installed = { ... }`.
+Check that a parser exists: `ls ~/.local/share/nvimt2/lazy/nvim-treesitter/runtime/queries/<lang>`. If it does, add `"<lang>"` to the language's `parsers`.
 
-Neovim would install the parser on first use anyway. The list matters for the suite: `tests/regress/refresh.lua` reads it with a pattern to choose which parsers to refresh. So keep it a literal `local ensure_installed = { "a", "b" }` table.
+Neovim would install the parser on first use anyway. The list matters for the suite: `tests/regress/refresh.lua` installs every language's `parsers` (through `lang.views()`) plus the literal `ensure_installed` list in `nvim/lua/plugins/nvim-treesitter.lua`, which holds only the parsers no language names.
 
 ## Areas
 
-`tests/regress/areas.map` already maps `after/lsp/*`, `lua/tools/*`, `lua/core/lsp_servers.lua`, `conform.lua`, `nvim-lint.lua` and `nvim-treesitter.lua`. Add a line only for a new config file outside those globs. An unmapped file makes `--changed` run every area.
+`tests/regress/areas.map` already maps `lua/lang/*`, `lua/tools/*` and `lua/core/lsp_servers.lua`. Add a line only for a new config file outside those globs. An unmapped file makes `--changed` run every area.

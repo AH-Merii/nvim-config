@@ -9,12 +9,13 @@ mise_state() {
     "$(ls "$HOME/.local/share/mise/installs" | sort | md5sum | cut -d' ' -f1)"
 }
 CAP=(systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=512M --)
-BRANCH=nvimt2/mise-tooling
 SCRATCH=$(mktemp -d -p "$TMPDIR" "check-$ID.XXXXXX")
 trap 'rm -rf "$SCRATCH"; rm -rf "$C/tests/regress/work/eval-$ID"' EXIT
 
 [ -d "$C/nvim" ] && [ -x "$C/tests/regress/nv.sh" ] || { echo "usage: $0 <clone dir>" >&2; exit 2; }
 C=$(cd "$C" && pwd)
+# the branch seed.sh cloned
+BRANCH=$(cat "$C/.git/eval-branch" 2>/dev/null || echo main)
 
 result() { # result <ok 0|1> <what> <evidence>
   local s=FAIL

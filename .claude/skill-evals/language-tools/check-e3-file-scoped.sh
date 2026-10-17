@@ -64,16 +64,16 @@ else
     "checks naming $ft and dependabot: $(paste -sd' ' <<<"$cks"); suite '^($names)\$': $(grep -E '^SUITE (PASS|FAIL)' <<<"$S")${fails:+; failed: $fails $(suite_reasons "$S" "${fails%% *}" | paste -sd' ')}"
 fi
 
-# 6. docs: the decisions doc's File-scoped tools table and decision list, and the README's sub-filetype sentence
+# 6. docs: the decisions doc's File-scoped tools table and decision list, and CONTRIBUTING.md's sub-filetype sentence
 D=$C/docs/mise-tooling-decisions.md
 row=$(section "$D" "File-scoped tools" | grep '^|' | grep -i dependabot)
 decided=$(sed -n '/^Decided since:/,/^## /p' "$D")
-readme=$(grep -n -i 'dependabot' "$C/README.md" | head -2)
+contributing=$(grep -n -i 'dependabot' "$C/CONTRIBUTING.md" | head -2)
 ok=0
 [[ $ft == yaml.* ]] && grep -qF "$ft" <<<"$row" && grep -q jactionlint <<<"$row" && grep -qi dependabot <<<"$decided" &&
-  grep -qF "$ft" "$C/README.md" && ok=1
-result $ok "the decisions doc's File-scoped tools table and decision list, and the README, name the Dependabot sub-filetype" \
-  "table row: ${row:-none}; decided-since mentions: $(grep -ci dependabot <<<"$decided"); README lines naming ${ft}: $(grep -cF "$ft" "$C/README.md") (${readme:-no dependabot line})"
+  grep -qF "$ft" "$C/CONTRIBUTING.md" && ok=1
+result $ok "the decisions doc's File-scoped tools table and decision list, and CONTRIBUTING.md, name the Dependabot sub-filetype" \
+  "table row: ${row:-none}; decided-since mentions: $(grep -ci dependabot <<<"$decided"); CONTRIBUTING.md lines naming ${ft}: $(grep -cF "$ft" "$C/CONTRIBUTING.md") (${contributing:-no dependabot line})"
 
 # 7. formatting
 check_stylua

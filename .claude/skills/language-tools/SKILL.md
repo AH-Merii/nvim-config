@@ -1,11 +1,11 @@
 ---
 name: language-tools
-description: Add a language to this Neovim config, or add, swap or remove a language's LSP server, formatter, linter or file-scoped tool, end to end. Covers finding the plugin's built-in definition and the tool's mise spec, every file to edit (tool catalog, lsp_servers, after/lsp, conform, nvim-lint, sub-filetypes, treesitter), verifying installs in an isolated mise, the regression checks to add and run, and updating the decisions doc and README. Use it whenever the user asks for support for a language or file type, a different language server, formatter or linter, or wants a tool to run only on certain files, even if they don't name these files.
+description: Add a language to this Neovim config, or add, swap or remove a language's LSP server, formatter, linter or file-scoped tool, end to end. Covers finding the plugin's built-in definition and the tool's mise spec, the two files to edit (the tool catalog and the language's file in nvim/lua/lang/: servers, formatters, linters, variants, parsers), verifying installs in an isolated mise, the regression checks to add and run, and updating the decisions doc and CONTRIBUTING.md. Use it whenever the user asks for support for a language or file type, a different language server, formatter or linter, or wants a tool to run only on certain files, even if they don't name these files.
 ---
 
 # Language tools
 
-Every LSP server, formatter and linter in this config is a binary that the resolver (`nvim/lua/tools/`) finds per project through mise. Wiring a tool takes two or three lines of Lua. The work is in choosing the right definition and spec, proving the tool runs, and recording why.
+Every LSP server, formatter and linter in this config is a binary that the resolver (`nvim/lua/tools/`) finds per project through mise. Wiring a tool takes two or three lines of Lua, in two files: the catalog says how to install the binary, and the language's file in `nvim/lua/lang/` says where it runs. The work is in choosing the right definition and spec, proving the tool runs, and recording why.
 
 `R` is the repo root (the dir with `nvim/`, `tests/`, `docs/`); `SK=$R/.claude/skills/language-tools/scripts`; `T` is your isolated mise dir, made once (see below) and reused. Bash calls don't keep variables, so set them in each call. Quote real command output in your notes and report; the report is checked against it.
 
@@ -24,7 +24,7 @@ Every LSP server, formatter and linter in this config is a binary that the resol
 - formatter: `conform.nvim/lua/conform/formatters/<name>.lua`
 - linter: `nvim-lint/lua/lint/linters/<name>.lua`
 
-Use that file's name in the config and catalog (conform calls `terraform fmt` "terraform_fmt"). Its `cmd`/`command` gives the binary, and its `args` show how the editor runs it. A definition of your own is only for a tool the plugin lacks. A second definition of a shipped tool drifts from upstream, and the audit fails on it.
+Use that file's name in the language file and catalog (conform calls `terraform fmt` "terraform_fmt"). Its `cmd`/`command` gives the binary, and its `args` show how the editor runs it. A definition of your own is only for a tool the plugin lacks. A second definition of a shipped tool drifts from upstream, and the audit fails on it.
 
 **2. Find the mise spec** (`choose-tool.md` 1.2). Ask the registry first: `$SK/iso-mise.sh $T mise registry <tool>`. If it isn't there, find the upstream repo before guessing a backend. Look in the lspconfig `---@brief` URL, conform's `meta.url`, nvim-lint's README table, or the crates.io/PyPI/npm metadata. Then query `aqua:` / `github:` on that owner/repo, then `npm:` / `pypi:` / `go:`, then `cargo:`. A version printed by `mise latest <spec>` proves the spec.
 
@@ -40,18 +40,20 @@ Copy the command and args from the built-in definition you read in step 1. Don't
 | Change | Edit |
 |---|---|
 | Any new binary | `nvim/lua/tools/catalog.lua`: one entry keyed by the binary, with the spec and the role names from step 1 |
-| Server | its nvim-lspconfig name in `M.servers` (`nvim/lua/core/lsp_servers.lua`); `nvim/after/lsp/<server>.lua` only for settings or filetypes |
-| Formatter | `formatters_by_ft` in `nvim/lua/plugins/conform.lua` (a plain list of names) |
-| Linter | `linters_by_ft` in `nvim/lua/plugins/nvim-lint.lua`; `covering_server` only if a server reports the same rules |
-| New language | `ensure_installed` in `nvim/lua/plugins/nvim-treesitter.lua`, if a parser exists |
-| Tool for some files only | a dotted sub-filetype: `references/sub-filetypes.md`, all of it |
+| Server | its nvim-lspconfig name under `servers` in the language's file, `nvim/lua/lang/<lang>.lua`, with any settings as `vim.lsp.Config` fields |
+| Formatter | `formatters` in the language's file (a plain list of conform names, run in order) |
+| Linter | `linters` in the language's file; `covered_by = "<server>"` only if a server reports the same rules |
+| New language | a new `nvim/lua/lang/<lang>.lua` with its `filetypes`, and `parsers` if a tree-sitter parser exists |
+| Tool for some files only | a variant (dotted filetype) in the language's file: `references/sub-filetypes.md`, all of it |
 | Removing or replacing | `references/remove-or-replace.md` |
 
-For a sub-filetype, two things are easy to miss. Every server of the base filetype must list the dotted name in its `after/lsp/<server>.lua` (yamlls lists `yaml.github-actions`), or it stops attaching. And a linter that already runs elsewhere must still report on the new kind of file with its existing args: run it on a sample (step 3) before wiring it.
+Then run `nvim --clean --headless -l tests/unit/lang_test.lua` from `R`. It fails within a second when a name has no catalog binary, a catalog binary is used by no language, or a variant's example path doesn't get its filetype.
+
+For a variant, a linter that already runs elsewhere must still report on the new kind of file with its existing args: run it on a sample (step 3) before wiring it. The variant gets its base's servers and linters by itself (`nvim/lua/lang/init.lua`).
 
 **5. Add regression checks** (`references/tests.md`): a fixture in the `lsp_attach` list for a server, a `format_<name>.lua` or `lint_<name>.lua` check for a formatter or linter, with `@needs <binary>`. For a sub-filetype, add cases to `tools_subfiletypes.lua` plus a check that opens a matching file. Take expected output from step 3; a guessed rule id fails.
 
-**6. Update the docs** (`references/docs.md`). Name each new tool in `docs/mise-tooling-decisions.md`: its row in "Per-language tools", an "Install specs" row with the spec, and a "Decided since:" bullet with the step 2-3 evidence. A sub-filetype also gets a "File-scoped tools" row and a mention in the README's Tier 1 sentence. `check.sh` prints any row that is missing.
+**6. Update the docs** (`references/docs.md`). Name each new tool in `docs/mise-tooling-decisions.md`: its row in "Per-language tools", an "Install specs" row with the spec, and a "Decided since:" bullet with the step 2-3 evidence. A sub-filetype also gets a "File-scoped tools" row and a mention in CONTRIBUTING.md's sentence that lists them. `check.sh` prints any row that is missing.
 
 **7. Run the check, then the suite.**
 
@@ -65,10 +67,10 @@ It runs in seconds: the wiring audit, the docs and tests for each binary and sub
 cd $R/tests/regress && mkdir -p last && systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=512M -- ./suite.sh --refresh '^(startup|<your checks>)$' > last/language-tools.log 2>&1
 ```
 
-`--refresh` installs each `@needs` into the suite's own mise. Then run `./suite.sh --area startup,smoke,tools,lsp,format,lint` (add `treesitter` if you touched it). Both must end with `SUITE PASS`. On a FAIL, fix the cause, never the check.
+`--refresh` installs each `@needs` into the suite's own mise. Then run `./suite.sh --area startup,smoke,tools,lsp,format,lint` (add `treesitter` if you touched `parsers`). Both must end with `SUITE PASS`. On a FAIL, fix the cause, never the check.
 
 **8. Report:** the files changed, the step 2-3 commands and output, the `check.sh` and suite results, and anything left for the user, such as a version coupling or a config file the tool needs.
 
 ## What the code does for you
 
-`tools.for_filetype` (`nvim/lua/tools/init.lua`) reads the server filetypes, `formatters_by_ft` and `linters_by_ft`. The install prompts, `:Tools`, the statusline and `:Status` all follow from it. `core/lsp_servers.lua` starts each listed server from the resolved binary with the catalog args, so `cmd` in `after/lsp/` has no effect.
+`nvim/lua/lang/init.lua` reads every language file. `lang.of(ft)` answers what applies to a filetype; the install prompts, `:Tools`, the statusline, `:Status`, the format and diagnostics key gates, and nvim-lint's runs and `<leader>ll`/`<leader>li` ask it. A mistake such as two languages declaring one filetype is skipped and reported at startup (`lang.problems()`). `lang.views()` builds conform's `formatters_by_ft`, nvim-lint's `linters_by_ft`, each server's `vim.lsp.config` fields, the variants' filetype rules and the parsers, so none of those plugin files changes for a new tool. `core/lsp_servers.lua` starts each server from the resolved binary with the catalog args, so `cmd` in a language file has no effect.

@@ -1,77 +1,51 @@
-# File-scoped tools: dotted sub-filetypes
+# File-scoped tools: dotted sub-filetypes (variants)
 
-Use this when a tool should run on, and be offered for, only some files of a filetype. Two exist today:
+Use this when a tool should run on, and be offered for, only some files of a filetype. Four exist today, each declared with `match` rules:
 
-- workflow YAML gets jactionlint and zizmor;
-- `pyproject.toml` gets pyproject-fmt.
+- workflow YAML gets jactionlint and zizmor (`yaml.github-actions`, `nvim/lua/lang/yaml.lua`);
+- `pyproject.toml` gets pyproject-fmt (`toml.pyproject`, `nvim/lua/lang/toml.lua`);
+- Compose and Bake files get the Docker language server (`yaml.docker-compose`, `hcl.docker-bake`, `nvim/lua/lang/docker.lua`).
 
-These files get a **dotted sub-filetype**, `<base>.<part>` (`yaml.github-actions`, `toml.pyproject`). Each consumer reads the dotted name in its own way (decisions doc, "File-scoped tools"):
+These files get a **dotted sub-filetype**, `<base>.<part>`, declared as a variant in a language file. One rule decides what it gets (`nvim/lua/lang/init.lua`): its base's servers and linters plus its own, and its own formatters if it names any, else its base's. Every consumer gets that answer explicitly:
 
-| Consumer | Reads a dotted filetype as | Consequence |
+| Consumer | Gets | Consequence |
 |---|---|---|
-| nvim-lint | With no key for the whole name, the union of every part's linters | Key linters by the **extra part**: `["github-actions"]` |
-| conform | The whole name first, then the most specific part | A formatter keyed `["toml.pyproject"]` replaces the base's formatter on that file only |
-| LSP servers | Exact match only | Every base server that should still attach must list the dotted name |
+| nvim-lint, conform | Their own key for the variant, with the whole list (`lang.views()`) | Their rules for dotted filetypes never decide anything |
+| LSP servers | The variant in each server's `filetypes` | The base's servers keep attaching without any edit |
 | treesitter | The first part | Nothing to do |
-| install offer, `:Tools`, lualine | `tools.for_filetype`, which follows the rows above | Nothing to do |
+| install offer, `:Tools`, lualine, `:Status` | `lang.of(ft)` | Nothing to do |
 
 ## Steps
 
-1. **Define it in `nvim/lua/tools/filetypes.lua`.** Edit both places in the file:
-   - the description in `M.filetypes`, which the tests loop over;
-   - the matcher in `vim.filetype.add`.
+1. **Declare it under `variants`** in the file of the language whose tools it adds; its base (the first part) may be another language's filetype (`yaml.docker-compose` is in `docker.lua`). Give it `about`, the `match` rules for `vim.filetype.add`, and an `example` path that matches:
 
-   Use `filename` for an exact base name in any dir. Use `pattern` for a Lua pattern matched against the full path; escape `.` and `-` as `%.` and `%-`, and use `ya?ml` for both extensions.
-
-   ```lua
-   -- before
-   M.filetypes = {
-     ["yaml.github-actions"] = "GitHub workflows: jactionlint, zizmor",
-     ["toml.pyproject"] = "pyproject.toml: pyproject-fmt",
-   }
-   ...
-       pattern = {
-         [".*/%.github/workflows/[^/]*%.ya?ml"] = "yaml.github-actions",
-       },
-   -- after: one more description and one more matcher
-   M.filetypes = {
-     ["yaml.github-actions"] = "GitHub workflows: jactionlint, zizmor",
-     ["toml.pyproject"] = "pyproject.toml: pyproject-fmt",
-     ["<base>.<part>"] = "<which files>: <tools>",
-   }
-   ...
-       pattern = {
-         [".*/%.github/workflows/[^/]*%.ya?ml"] = "yaml.github-actions",
-         ["<lua pattern for the full path>"] = "<base>.<part>",
-       },
-   ```
-
-2. **Give the sub-filetype its tools.**
-   - Linters go under the **extra part**, in `nvim/lua/plugins/nvim-lint.lua`:
-
-     ```lua
-           -- Workflow files are yaml.github-actions (lua/tools/filetypes.lua)
-           ["github-actions"] = { "jactionlint", "zizmor" },
-     ```
-
-     Do not key a linter by the full dotted name. A full-name key replaces the union, so the file silently loses its base linters (yamllint on YAML), and `checks/tools_subfiletypes.lua` fails with "keeps yaml's servers and linters".
-   - Formatters go under the full dotted name, in `nvim/lua/plugins/conform.lua`:
-
-     ```lua
-           toml = { "tombi" },
-           ["toml.pyproject"] = { "pyproject-fmt" },
-     ```
-
-     A formatter key replaces the base's formatter on those files. Add none if the base formatter should still run.
-   - A tool another sub-filetype already uses needs no new catalog entry; listing it under the new part is enough. But it runs there with the args it already has, which were chosen for the other files (`jactionlint` runs with `--profile correctness`, `nvim/lua/plugins/nvim-lint.lua:42`). Before wiring it, run it with exactly those args on a bad sample at a realistic path of the new kind (`verify.md` section 2), and check that it reports. If it reports nothing, wiring it adds an offer and no findings: tell the user what the current args do there and leave the arg choice to them.
-3. **Keep the base's servers attached.** List the base filetype's servers: `FT="<base>" $SK/check.sh $R` prints them on its `ft <base>:` line. For each server, add the dotted name to `filetypes` in `nvim/after/lsp/<server>.lua`, keeping the names already there. The yamlls example lists every sub-filetype it serves:
+   - `filename` for an exact base name in any dir;
+   - `pattern` for a Lua pattern matched against the full path, each with its options (`{}`, or `{ priority = 1 }` to win over another variant's pattern); escape `.` and `-` as `%.` and `%-`, and use `ya?ml` for both extensions.
 
    ```lua
-   -- nvim/after/lsp/yamlls.lua
-     filetypes = { "yaml", "yaml.docker-compose", "yaml.gitlab", "yaml.helm-values", "yaml.github-actions" },
+   -- nvim/lua/lang/yaml.lua
+     variants = {
+       ["yaml.github-actions"] = {
+         about = "GitHub workflows: jactionlint, zizmor",
+         match = { pattern = { [".*/%.github/workflows/[^/]*%.ya?ml"] = { priority = 1 } } },
+         example = ".github/workflows/compose.yml",
+         linters = { jactionlint = {}, zizmor = {} },
+       },
+       ["<base>.<part>"] = {
+         about = "<which files>: <tools>",
+         match = { pattern = { ["<lua pattern for the full path>"] = {} } },
+         example = "<a path that matches>",
+         linters = { ["<nvim-lint name>"] = {} },
+       },
+     },
    ```
 
-   If you forget this, the server quietly stops attaching on those files.
+2. **Give it its tools.**
+   - Linters under the variant's `linters`; the base's still run there.
+   - Formatters under the variant's `formatters`, a list that replaces the base's on those files. Add none if the base formatter should still run.
+   - Servers under the variant's `servers`, a list of names configured in some language's `servers` (`servers = { "docker_language_server" }`). The base's servers attach anyway.
+   - A tool another sub-filetype already uses needs no new catalog entry; listing it under the variant is enough. But it runs there with the args it already has, which were chosen for the other files (`jactionlint` runs with `--profile correctness`, `lint.linters.jactionlint` in `nvim/lua/plugins/nvim-lint.lua`). Before wiring it, run it with exactly those args on a bad sample at a realistic path of the new kind (`verify.md` section 2), and check that it reports. If it reports nothing, wiring it adds an offer and no findings: tell the user what the current args do there and leave the arg choice to them.
+3. **Run the unit test**: `nvim --clean --headless -l tests/unit/lang_test.lua` from `R`. It fails when the example path doesn't get the variant's filetype, or the variant loses its base's servers or linters.
 4. **Check.** Pass matching paths and near misses in `FILES`, and the base and the sub-filetype in `FT`:
 
    ```sh

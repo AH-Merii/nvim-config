@@ -3,13 +3,13 @@
 -- Prints tab-separated facts, one per line:
 --   catalog   <binary> spec=<spec> servers=<a,b> formatters=<a,b> linters=<a,b>
 --   enabled   <server> lspconfig=<yes|no>
---   file      <path> ft=<ft> servers=<..> formatters=<..> linters=<..>     (what tools.for_filetype gives the buffer)
+--   file      <path> ft=<ft> servers=<..> formatters=<..> linters=<..>     (what lang.of gives the buffer)
 --   linterdef <name> custom=<yes|no> builtin=<yes|no> cmd=<cmd> dup=<built-in linters running the same command>
 --   fmtdef    <name> builtin=<yes|no> cmd=<cmd> dup=<built-in formatters running the same command>
 --   lspft     <server> <filetype,...>
 --   PROBE DONE
 require("lazy").load({ plugins = { "conform.nvim", "nvim-lint", "nvim-lspconfig" } })
-local tools, catalog = require("tools"), require("tools.catalog")
+local lang, catalog = require("lang"), require("tools.catalog")
 local conform, lint = require("conform"), require("lint")
 local enabled = require("core.lsp_servers").servers
 local function out(...) io.stdout:write(table.concat({ ... }, "\t") .. "\n") end
@@ -84,7 +84,7 @@ end
 
 for _, path in ipairs(vim.split(vim.env.FILES or "", "%s+", { trimempty = true })) do
   local ft = vim.filetype.match({ filename = vim.fs.abspath(path) }) or ""
-  local f = tools.for_filetype(ft)
+  local f = lang.of(ft) or { servers = {}, formatters = {}, linters = {} }
   out("file", path, "ft=" .. ft, "servers=" .. join(f.servers), "formatters=" .. join(f.formatters), "linters=" .. join(f.linters))
 end
 out("PROBE DONE")

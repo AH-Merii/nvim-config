@@ -3,9 +3,16 @@
 set -euo pipefail
 cd "$1"
 perl -0pi -e 's/(  -- Make\n)/  -- Zig; zls must match the zig version it serves\n  zls = { spec = "zls", servers = { zls = {} } },\n  zig = { spec = "zig", formatters = { "zigfmt" } },\n\n$1/' nvim/lua/tools/catalog.lua
-perl -0pi -e 's/(  "docker_language_server",\n)/$1  "zls",\n/' nvim/lua/core/lsp_servers.lua
-perl -0pi -e 's/(      cmake = \{ "gersemi" \},\n)/$1\n      zig = { "zigfmt" },\n/' nvim/lua/plugins/conform.lua
-grep -q '"zig"' nvim/lua/plugins/nvim-treesitter.lua || perl -0pi -e 's/(local ensure_installed = \{\n(?:  "[^"]+",\n)*)/$1  "zig",\n/' nvim/lua/plugins/nvim-treesitter.lua
+cat > nvim/lua/lang/zig.lua <<'LUA'
+-- Zig: zls checks, zig fmt formats
+---@type lang.Spec
+return {
+  filetypes = { "zig" },
+  parsers = { "zig" },
+  servers = { zls = {} },
+  formatters = { "zigfmt" },
+}
+LUA
 printf 'const std = @import("std");\n\npub fn main() void {\n    std.debug.print("hi\\n", .{});\n}\n' > tests/regress/fixtures/default/main.zig
 sed -i 's/^\(-- @needs .*\)$/\1 zls/' tests/regress/checks/lsp_attach.lua
 sed -i 's|"\.github/workflows/ci\.yml" }|".github/workflows/ci.yml", "main.zig" }|' tests/regress/checks/lsp_attach.lua

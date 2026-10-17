@@ -1,7 +1,7 @@
 {
   "skill_name": "language-tools",
   "harness": {
-    "seed": "seed.sh <clone dir under ~/.cache/skill-eval> <with-skill 0|1>",
+    "seed": "seed.sh <clone dir under ~/.cache/skill-eval> <with-skill 0|1>: a clone of the branch checked out where these scripts live, or of $EVAL_BRANCH",
     "check": "check-<id>.sh <clone dir>: one 'PASS|FAIL <id> <what> -- <evidence>' line per check, then 'GATE env OK|TOUCHED'",
     "gate": "the user's real mise is unchanged: sha256 of readlink -f ~/.config/mise/config.toml and md5 of the sorted ~/.local/share/mise/installs listing equal the values recorded in lib.sh; a TOUCHED gate voids the run, it is not scored",
     "validation": "validation/validate.sh [untouched|reference|wrong] [id]: untouched clone all FAIL, reference solution (validation/ref-<id>.sh) all PASS, each sibling wrong implementation (validation/wrong.sh list) FAILs its matching check"
@@ -44,7 +44,7 @@
         "yamlls still serves the Dependabot sub-filetype",
         "live: jactionlint reports dependabot-syntax on a bad .github/dependabot.yml, yamlls attaches there, and config.yml with the same text gets no jactionlint finding",
         "a regression check expects the Dependabot sub-filetype, and it passes with tools_subfiletypes, lint_jactionlint and startup",
-        "the decisions doc's File-scoped tools table and decision list, and the README, name the Dependabot sub-filetype",
+        "the decisions doc's File-scoped tools table and decision list, and CONTRIBUTING.md, name the Dependabot sub-filetype",
         "changed Lua passes stylua --check"
       ]
     }
