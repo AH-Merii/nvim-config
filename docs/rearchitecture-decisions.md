@@ -26,6 +26,7 @@ The full proposal, with its measurements and sources, was written outside the re
 - Built: step 2, `format/` and `linting/` ("Step 2: format/ and lint/" below).
 - Built: step 4b, neoblocks.nvim's statusline replaces lualine ("Step 4b: neoblocks statusline" below).
 - Built: step 3, `keys/`, with D49 ("Step 3: keys/" below).
+- Built: step 5, `features/`, with `lsp/`, `textobjects/` and the rest of `ui/` ("Step 5: features/" below).
 
 ## Target layout
 
@@ -936,3 +937,195 @@ label as desc, so `:map` and `<leader>sk` describe gated keys too (review found 
 lazy's `keys`). Wrong implementations for them each fail their check
 (`~/.cache/nvim-config/rearch/keys/suite-mutants/run.py <worktree> <regex>`): expr maps or plain maps losing their
 desc, a hidden row's spec filtered out, and the git needs' autocmds made once in config.
+
+## Step 5: features/ (2026-10-18)
+
+Built on `rearch/features` from `origin/main` baaae96 (steps 1 to 4b). Behaviour is unchanged. After each slice, a
+dump of the sandbox's state (lazy's plugins and their resolved opts, global and buffer maps, autocmds, commands,
+`keys.list()` rows, `keys.menu`, options, highlights, `vim.diagnostic.config()`, `vim.g`, namespaces) was compared
+with main's. It is a scratch check run as a suite `work/` check, so it is not in the branch. The differences that
+remain are listed under "What changed".
+
+**Built.**
+
+- `lua/features/`: one module per feature: editing, search, git, completion, folds, diagnostics, treesitter, windows,
+  files, lua_dev, lsp_status, profiling.
+- `lua/lsp/`: `init.lua` (was `core/lsp_servers.lua`), `buffer.lua` (was `core/lsp.lua`, now only what servers give
+  a buffer) and `pyrefly.lua`.
+- `lua/textobjects/`: was `config/textobjects.lua`.
+- `lua/ui/`:
+  - `theme.lua`: onedark and every override, and `palette()` for the statusline;
+  - `icons.lua`;
+  - `snacks.lua`: the picker and notifier options and patches;
+  - `statusline.lua`;
+  - `messages/`: was `config/ui2/`, moved as is.
+- `lua/keys/languages.lua`.
+- Language files now have a `keys` field. `lang/php.lua` is new and holds only php's labels.
+
+Gone: `plugins/`, `config/autocmds.lua`, `keymaps.lua`, `helpers.lua`, `utils.lua`, `config/ui2/`,
+`core/lsp.lua`, `core/lsp_servers.lua` and `after/ftplugin/`. Left: `config/options.lua` and `core/lazy.lua` (step 6).
+
+**Decisions.**
+
+- *A feature is `{ plugins = { lazy specs }, setup = fn }`,* as the proposal's card has it (`features/init.lua:4-13`).
+  - `setup()` makes the feature's rows, needs, autocmds and options. It runs once, from `init.lua`, before
+    `core.lazy`.
+  - Anything that needs a plugin goes in that plugin's spec (`config` or `init`), or in a callback given to
+    `require("features").at_very_lazy(fn)` (`features/init.lua:46-76`). The Snacks toggles are the main case: each
+    owner declares its own (`features/windows.lua:47`).
+  - Those callbacks run at `VeryLazy` after lazy's own listener, as main's snacks hook and `config.helpers` hook did,
+    so the plugins that load at `VeryLazy` are loaded first: conform, diffview, flash, mini.icons, neoblocks,
+    tiny-inline-diagnostic and which-key (the sandbox dump's `event` fields).
+    - Listeners run in the order they were made (`:h autocmd-define`), and lazy makes its listener inside
+      `lazy.setup` (`lazy/core/handler/event.lua:68`). `setup()` runs before that.
+    - So `at_very_lazy` queues each callback, and `init.lua` calls `features.after_lazy()` after `core.lazy` to make
+      the listeners.
+    - The review's probe (`~/.cache/nvim-config/rearch/features-review/probes/verylazy.lua`, run at the end of `init.lua`) lists
+      `lazy_handler_event`, then six `features.very_lazy` listeners. Main lists `lazy_handler_event`, then
+      `SnacksUserAutocmds`, then `init.lua`'s helpers hook.
+    - The first build made the listeners in `setup()` itself, so they ran before lazy's. Review found that.
+  - Autocmds go in a `features.<name>` augroup. `lsp/init.lua` uses `lsp` and `lsp/buffer.lua` uses `lsp.buffer`.
+    These replace main's `UserAutocmds`, `CursorLine`, `SnacksGitKeys`, `PRReviewKeys`, `UserTreesitter`,
+    `core.lsp_servers` and `core.lsp.linked_editing`. The tmux TermOpen autocmd had no group on main and is now in
+    `features.windows`.
+  - Rejected:
+    - Features declaring their rows at module level. `features.plugins()` requires every module to collect specs,
+      so collecting would then also make keys.
+    - A `keys` field per feature for a central loop. Rows that need a plugin, or need to be declared at
+      `VeryLazy`, would still be made elsewhere, so the field would not be the only place.
+- *Adapters bring their plugin's spec as a `plugins` field.* These are the modules that wrap a plugin:
+  - `ui.theme`, `ui.icons`, `ui.snacks`, `ui.statusline`;
+  - `lsp` (nvim-lspconfig);
+  - `format.conform`, `linting.nvim_lint`;
+  - `keys.which_key`.
+
+  They have no `setup` in the features loop: the plugin's `config` calls theirs. `features/init.lua` lists them in
+  `M.adapters`, and `features.plugins()` returns their specs first, then the features' specs. lazy merges a later
+  fragment over an earlier one (`lazy/core/plugin.lua:441-453`), so diagnostics' trouble actions for the snacks
+  picker merge over `ui/snacks.lua`'s opts, as they did when trouble's spec file sorted after snacks'.
+- *Rows live with their owner:* in a feature's `setup()`, in a plugin's spec, in `lsp/buffer.lua`, or in a language
+  file's `keys` (below).
+  - The popup doesn't depend on the order rows are declared: which-key sorts by `local, order, group, alphanum, mod`,
+    and `order` only applies to plugin items (`which-key/node.lua:134`).
+  - A `<leader>` row still needs mapleader first (`config.options` before every row).
+- *Setup order is the list order in `M.features`.* Nothing in it depends on another feature at setup, since a need is
+  read when a key is used, not when it is declared (`keys/init.lua:15`). The FileType autocmds that two features make
+  touch different things: editing's mail, prose and commentstring (`features/editing.lua:436-465`), and windows' `q`
+  (`features/windows.lua:71`).
+- *Autocmd order within an event changed in three places.* Each change is harmless; the dump sorts autocmds, so it
+  can't show order, and the review's `order.lua` probe can.
+  - FileType: main ran mail, then `q` close, then prose and commentstring, all from `config/autocmds.lua`. Now
+    editing's three run before windows' `q`, and the `keys.language` listener follows them. They set different
+    things.
+  - BufReadPost: `features.git`'s file lookup now runs before `nvim.diagnostic.buf_load`. Neovim makes that listener
+    when `vim.diagnostic` is first required, and on main `core/lsp.lua` required it first. The two don't share
+    state.
+  - Plugin-made listeners (ColorScheme's MiniIcons and the statusline groups; FileType's `lsp` and
+    `features.treesitter`) follow the order lazy loads startup plugins. That is `pairs()` over its plugin table
+    (`lazy/core/loader.lua:163`), and it varies from run to run on main too: three probe runs of main gave three
+    ColorScheme orders.
+- *`core/lazy.lua` gets one list:* `require("lazy").setup(require("features").plugins(), opts)`. Before, it imported
+  `plugins/`.
+  - This also removes step 3's re-run hazard. lazy reloads an imported spec module after an install or update
+    (`package.loaded[modname] = nil`, `lazy/core/plugin.lua:184`), and a module that made state or autocmds made them
+    twice. A table spec is parsed again without running any module code.
+  - So snacks' config no longer looks up the buffers loaded before it. That lookup covered the re-run, and at
+    startup no file is loaded yet: Neovim loads the windows' buffers after the user config
+    (`runtime/doc/starting.txt:555-560`).
+  - `checks/keys_spec_reload.lua` still passes, unedited.
+  - lazy's `change_detection` would now start no timer, since it only watches imported modules
+    (`lazy/manage/reloader.lua:18`, `#Config.spec.modules > 0`), so its setting is dropped from `core/lazy.lua`. On
+    main it reloaded the spec when a file under `plugins/` changed. Now a spec edit takes `ZR` (`:restart`, which
+    keeps the session), the safe choice anyway given the reload's re-run hazard. CONTRIBUTING says so.
+  - For step 6, `features.plugins()` is the seam: an `app/` phase can hand the same list to lazy or to a vim.pack
+    adapter (D45).
+- *The module cache is enabled first* (`init.lua:1-3`, `vim.loader.enable()`).
+  - lazy enables it in its setup (`lazy/init.lua:61-70`). On main every spec file loaded after that, byte-compiled.
+    The feature modules now load before lazy's setup and were parsed from source each start: about 3 ms slower than
+    main.
+  - Enabling it earlier is idempotent, so lazy's own call returns early (`runtime/lua/vim/loader.lua:437-438`).
+  - Rejected: requiring the features after `lazy.setup`. The specs have to be collected before it.
+- *Language keys (D46).*
+  - The runtime ftplugins' labels in `keys/neovim.lua` are now `keys` rows in `lang/go.lua`, `markdown.lua`,
+    `php.lua`, `python.lua` and `rust.lua`. Each language's `keys.filetypes` limits its rows to the ftplugin's
+    filetype.
+  - `lang.views().keys` gives each filetype its rows, and variants get none (tested in `tests/unit/lang_test.lua`).
+    `keys/languages.lua` passes them to `keys.language(ft)`.
+  - php has no tools. Its language file exists only for these labels; the alternative was keeping a php table in
+    `keys/neovim.lua`.
+- *`after/ftplugin/lua.lua` and `vim.lua` are lua-dev's keys,* not language facts. They are now
+  `keys.language("lua")` and `keys.language("vim")` rows in `features/lua_dev.lua`, with the same rhs, desc and
+  `silent = false`.
+  - Their buffer maps in a Lua buffer are identical in the dump. `keys_source_file`, `wk_ftplugin_labels` and
+    `bufmaps` pass.
+  - lua-dev's label-less `<leader>!` row, which only gave an icon, is dropped. The popup never showed the icon: the
+    ftplugin map's own desc won both label and icon (`keys/init.lua:614-615`, and main's dump lists
+    `menu n { label = "Execute current line", lhs = "<Space>!" }`).
+- *textobjects asks `keys.which_key.presets()`* for which-key's preset labels (`keys/which_key.lua:109`), so
+  `keys/which_key.lua` is again the only file that requires which-key.
+- *ui/theme owns the colorscheme and every override.*
+  - The overrides are in onedark's `highlights`, which onedark applies again on each load, `:colorscheme onedark`
+    included (card 12).
+  - The statusline's `Statusline*` groups stay in `ui/statusline.lua`, redefined on ColorScheme
+    (`ui/statusline.lua:162`). They are the statusline's own groups, not overrides, and they read
+    `ui.theme.palette()`.
+  - `lsp/buffer.lua:143` makes `default = true` groups for each document colour. They are data, not theme.
+- *Adjustments to the proposal's feature list.*
+  - treesitter is a feature: it owns nvim-treesitter's spec, its parsers and its need.
+  - The LSP keys and what servers give a buffer stay in `lsp/buffer.lua`, beside the server lifecycle, rather than
+    in a feature.
+  - pyrefly's type-error switch is `lsp/pyrefly.lua`. Its two callers are `lang/python.lua`'s `on_init` and the
+    `<leader>Te` toggle.
+  - search covers "search and jump". files covers writing, quitting, scratch buffers, renaming and the Ghostty check.
+  - editing also has the todo-comments spec and the yank highlight.
+
+**What didn't fit, kept as is.**
+
+- *The text-object dispatch* stays a global expr map per key in `textobjects/`. A key row hides a key where its need
+  fails, but a text-object key must stay listed with its own meaning there. The presses and the labels also judge
+  "acts" at different precision.
+- *textobjects has no `plugins` field.* It wraps `nvim-treesitter-textobjects.shared` when it loads
+  (`textobjects/init.lua:161-162,256-257`), and collecting specs would load it before the plugin is on the
+  runtimepath. The dependency stays in `features/treesitter.lua:59`.
+- *The FileType `q` close* stays an autocmd in `features/windows.lua:72`, not language rows. The runtime's man
+  ftplugin and checkhealth map `q` themselves (`runtime/ftplugin/man.vim:29`, `runtime/lua/vim/health.lua:474`), and
+  the list includes non-language buffers (help, qf, lspinfo). `[Output]`'s `q` is a map on a scratch buffer in
+  `ui/messages/messages.lua:149`.
+- *Per-filetype options stay FileType autocmds in editing,* not language `options`.
+  - Terraform's `commentstring` covers `terraform` and `hcl`, while `lang/terraform.lua` covers `terraform`,
+    `terraform-vars` and `tf`, and no language has `hcl`.
+  - The prose options cover gitcommit, oil, text, tex and NeogitCommitMessage, which have no language files.
+  - The tsconfig and dotenv filetype rules stay in `config/options.lua` (step 6).
+- *The `<leader>Te` toggle* stays in `lsp/buffer.lua`, not `lang/python.lua`. It is a Snacks toggle made at
+  `VeryLazy`, which a language file's data can't hold.
+- *Two unmapped helpers are kept:* `features.files.toggle_go_test()` and `features.git.copyFilePathAndLineNumber()`.
+  They were unmapped on main too. Run them with `:lua`.
+
+**What changed.**
+
+- *lazy `init` flags:* which-key gained one, for its `<leader>?` row. origami, tmux-navigator and PR review lost
+  theirs, since their options and rows moved to their features' `setup()`.
+- *Augroups:* renamed as above.
+  - snacks' single `VeryLazy` hook became one `features.very_lazy` listener per owner, still after lazy's.
+  - `keys.language` gained the FileType autocmd for lua-dev's rows.
+- *Autocmd order* within FileType and BufReadPost (above).
+- *The runtimepath* no longer has `config/nvim/after`, since the directory is gone.
+
+**Checks edited (call sites only).**
+
+- `checks/showcmd_pending.lua`: `require("ui.messages.showcmd")`.
+- `work/ui2-noice/ui2_noice.sh`: the module path.
+- `tests/regress/refresh.lua`: reads `lua/features/treesitter.lua` for the parser list (infrastructure, not a check).
+
+**Cost.** Startup in the regress sandbox, headless with no file (cwd the default fixture), `--startuptime`,
+interleaved rounds of 9
+(`~/.cache/nvim-config/rearch/features/bench/startup.sh`):
+
+| Config | Pooled median | Rounds |
+| --- | --- | --- |
+| main | 95.1 ms | 3 × 9 |
+| this branch | 83.8 ms | 3 × 9 |
+| main with `vim.loader.enable()` added first | 83.6 ms | 3 × 9 |
+| this branch before that line | 97.5 ms | 9 × 9, against main's 93.2 ms over 9 × 9 |
+
+The branch matches main on equal footing, and the gain is the cache.
