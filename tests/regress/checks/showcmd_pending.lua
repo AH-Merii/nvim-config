@@ -2,7 +2,7 @@
 -- @areas    ui
 -- @budget   10
 -- Headless no UI is attached, so ui2 and the hook are off; this checks the rule the hook applies.
-local visible = require("config.ui2.showcmd").visible
+local visible = require("ui.messages.showcmd").visible
 local cases = {
   { "w", "" }, { "j", "" }, { "^D", "" }, { "^U", "" }, { "p", "" }, { "x", "" },
   { "5", "5" }, { "d", "d" }, { "c", "c" }, { "y", "y" }, { ">", ">" }, { '"', '"' }, { "f", "f" }, { "r", "r" },

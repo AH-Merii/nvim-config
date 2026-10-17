@@ -176,7 +176,7 @@ local function uninstall(err)
   ui.cmd.cmdline_show, ui.cmd.cmdline_hide = orig_show, orig_hide
   pcall(restore)
   vim.schedule(
-    function() vim.notify("ui2 cmdline popup disabled, using plain ui2: " .. tostring(err), vim.log.levels.WARN, { title = "config.ui2.cmdline" }) end
+    function() vim.notify("ui2 cmdline popup disabled, using plain ui2: " .. tostring(err), vim.log.levels.WARN, { title = "ui.messages.cmdline" }) end
   )
 end
 
