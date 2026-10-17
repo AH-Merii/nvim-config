@@ -120,8 +120,6 @@ local function add(list, name)
   end
 end
 
-local role_words = { server = "lsp", formatter = "formatter", linter = "linter" }
-
 --- The catalog binaries buf's filetype runs (servers, formatters, linters, and what they call), and per binary its
 --- roles there in plain words, e.g. { "lsp", "formatter", "linter" }.
 ---@param buf integer
@@ -131,23 +129,7 @@ local function needed(buf)
   if not found then
     return {}, {}, {}
   end
-  local names, roles = {}, {}
-  for _, role in ipairs({ { "server", found.servers }, { "formatter", found.formatters }, { "linter", found.linters } }) do
-    for _, name in ipairs(role[2]) do
-      local bin = catalog.binary(role[1], name)
-      -- Names outside the catalog (conform's trim_whitespace, ...) are not binaries mise provides
-      if bin then
-        add(names, bin)
-        roles[bin] = roles[bin] or {}
-        add(roles[bin], role_words[role[1]])
-        for _, required in ipairs(catalog.tools[bin].requires or {}) do
-          add(names, required)
-          roles[required] = roles[required] or {}
-          add(roles[required], "used by " .. name)
-        end
-      end
-    end
-  end
+  local names, roles = catalog.needed(found)
   return names, roles, found.servers
 end
 

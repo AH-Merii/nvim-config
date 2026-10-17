@@ -145,6 +145,40 @@ function M.servers()
   return names
 end
 
+local role_words = { server = "lsp", formatter = "formatter", linter = "linter" }
+
+--- The catalog binaries a filetype's tools run: its servers', formatters' and linters' binaries and what each calls
+--- (requires), and per binary its roles there in plain words, e.g. { "lsp", "formatter", "linter" } or
+--- { "used by bashls" }. Names outside the catalog (conform's trim_whitespace, ...) are not binaries mise provides.
+---@param found lang.Answer
+---@return string[] names, table<string, string[]> roles
+function M.needed(found)
+  local names, roles = {}, {}
+  ---@param list string[]
+  ---@param name string
+  local function add(list, name)
+    if not vim.list_contains(list, name) then
+      table.insert(list, name)
+    end
+  end
+  for _, role in ipairs({ { "server", found.servers }, { "formatter", found.formatters }, { "linter", found.linters } }) do
+    for _, name in ipairs(role[2]) do
+      local bin = by_role[role[1]][name]
+      if bin then
+        add(names, bin)
+        roles[bin] = roles[bin] or {}
+        add(roles[bin], role_words[role[1]])
+        for _, required in ipairs(M.tools[bin].requires or {}) do
+          add(names, required)
+          roles[required] = roles[required] or {}
+          add(roles[required], "used by " .. name)
+        end
+      end
+    end
+  end
+  return names, roles
+end
+
 --- Args that follow the binary in a server's cmd.
 ---@param server string
 ---@return string[]?
