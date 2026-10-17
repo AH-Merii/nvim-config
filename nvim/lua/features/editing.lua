@@ -313,4 +313,54 @@ table.insert(specs, {
   opts = {},
 })
 
-return { plugins = specs }
+local M = { plugins = specs }
+
+function M.setup()
+  -- Its toggles, once snacks is loaded: a press flips one, says so, and its label in the popup follows it
+  require("features").at_very_lazy(function()
+    local function indent_view_toggle(n_wide, n_compact)
+      -- defaults if not provided
+      n_wide = n_wide or 8 -- wide visual tab view
+      n_compact = n_compact or 2 -- canonical indent
+
+      return Snacks.toggle({
+        name = "Indent View (tabstop)",
+        get = function() return vim.bo.tabstop == n_wide end,
+        set = function(state)
+          if state then
+            vim.bo.tabstop = n_wide
+          else
+            vim.bo.tabstop = n_compact
+          end
+
+          -- keep semantics stable
+          vim.bo.shiftwidth = n_compact
+          vim.bo.softtabstop = n_compact
+
+          vim.notify(
+            string.format("Indent View: tabstop=%d (shiftwidth=%d, softtabstop=%d)", vim.bo.tabstop, vim.bo.shiftwidth, vim.bo.softtabstop),
+            vim.log.levels.INFO,
+            { title = "Snacks" }
+          )
+        end,
+      })
+    end
+
+    require("keys").feature("editing")({
+      { "<leader>Ts", toggle = Snacks.toggle.option("spell", { name = "Spell Checking" }) },
+      { "<leader>Tw", toggle = Snacks.toggle.option("wrap", { name = "Wrap" }) },
+      {
+        "<leader>Tm",
+        toggle = Snacks.toggle.option("conceallevel", {
+          name = "Markup Details",
+          off = 0,
+          on = vim.o.conceallevel > 0 and vim.o.conceallevel or 2,
+          wk_desc = { enabled = "Conceal ", disabled = "Show " },
+        }),
+      },
+      { "<leader>Ti", toggle = indent_view_toggle() },
+    })
+  end)
+end
+
+return M

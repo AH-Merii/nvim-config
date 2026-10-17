@@ -19,12 +19,14 @@ lua/features/completion.lua       completion
 lua/keys/*                        keys which-key lsp git lint format treesitter
 lua/textobjects/*                 treesitter keys which-key
 lua/features/editing.lua          editing keys which-key
-lua/features/diagnostics.lua      ui lsp
-lua/ui/snacks.lua                 ui keys git
-lua/features/search.lua           keys editing
+lua/features/diagnostics.lua      ui lsp keys
+lua/ui/snacks.lua                 ui keys
+lua/features/search.lua           keys editing which-key
 lua/features/windows.lua          keys editing
 lua/features/folds.lua            editing treesitter
 lua/features/lua_dev.lua          editing lsp
+lua/features/files.lua            keys editing
+lua/features/profiling.lua        keys
 lua/config/keymaps.lua            keys which-key
 lua/config/options.lua            editing ui
 lua/config/autocmds.lua           editing ui
