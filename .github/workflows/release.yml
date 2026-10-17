@@ -41,7 +41,9 @@ jobs:
       # Auto-merge waits for the checks main requires; with none required it merges right away.
       - name: Merge the release PR when its checks pass
         if: steps.release.outputs.pr
+        # The PR comes in as JSON text: GitHub evaluates a step's env even when its `if` is false, so fromJSON here
+        # would fail every run that opens no release PR.
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
-          PR: ${{ fromJSON(steps.release.outputs.pr).number }}
-        run: gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --squash --auto
+          PR_JSON: ${{ steps.release.outputs.pr }}
+        run: gh pr merge "$(jq -r .number <<<"$PR_JSON")" --repo "$GITHUB_REPOSITORY" --squash --auto
