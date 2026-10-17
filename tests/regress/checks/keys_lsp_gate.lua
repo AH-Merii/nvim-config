@@ -393,14 +393,17 @@ info("gained with every method: " .. table.concat(gained, ", "))
 expect(#gained > 0, "a server with every method brings keys")
 expect(#unknown == 0, "every key a server brings is judged here or by its own check; not judged: %s", table.concat(unknown, ", "))
 
-section("gr* with no server: Vim's gr{char}")
--- D49 turns this into a message naming the missing need; until then gr{char} replaces the character under the cursor
+section("gr* with no server: a message naming the missing need")
+-- D49: Vim's gr{char} would replace the character under the cursor; the key says which method no server supports
 local b6 = scratch("grchar.sbxfake")
 for _, key in ipairs(KEYS) do
   if key[1]:match("^gr.$") and (key.mode or "n") == "n" then
+    vim.cmd("messages clear")
     local r = press(b6, key, false)
-    local char = key[1]:sub(3)
-    expect(not r.acted and r.text == "z = " .. char, "%s replaces the x under the cursor with %s (line 3 now %q)", key[1], char, tostring(r.text))
+    local said = vim.api.nvim_exec2("messages", { output = true }).output
+    local named = said:find(key.need[1], 1, true) ~= nil
+    expect(not r.acted and r.text == "z = x", "%s leaves the x under the cursor (line 3 now %q)", key[1], tostring(r.text))
+    expect(named, "%s says it needs %s (said: %q)", key[1], key.need[1], said)
   end
 end
 
