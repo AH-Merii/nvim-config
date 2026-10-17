@@ -1,4 +1,4 @@
--- @desc     format_buffer (<leader>lf) formats with the planned formatter, reports no-ops and missing formatters, and shows the formatter's own error text
+-- @desc     format.buffer (<leader>lf) formats with the planned formatter, reports no-ops and missing formatters, and shows the formatter's own error text
 -- @areas    format lsp
 -- @budget   40
 -- @needs    stylua terraform-ls
@@ -8,10 +8,10 @@ local harness_notify, real_format = vim.notify, c.format
 local notes = {}
 vim.notify = function(msg, level, opts) table.insert(notes, { msg = tostring(msg), level = level, title = opts and opts.title }) end
 
--- format_buffer is async; its single notification is the result
-local function run(buf, args)
+-- format.buffer is async; its single notification is the result
+local function run(buf)
   notes = {}
-  c.format_buffer(vim.tbl_extend("force", { async = true, bufnr = buf }, args or {}))
+  require("format").buffer(buf, { async = true })
   wait_until(function() return #notes > 0 end, 10000)
   return notes[1] or { msg = "no notification", level = -1 }
 end

@@ -1,11 +1,13 @@
 -- What applies to each buffer, for whatever shows it (the statusline, the tools indicator, :Status): the servers
--- running, the formatters and linters that will run, the missing tools, the tools root and the git checkout. Built
--- from lang.of, the tool resolver's results, vim.lsp's clients and vim.fs.root, never from conform's or nvim-lint's
--- tables. Each buffer's facts are cached until an event that can change them; User FactsChanged (M.event, data
+-- running, the formatters and linters that will run, the missing tools, the tools root and the git checkout. What
+-- will run is format.plan(buf).run and linting.plan(buf).run; the rest comes from lang.of, the tool resolver's
+-- results, vim.lsp's clients and vim.fs.root. Each buffer's facts are cached until an event that can change them; User FactsChanged (M.event, data
 -- { buf }) fires once when they did, so a statusline redraws once. A read is a table lookup.
 
 local tools = require("tools")
 local catalog = require("tools.catalog")
+-- Required here so their plan caches drop on an event before these facts' handlers read the plans again
+local format, linting = require("format"), require("linting")
 
 local M = {}
 
@@ -20,7 +22,6 @@ M.event = "FactsChanged"
 ---@field missing string[] catalog binaries the buffer's tools run that the resolver did not find
 ---@field unanswered boolean the root's project mise config waits for the project prompt's answer
 
-local lang = require("lang") ---@type { of: fun(ft: string): lang.Answer? }
 local cache = {} ---@type table<integer, ui.Facts> buf -> its facts
 local stale = {} ---@type table<integer, true> buffers whose cached facts an event may have changed
 local before = {} ---@type table<integer, ui.Facts> buf -> its facts when it went stale, until the next flush
@@ -42,25 +43,6 @@ local function running(buf)
   return names
 end
 
---- What will run on buf: the formatters and linters its language names whose binaries the resolver found (a name
---- outside the catalog always runs), less each linter whose covering server is running. Step 2's format.plan(buf).run
---- and linting.plan(buf).run answer this; switching to them replaces this body.
----@param buf integer
----@param found lang.Answer
----@param root string
----@param servers string[] running(buf)
----@return string[] formatters, string[] linters
-local function plan(buf, found, root, servers)
-  ---@param role "formatter"|"linter"
-  local function found_bin(role, name)
-    local bin = catalog.binary(role, name)
-    return not bin or (tools.get(bin, root) or {}).path ~= nil
-  end
-  local formatters = vim.tbl_filter(function(name) return found_bin("formatter", name) end, found.formatters)
-  local linters = vim.tbl_filter(function(name) return not vim.list_contains(servers, found.covered_by[name]) and found_bin("linter", name) end, found.linters)
-  return formatters, linters
-end
-
 --- The git checkout buf's folder is in: a .git dir or file above it (a linked worktree has a file), nil outside one.
 ---@param buf integer
 ---@return string?
@@ -74,7 +56,7 @@ local touch ---@type fun(buf: integer)
 ---@param buf integer
 ---@return ui.Facts
 local function compute(buf)
-  local found = lang.of(vim.bo[buf].filetype)
+  local found = require("lang").of(vim.bo[buf].filetype)
   local root = tools.root(buf)
   local facts = { root = root, servers = running(buf), formatters = {}, linters = {}, missing = {} } ---@type ui.Facts
   facts.repo = repo_of(buf)
@@ -90,7 +72,7 @@ local function compute(buf)
     end
   end
   if found then
-    facts.formatters, facts.linters = plan(buf, found, root, facts.servers)
+    facts.formatters, facts.linters = format.plan(buf).run, linting.plan(buf).run
   end
   local project = tools.project(root)
   facts.unanswered = project ~= nil and #project.configs > 0 and project.choice == nil
@@ -156,11 +138,8 @@ function M.get(buf)
   return cache[buf]
 end
 
---- Drops every cached answer and (re)makes the handlers that mark facts stale. opts.lang, for tests, replaces the
---- language registry (lang._from(specs)).
----@param opts? { lang?: { of: fun(ft: string): lang.Answer? } }
-function M.setup(opts)
-  lang = opts and opts.lang or require("lang")
+--- Drops every cached answer and (re)makes the handlers that mark facts stale.
+function M.setup()
   cache, stale, before, detaching, waiting = {}, {}, {}, {}, {}
   local group = vim.api.nvim_create_augroup("ui.facts", { clear = true })
   local au = vim.api.nvim_create_autocmd

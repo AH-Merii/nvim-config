@@ -27,25 +27,23 @@ local M = {}
 ---@field method? string|string[] the buffer gets the map while an attached client supports any of these
 ---@field when? fun(buf: integer, clients: vim.lsp.Client[]): boolean the buffer also gets the map while this holds
 
--- A formatter the filetype's language names counts before its tool is installed
----@param buf integer
-local function has_formatter(buf)
-  local found = require("lang").of(vim.bo[buf].filetype)
-  return found ~= nil and #found.formatters > 0
-end
+-- Loaded here, at startup, so their plans are dropped on attach, detach and ToolsChanged before any other handler
+-- reads them (the statusline's)
+local formatting, linting = require("format"), require("linting")
 
-local function format() require("conform").format_buffer({ async = true, quiet = false }) end
+-- The "formatter" need: a formatter the filetype's language names, installed or not, or an attached client that
+-- formats (a range, in visual mode)
+---@param buf integer
+local function has_formatter(buf) return formatting.has(buf) end
+---@param buf integer
+local function has_range_formatter(buf) return formatting.has(buf, true) end
+
+local function format() formatting.buffer() end
 
 -- Diagnostics come from attached clients, and from the linters the filetype's language names
 ---@param buf integer
 ---@param clients vim.lsp.Client[]
-local function has_diagnostics(buf, clients)
-  if #clients > 0 then
-    return true
-  end
-  local found = require("lang").of(vim.bo[buf].filetype)
-  return found ~= nil and #found.linters > 0
-end
+local function has_diagnostics(buf, clients) return #clients > 0 or linting.has(buf) end
 
 ---@param clients vim.lsp.Client[]
 local function has_pyrefly(_, clients)
@@ -82,9 +80,9 @@ M.keys = {
   { "<leader>Th", method = "textDocument/inlayHint" },
   { "<leader>Tc", method = "textDocument/codeLens" },
   { "<leader>Te", when = has_pyrefly },
-  { "<leader>lf", format, desc = "Format buffer", method = "textDocument/formatting", when = has_formatter },
-  { "<leader>lf", format, mode = "x", desc = "Format selection", method = "textDocument/rangeFormatting", when = has_formatter },
-  { "<leader>Tf", method = "textDocument/formatting", when = has_formatter },
+  { "<leader>lf", format, desc = "Format buffer", when = has_formatter },
+  { "<leader>lf", format, mode = "x", desc = "Format selection", when = has_range_formatter },
+  { "<leader>Tf", when = has_formatter },
   { "<leader>xX", "<cmd>Trouble diagnostics toggle filter.buf=0<cr>", desc = "Buffer Diagnostics (Trouble)", when = has_diagnostics },
   { "<leader>sd", function() Snacks.picker.diagnostics_buffer() end, desc = "Diagnostics (Buffer)", when = has_diagnostics },
   { "<leader>sS", function() Snacks.picker.lsp_workspace_symbols() end, desc = "Workspace symbols", method = "workspace/symbol" },

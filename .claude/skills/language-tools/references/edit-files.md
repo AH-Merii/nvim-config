@@ -15,7 +15,7 @@ Work down the table. For each row, either make the edit or note why it does not 
 | 5 | `nvim/lua/lang/<lang>.lua`, `variants` | The tool runs only on some files of a filetype | `sub-filetypes.md` |
 | 6 | `nvim/lua/lang/<lang>.lua`, `parsers` | A new language with a tree-sitter parser | Treesitter |
 | 7 | `nvim/lua/core/lsp_servers.lua`, `roots` | nvim-lspconfig's `root_dir` runs the tool from PATH or checks its version | Custom root |
-| 8 | `nvim/lua/plugins/conform.lua`, `nvim/lua/plugins/nvim-lint.lua` | Only a formatter's extra args, or a definition conform or nvim-lint lacks | Formatter, Linter |
+| 8 | `definitions` in `nvim/lua/format/conform.lua` or `nvim/lua/linting/nvim_lint.lua` | Only a formatter's extra args, or a definition conform or nvim-lint lacks | Formatter, Linter |
 
 You never edit these: `:Tools`, the install prompts, lualine, `:Status`, `nvim/lua/plugins/lspconfig.lua`, conform's `formatters_by_ft`, nvim-lint's `linters_by_ft`, the server list. They are built from, or ask, `nvim/lua/lang/` (`lang.views()`, `lang.of()`).
 
@@ -107,7 +107,7 @@ A `root_dir` that runs the language's toolchain (`go env`, `cargo metadata`) alr
 
 ## Formatter
 
-List conform names under `formatters`, in the order they run. The value **must be a plain list of names**; conform's own function form and nested alternatives are not supported (the adapter loop in `nvim/lua/plugins/conform.lua` wires each name to the resolver).
+List conform names under `formatters`, in the order they run. The value **must be a plain list of names**; conform's own function form and nested alternatives are not supported (the adapter loop in `nvim/lua/format/conform.lua` wires each name to the resolver).
 
 To pick a formatter per file, use a variant (`sub-filetypes.md`). That is how the old pyproject.toml chooser function was replaced.
 
@@ -122,17 +122,15 @@ Before and after for gofumpt (`nvim/lua/lang/go.lua`):
 
 `filetypes` on the list limits it to some of the language's filetypes (Go formats only `go`; `gomod` falls back to LSP formatting).
 
-- **Extra args** still go under `opts.formatters.<name>` in `nvim/lua/plugins/conform.lua`. The resolver wrapper keeps them (the `tbl_extend` in `conform.lua`'s config):
+- **Extra args** go under `definitions.<name>` in `nvim/lua/format/conform.lua`, by tool rather than by language (conform keys formatters by name for every filetype). The resolver wrapper keeps them (the `tbl_extend` in `M.setup`):
 
   ```lua
-    formatters = {
-      shfmt = {
-        prepend_args = { "-i", "2", "-kp" },
-      },
-    },
+  local definitions = {
+    shfmt = { prepend_args = { "-i", "2", "-kp" } },
+  }
   ```
 
-- **A formatter conform does not ship** needs a full definition under `opts.formatters.<name>` (`command = "<bare binary name>"`, `args`, `stdin`), plus its catalog entry. The wrapper replaces `command` with the resolved path. Check first that no conform file runs the same binary (`grep -l 'command = "<binary>"' $L/conform.nvim/lua/conform/formatters/*.lua`): if one does, use its name. `check.sh` fails on a definition that duplicates a built-in.
+- **A formatter conform does not ship** needs a full definition under `definitions.<name>` in `nvim/lua/format/conform.lua` (`command = "<bare binary name>"`, `args`, `stdin`), plus its catalog entry. The wrapper replaces `command` with the resolved path. Check first that no conform file runs the same binary (`grep -l 'command = "<binary>"' $L/conform.nvim/lua/conform/formatters/*.lua`): if one does, use its name. `check.sh` fails on a definition that duplicates a built-in.
 
 ## Linter
 
@@ -152,11 +150,11 @@ Before and after for gofumpt (`nvim/lua/lang/go.lua`):
      linters = { ruff = { covered_by = "ruff" } },
    ```
 
-   The linter then stays quiet while that server is attached (`tools.lint.covering_server` is built from these). Leave it out when the server's diagnostics are different rules from the linter's: for example, yamlls and yamllint.
-3. **No nvim-lint definition?** Only then write one. Check both the name and the binary: `ls $L/nvim-lint/lua/lint/linters/<name>.lua` and `grep -l "cmd = .<binary>." $L/nvim-lint/lua/lint/linters/*.lua`. If either finds a file, use that linter's name and don't define `lint.linters.<name>`; to change its args, set `lint.linters.<name>.args` on the built-in. If both are empty, define one inline, as jactionlint is (`lint.linters.jactionlint` in `nvim-lint.lua`). Set `cmd` to the **bare binary name**; `wrap_linter` in `nvim-lint.lua` swaps in the resolved path. Write the parser for the JSON the tool prints, which you saw in `verify.md` section 2:
+   The linter then stays quiet while that server is attached (`linting.plan(buf).covered` reads them). Leave it out when the server's diagnostics are different rules from the linter's: for example, yamlls and yamllint.
+3. **No nvim-lint definition?** Only then write one. Check both the name and the binary: `ls $L/nvim-lint/lua/lint/linters/<name>.lua` and `grep -l "cmd = .<binary>." $L/nvim-lint/lua/lint/linters/*.lua`. If either finds a file, use that linter's name and don't define one of your own; to change its args, put only `args` under `definitions.<name>` in `nvim/lua/linting/nvim_lint.lua`, which is merged over the built-in. If both are empty, define it under `definitions` in `nvim/lua/linting/nvim_lint.lua`, as jactionlint is. Set `cmd` to the **bare binary name**; `wrap_linter` in `M.lint` there swaps in the resolved path. Write the parser for the JSON the tool prints, which you saw in `verify.md` section 2:
 
    ```lua
-       lint.linters.jactionlint = {
+       jactionlint = {
          cmd = "jactionlint",
          stdin = true,
          args = { "--format", "{{json .}}", "--profile", "correctness", "--stdin-filename", function() return vim.api.nvim_buf_get_name(0) end, "-" },
@@ -166,8 +164,8 @@ Before and after for gofumpt (`nvim/lua/lang/go.lua`):
    ```
 
 4. **Rare cases:**
-   - `keep_cwd[name] = true` in `nvim-lint.lua` is for a parser that matches paths relative to Neovim's cwd (tflint).
-   - Rebuild a linter's args per resolved binary when its nvim-lint module runs the tool from PATH while loading. golangcilint does this (`golangcilint_args` in `nvim-lint.lua`); read the module's top lines to check.
+   - `keep_cwd[name] = true` in `nvim/lua/linting/nvim_lint.lua` is for a parser that matches paths relative to Neovim's cwd (tflint).
+   - Rebuild a linter's args per resolved binary when its nvim-lint module runs the tool from PATH while loading. golangcilint does this (`golangcilint_args` in `nvim/lua/linting/nvim_lint.lua`); read the module's top lines to check.
 
 ## Treesitter
 

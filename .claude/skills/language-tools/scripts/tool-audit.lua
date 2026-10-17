@@ -38,8 +38,8 @@ for _, name in ipairs(catalog.servers()) do
 end
 
 -- conform and nvim-lint set these in their config(); empty means that config raised an error
-check(next(conform.formatters_by_ft) ~= nil, "conform's formatters_by_ft is empty: lua/plugins/conform.lua config() raised an error")
-check(next(lint.linters_by_ft) ~= nil, "nvim-lint's linters_by_ft is empty: lua/plugins/nvim-lint.lua config() raised an error")
+check(next(conform.formatters_by_ft) ~= nil, "conform's formatters_by_ft is empty: lua/format/conform.lua setup() raised an error")
+check(next(lint.linters_by_ft) ~= nil, "nvim-lint's linters_by_ft is empty: lua/linting/nvim_lint.lua setup() raised an error")
 
 -- The plugins' built-in definitions, by command. Read as text: loading some of them runs the tool.
 local function builtins(glob, field)
@@ -72,10 +72,10 @@ for ft, names in pairs(conform.formatters_by_ft) do
         local def = conform.formatters[name]
         local cmd = type(def) == "table" and type(def.command) == "string" and vim.fs.basename(def.command) or bin
         local dup = not builtin_fmt[name] and cmd and fmt_by_cmd[cmd]
-        check(not dup, "formatter %s is a definition of the config's own, but conform's built-in %s already runs %s: use that name in lua/lang/ and the catalog, and delete opts.formatters.%s (lua/plugins/conform.lua)",
+        check(not dup, "formatter %s is a definition of the config's own, but conform's built-in %s already runs %s: use that name in lua/lang/ and the catalog, and delete definitions.%s (lua/format/conform.lua)",
           name, table.concat(dup or {}, "/"), cmd or "", name)
         check(not (builtin_fmt[name] and type(def) == "table" and def.inherit == false),
-          "opts.formatters.%s replaces conform's built-in definition (inherit = false): override only what differs, e.g. prepend_args", name)
+          "definitions.%s (lua/format/conform.lua) replaces conform's built-in definition (inherit = false): override only what differs, e.g. prepend_args", name)
       end
     end
   end
@@ -86,15 +86,14 @@ end
 for ft, names in pairs(lint.linters_by_ft) do
   for _, name in ipairs(names) do
     check(catalog.binary("linter", name) ~= nil, "linter %s (linters_by_ft[%q]) is in no catalog entry's linters", name, ft)
-    check(lint.linters[name] ~= nil, "linter %s has no nvim-lint definition (built in or lint.linters.%s in nvim-lint.lua)", name, name)
+    check(lint.linters[name] ~= nil, "linter %s has no nvim-lint definition (built in or definitions.%s in lua/linting/nvim_lint.lua)", name, name)
   end
 end
 for name, def in pairs(lint.linters) do -- pairs sees raw keys only: the config's own definitions
-  check(not builtin_lint[name], "lint.linters.%s in nvim-lint.lua replaces nvim-lint's built-in %s: delete it and use the built-in (%s)",
-    name, name, builtin_lint[name] or "")
+  -- A definition for a built-in name is merged over the built-in (lua/linting/nvim_lint.lua), so it only changes args
   local cmd = type(def) == "table" and type(def.cmd) == "string" and vim.fs.basename(def.cmd) or catalog.binary("linter", name)
-  local dup = cmd and lint_by_cmd[cmd]
-  check(not dup, "lint.linters.%s runs %s, which nvim-lint's built-in %s already runs: use that name instead of a definition of your own",
+  local dup = not builtin_lint[name] and cmd and lint_by_cmd[cmd]
+  check(not dup, "definitions.%s (lua/linting/nvim_lint.lua) runs %s, which nvim-lint's built-in %s already runs: use that name instead of a definition of your own",
     name, cmd or "", table.concat(dup or {}, "/"))
 end
 
