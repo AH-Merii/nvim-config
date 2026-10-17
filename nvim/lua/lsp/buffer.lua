@@ -112,9 +112,12 @@ require("features").at_very_lazy(function()
   })
 end)
 
+local autocmd = vim.api.nvim_create_autocmd
+local group = vim.api.nvim_create_augroup("lsp.buffer", { clear = true })
+
 -- Linked editing: renaming a tag renames its pair, where the server supports it (html, and tsc in JSX/TSX)
-vim.api.nvim_create_autocmd("LspAttach", {
-  group = vim.api.nvim_create_augroup("core.lsp.linked_editing", { clear = true }),
+autocmd("LspAttach", {
+  group = group,
   callback = function(ev)
     local client = vim.lsp.get_client_by_id(ev.data.client_id)
     if client and client:supports_method("textDocument/linkedEditingRange", ev.buf) then
@@ -122,3 +125,58 @@ vim.api.nvim_create_autocmd("LspAttach", {
     end
   end,
 })
+
+-- LSP progress as progress-messages, so vim.ui.progress_status() (in the statusline) counts it (:h LspProgress).
+-- Silent: the Progress event still fires but no message is drawn, so the statusline is the one place it shows.
+autocmd("LspProgress", {
+  group = group,
+  callback = function(ev)
+    local value = ev.data.params.value
+    if type(value) ~= "table" or not value.kind then
+      return
+    end
+    local opts = {
+      id = "lsp." .. ev.data.client_id .. "." .. tostring(ev.data.params.token),
+      kind = "progress",
+      source = "vim.lsp",
+      title = value.title,
+      status = value.kind ~= "end" and "running" or "success",
+      percent = value.percentage,
+    }
+    vim._with({ silent = true }, function() vim.api.nvim_echo({ { value.message or "done" } }, false, opts) end)
+  end,
+})
+
+-- Language servers' colors (vim.lsp.document_color, on by default, redrawn on edits only), drawn as a palette
+-- symbol at the line's end in the color instead of the built-in's background
+local color_ns = vim.api.nvim_create_namespace("config.document_color")
+local drawn = {} ---@type table<integer, integer> buffer -> the version its marks are for
+vim.lsp.document_color.enable(true, nil, {
+  style = function(buf, range, hex)
+    -- called for each color once per buffer version, after the built-in clears its own marks
+    local version = vim.lsp.util.buf_versions[buf]
+    if drawn[buf] ~= version then
+      vim.api.nvim_buf_clear_namespace(buf, color_ns, 0, -1)
+      drawn[buf] = version
+    end
+    local hl = "LspDocumentColorSymbol_" .. hex:sub(2)
+    vim.api.nvim_set_hl(0, hl, { fg = hex, default = true })
+    vim.api.nvim_buf_set_extmark(buf, color_ns, range.start_row, range.start_col, {
+      virt_text = { { " \u{E22B}", hl } },
+      virt_text_pos = "eol",
+      strict = false,
+    })
+  end,
+})
+-- the built-in clears only its own marks when a server goes
+autocmd("LspDetach", {
+  group = group,
+  callback = function(ev)
+    vim.api.nvim_buf_clear_namespace(ev.buf, color_ns, 0, -1)
+    drawn[ev.buf] = nil
+  end,
+})
+
+-- Code lenses from every server that has them, drawn as lines above their line (vim.lsp.codelens, off per buffer
+-- by default); <leader>Tc turns them off in a buffer
+vim.lsp.codelens.enable(true)

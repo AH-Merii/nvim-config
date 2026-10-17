@@ -71,8 +71,10 @@ local specs = {
         { "-", "in", "Shrink selection to child node", mode = "x", remap = true, icon = { icon = "󰩭", color = "cyan" } },
         { "<leader>TT", toggle = Snacks.toggle.treesitter() },
       })
+      local group = vim.api.nvim_create_augroup("features.treesitter", { clear = true })
       -- on the first start lazy runs this config inside its install wait, where the install log raises a hit-enter prompt
       vim.api.nvim_create_autocmd("VimEnter", {
+        group = group,
         once = true,
         callback = function() ts.install(vim.list_extend(vim.deepcopy(require("lang").views().parsers), ensure_installed)) end,
       })
@@ -81,7 +83,7 @@ local specs = {
 
       local installs = {} -- language -> its one install task this session, so a failed build is not retried per buffer
       vim.api.nvim_create_autocmd("FileType", {
-        group = vim.api.nvim_create_augroup("UserTreesitter", { clear = true }),
+        group = group,
         callback = function(args)
           local lang = vim.treesitter.language.get_lang(args.match)
           if lang and vim.treesitter.language.add(lang) then

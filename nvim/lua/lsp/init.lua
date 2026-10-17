@@ -218,7 +218,7 @@ function M.setup()
     end
   end
 
-  local group = vim.api.nvim_create_augroup("core.lsp_servers", { clear = true })
+  local group = vim.api.nvim_create_augroup("lsp", { clear = true })
   -- Made before vim.lsp.enable's own FileType autocmd so it runs first, after lazy loaded the filetype's plugins
   vim.api.nvim_create_autocmd("FileType", {
     group = group,

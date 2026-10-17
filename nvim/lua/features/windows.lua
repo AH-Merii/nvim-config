@@ -17,6 +17,7 @@ M.plugins = {
 }
 
 function M.setup()
+  local group = vim.api.nvim_create_augroup("features.windows", { clear = true })
   vim.g.tmux_navigator_no_wrap = 1
 
   -- Reusable function to register keymaps in different contexts
@@ -32,6 +33,7 @@ function M.setup()
 
   -- Re-register for terminal buffers to prevent literal command injection
   vim.api.nvim_create_autocmd("TermOpen", {
+    group = group,
     callback = set_keymaps,
   })
 
@@ -60,6 +62,59 @@ function M.setup()
     { "-", ":vertical resize -5<CR>", "Decrease width", silent = true },
     { "=", ":resize +5<CR>", "Increase height", silent = true },
     { "_", ":resize -5<CR>", "Decrease height", silent = true },
+  })
+
+  local autocmd = vim.api.nvim_create_autocmd
+
+  -- Close specific filetypes with 'q'. Not language rows (keys.language): a row yields to the buffer's own map, and the
+  -- runtime's man ftplugin and checkhealth map q themselves (runtime/ftplugin/man.vim:29, lua/vim/health.lua:474)
+  autocmd("FileType", {
+    group = group,
+    pattern = {
+      "PlenaryTestPopup",
+      "help",
+      "lspinfo",
+      "man",
+      "notify",
+      "qf",
+      "spectre_panel",
+      "startuptime",
+      "tsplayground",
+      "checkhealth",
+      "netrw",
+      "Jaq",
+      "git",
+      "oil",
+      "lir",
+    },
+    callback = function(event)
+      vim.bo[event.buf].buflisted = false
+      vim.keymap.set("n", "q", "<cmd>close<cr>", {
+        buf = event.buf,
+        silent = true,
+        desc = "Close window",
+      })
+    end,
+  })
+
+  -- Resize windows equally when Neovim is resized
+  autocmd("VimResized", {
+    group = group,
+    callback = function()
+      local current_tab = vim.api.nvim_get_current_tabpage()
+      vim.cmd("tabdo wincmd =")
+      vim.api.nvim_set_current_tabpage(current_tab)
+    end,
+  })
+
+  -- Show cursor line only in active window
+  autocmd({ "InsertLeave", "WinEnter" }, {
+    group = group,
+    callback = function() vim.opt_local.cursorline = true end,
+  })
+  autocmd({ "InsertEnter", "WinLeave" }, {
+    group = group,
+    callback = function() vim.opt_local.cursorline = false end,
   })
 end
 

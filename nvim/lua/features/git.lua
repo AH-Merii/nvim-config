@@ -148,13 +148,13 @@ function M.setup()
   end
 
   -- The events that fill the caches, made once with the needs and their caches
-  local git_group = vim.api.nvim_create_augroup("SnacksGitKeys", { clear = true })
-  vim.api.nvim_create_autocmd("DirChanged", { group = git_group, callback = function() cwd_repo = {} end })
+  local group = vim.api.nvim_create_augroup("features.git", { clear = true })
+  vim.api.nvim_create_autocmd("DirChanged", { group = group, callback = function() cwd_repo = {} end })
   vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile", "BufFilePost" }, {
-    group = git_group,
+    group = group,
     callback = function(ev) look_up_file(ev.buf) end,
   })
-  vim.api.nvim_create_autocmd("BufWipeout", { group = git_group, callback = function(ev) file_repo[ev.buf] = nil end })
+  vim.api.nvim_create_autocmd("BufWipeout", { group = group, callback = function(ev) file_repo[ev.buf] = nil end })
 
   local function icon(glyph, color) return { icon = glyph, color = color } end
   --   Git Tools: Interact with branches, logs, and diffs
@@ -193,7 +193,7 @@ function M.setup()
     { "<leader>p", ":<C-u>'<,'>PRSuggestChange<CR>", "Suggest change", mode = "x" },
   })
   vim.api.nvim_create_autocmd("DirChanged", {
-    group = vim.api.nvim_create_augroup("PRReviewKeys", { clear = true }),
+    group = group,
     callback = look_up,
   })
   look_up()
