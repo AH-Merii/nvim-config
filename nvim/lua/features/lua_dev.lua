@@ -16,9 +16,15 @@ function M.setup()
     _G.bt = function() Snacks.debug.backtrace() end
   end)
 
-  require("keys").feature("lua-dev")({
-    -- The Lua ftplugin's <leader>! (after/ftplugin/lua.lua)
-    { "<leader>!", mode = { "n", "x" }, icon = { icon = "", color = "red" } },
+  local keys = require("keys")
+  -- Run the Lua being written: its line or selection, or the whole file
+  keys.language("lua", { silent = false })({
+    { "<leader>!", ":.lua<CR>", label = "Execute current line" },
+    { "<leader>!", ":lua<CR>", mode = "x", label = "Execute current selection" },
+    { "<leader>%", "<cmd>source %<CR>", label = "Source current file" },
+  })
+  keys.language("vim", { silent = false })({
+    { "<leader>%", "<cmd>source %<CR>", label = "Source current file" },
   })
 end
 
