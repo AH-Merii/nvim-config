@@ -41,17 +41,15 @@ return {
   event = "VeryLazy",
   config = function()
     local lualine = require("lualine")
+    -- What the segments show of a buffer's servers, tools and checkout (lua/ui/facts.lua); this spec only draws it
+    local facts = require("ui.facts")
 
     local colors = get_colors()
 
     local conditions = {
       buffer_not_empty = function() return vim.fn.empty(vim.fn.expand("%:t")) ~= 1 end,
       hide_in_width = function() return vim.fn.winwidth(0) > 80 end,
-      -- vim.fs.root matches a .git file too, as in a linked worktree; finddir() finds only dirs
-      check_git_workspace = function()
-        local filepath = vim.fn.expand("%:p:h")
-        return filepath ~= "" and vim.fs.root(filepath, ".git") ~= nil
-      end,
+      check_git_workspace = function() return facts.get(0).repo ~= nil end,
     }
 
     ---------------------------------------------------------------------------
@@ -66,101 +64,32 @@ return {
     end
 
     ---------------------------------------------------------------------------
-    -- Project root logic (cached to avoid shell calls on every redraw)
+    -- The buffer whose servers and tools the lists show: the current one, or the last file buffer while the current
+    -- one is not a file (a picker, a terminal), so a popup does not blank them
     ---------------------------------------------------------------------------
-    local project_root_cache = {}
-
-    local function get_project_root()
-      local buf_dir = vim.fn.expand("%:p:h")
-      if project_root_cache[buf_dir] then
-        return project_root_cache[buf_dir]
+    local last_file ---@type integer?
+    local function shown_buf()
+      local buf = vim.api.nvim_get_current_buf()
+      if vim.bo[buf].buftype == "" then
+        last_file = buf
+        return buf
       end
-      local git_root = vim.fn.systemlist("git -C " .. vim.fn.shellescape(buf_dir) .. " rev-parse --show-toplevel")[1]
-      if git_root and git_root ~= "" and not git_root:match("^fatal") then
-        project_root_cache[buf_dir] = git_root
-        return git_root
-      end
-      project_root_cache[buf_dir] = vim.fn.getcwd()
-      return project_root_cache[buf_dir]
+      return last_file and vim.api.nvim_buf_is_valid(last_file) and last_file or nil
+    end
+    --- buf's list of name, joined, or "" with no buffer to show
+    ---@param name "servers"|"formatters"|"linters"
+    local function list(name)
+      local buf = shown_buf()
+      return buf and table.concat(facts.get(buf)[name], ", ") or ""
     end
 
-    -- Clear git cache when cwd changes
-    vim.api.nvim_create_autocmd("DirChanged", {
-      callback = function() project_root_cache = {} end,
-    })
-
-    ---------------------------------------------------------------------------
-    -- Cached statusline component data (updated on BufEnter, not every redraw)
-    ---------------------------------------------------------------------------
-    local cached_lsp_names = ""
-    local cached_formatters = ""
-    local cached_linters = ""
-
-    local function update_statusline_cache(args)
-      -- Resolve which buffer this update is for. Autocmd events give us the
-      -- triggering buffer in `args.buf`; fall back to the focused buffer when
-      -- the function is called manually. Skip non-file / scratch / popup
-      -- buffers so transient windows don't clobber the cache.
-      local bufnr = (args and args.buf) or vim.api.nvim_get_current_buf()
-      if not vim.api.nvim_buf_is_valid(bufnr) then
-        return
-      end
-      if vim.bo[bufnr].buftype ~= "" then
-        return
-      end
-
-      -- LSP clients attached to this buffer specifically
-      local clients = vim.lsp.get_clients({ bufnr = bufnr })
-      if clients and next(clients) then
-        local names_seen, names = {}, {}
-        for _, client in ipairs(clients) do
-          if not names_seen[client.name] then
-            table.insert(names, client.name)
-            names_seen[client.name] = true
-          end
-        end
-        cached_lsp_names = table.concat(names, ", ")
-      else
-        cached_lsp_names = "No Active LSP"
-      end
-
-      -- Formatters
-      local ok_conform, conform = pcall(require, "conform")
-      -- conform's availability check waits for each formatter's binary, so ask only once they are resolved;
-      -- ToolsChanged updates the list when the last one is
-      local tools = require("tools")
-      local root = tools.root(bufnr)
-      local found = require("lang").of(vim.bo[bufnr].filetype)
-      local resolving = vim.iter(found and found.formatters or {}):any(function(name)
-        local bin = tools.catalog.binary("formatter", name)
-        return bin ~= nil and tools.resolve(bin, root) == nil
-      end)
-      if ok_conform and not resolving then
-        local formatters = conform.list_formatters_to_run(bufnr)
-        if formatters and not vim.tbl_isempty(formatters) then
-          cached_formatters = table.concat(vim.tbl_map(function(f) return f.name end, formatters), ", ")
-        else
-          cached_formatters = ""
-        end
-      else
-        cached_formatters = ""
-      end
-
-      -- Linters that run, like the lists above: found by the resolver and not covered by an attached server
-      -- (ToolsChanged and LspAttach/LspDetach update the list)
-      cached_linters = table.concat(require("tools.lint").to_run(bufnr), ", ")
-    end
-
-    -- Update cache on buffer/window changes, LSP lifecycle events, and after save
-    vim.api.nvim_create_autocmd({ "BufEnter", "FileType", "LspAttach", "LspDetach", "BufWritePost" }, {
-      callback = update_statusline_cache,
-    })
-    -- A tool was found, installed or lost: update the lists and the tools indicator
+    -- Redraw once when the shown buffer's facts change: an attach, a detach, a tool found or lost
     vim.api.nvim_create_autocmd("User", {
-      pattern = "ToolsChanged",
-      callback = function()
-        update_statusline_cache()
-        lualine.refresh({ place = { "statusline" } })
+      pattern = facts.event,
+      callback = function(ev)
+        if ev.data.buf == vim.api.nvim_get_current_buf() or ev.data.buf == last_file then
+          lualine.refresh({ place = { "statusline" } })
+        end
       end,
     })
 
@@ -185,7 +114,7 @@ return {
       end
 
       local fullpath = vim.fn.expand("%:p")
-      local root = get_project_root()
+      local root = facts.get(0).repo or vim.fn.getcwd()
       if not fullpath or not root or fullpath == "" or root == "" then
         return escape(vim.fn.expand("%:t"))
       end
@@ -283,11 +212,6 @@ return {
       return " @" .. reg
     end
 
-    -- Refresh lualine when macro recording starts/stops
-    vim.api.nvim_create_autocmd({ "RecordingEnter", "RecordingLeave" }, {
-      callback = function() require("lualine").refresh() end,
-    })
-
     ---------------------------------------------------------------------------
     -- lualine setup
     ---------------------------------------------------------------------------
@@ -310,6 +234,10 @@ return {
             "Filetype",
             "ModeChanged",
             "DiagnosticChanged",
+            -- the macro recording and progress segments
+            "RecordingEnter",
+            "RecordingLeave",
+            "Progress",
           },
         },
         theme = {
@@ -384,23 +312,24 @@ return {
     })
     ins_left({ function() return "%=" end })
 
-    -- LSP (use cached value)
     ins_left({
-      function() return cached_lsp_names end,
+      function()
+        local buf = shown_buf()
+        return buf and (#facts.get(buf).servers > 0 and list("servers") or "No Active LSP") or ""
+      end,
       icon = "󱍔 LSP:",
       color = { fg = colors.yellow, gui = "bold" },
     })
 
-    -- Formatters (use cached value)
+    -- The formatters and linters that will run
     ins_left({
-      function() return cached_formatters end,
+      function() return list("formatters") end,
       icon = "󰁨 ",
       color = { fg = colors.magenta, gui = "bold" },
     })
 
-    -- Linters (use cached value)
     ins_left({
-      function() return cached_linters end,
+      function() return list("linters") end,
       icon = " ",
       color = { fg = colors.orange, gui = "bold" },
     })
@@ -446,9 +375,6 @@ return {
       function() return (vim.ui.progress_status():gsub("%%", "%%%%")) end,
       icon = "󰔟",
       color = { fg = colors.violet },
-    })
-    vim.api.nvim_create_autocmd("Progress", {
-      callback = function() lualine.refresh({ place = { "statusline" } }) end,
     })
     -- Search count, e.g. "[2/3]": ui2 draws it on the cmdline, which is hidden since 'cmdheight' is 0
     -- the count follows the cursor, so refresh on moves while a search is highlighted

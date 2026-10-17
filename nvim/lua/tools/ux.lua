@@ -15,7 +15,6 @@ local title = "Tools"
 M.file = vim.fs.joinpath(vim.fn.stdpath("state"), "tools", "offered.json")
 
 local asked = {} ---@type table<string, true> offers and project prompts made this session, answered or dismissed
-local tracked = {} ---@type table<integer, { root: string, ft: string, names: string[] }> buf -> its tools, for status()
 local checked = {} ---@type table<integer, string> buf -> filetype its prompts ran for
 
 ---@return table<string, string>
@@ -120,8 +119,6 @@ local function add(list, name)
   end
 end
 
-local role_words = { server = "lsp", formatter = "formatter", linter = "linter" }
-
 --- The catalog binaries buf's filetype runs (servers, formatters, linters, and what they call), and per binary its
 --- roles there in plain words, e.g. { "lsp", "formatter", "linter" }.
 ---@param buf integer
@@ -131,23 +128,7 @@ local function needed(buf)
   if not found then
     return {}, {}, {}
   end
-  local names, roles = {}, {}
-  for _, role in ipairs({ { "server", found.servers }, { "formatter", found.formatters }, { "linter", found.linters } }) do
-    for _, name in ipairs(role[2]) do
-      local bin = catalog.binary(role[1], name)
-      -- Names outside the catalog (conform's trim_whitespace, ...) are not binaries mise provides
-      if bin then
-        add(names, bin)
-        roles[bin] = roles[bin] or {}
-        add(roles[bin], role_words[role[1]])
-        for _, required in ipairs(catalog.tools[bin].requires or {}) do
-          add(names, required)
-          roles[required] = roles[required] or {}
-          add(roles[required], "used by " .. name)
-        end
-      end
-    end
-  end
+  local names, roles = catalog.needed(found)
   return names, roles, found.servers
 end
 
@@ -621,41 +602,21 @@ end
 -- Indicator
 --------------------------------------------------------------------------------
 
---- Starts resolving buf's tools so status() can count them.
----@param buf integer
-local function track(buf)
-  if not vim.api.nvim_buf_is_valid(buf) or vim.bo[buf].buftype ~= "" or vim.api.nvim_buf_get_name(buf) == "" then
-    return
-  end
-  local root, ft = tools.root(buf), vim.bo[buf].filetype
-  local names = needed(buf)
-  tracked[buf] = { root = root, ft = ft, names = names }
-  tools.resolve_all(names, root, function() end)
-end
-
 --- Statusline text: empty when every tool buf runs is found and its project config is answered; otherwise
 --- the number of missing tools and "?" for an unanswered project config, e.g. "2" or "?" (lualine adds the icon).
+--- Only for a file buffer, and only with a UI, where the prompts that resolve the missing tools can run.
 ---@param buf? integer default current
 ---@return string
 function M.status(buf)
   buf = buf or vim.api.nvim_get_current_buf()
-  local info = tracked[buf]
-  if not info then
+  if #vim.api.nvim_list_uis() == 0 or vim.bo[buf].buftype ~= "" or vim.api.nvim_buf_get_name(buf) == "" then
     return ""
   end
-  local missing = 0
-  for _, name in ipairs(info.names) do
-    local result = tools.get(name, info.root)
-    if result and not result.path then
-      missing = missing + 1
-    end
-  end
-  local project = tools.project(info.root)
-  local unanswered = project and #project.configs > 0 and project.choice == nil
-  if missing == 0 and not unanswered then
+  local facts = require("ui.facts").get(buf)
+  if #facts.missing == 0 and not facts.unanswered then
     return ""
   end
-  return (missing > 0 and tostring(missing) or "") .. (unanswered and "?" or "")
+  return (#facts.missing > 0 and tostring(#facts.missing) or "") .. (facts.unanswered and "?" or "")
 end
 
 --------------------------------------------------------------------------------
@@ -936,14 +897,7 @@ function M.setup()
       end
       -- After the FileType handlers, so conform, nvim-lint and the servers are set up for this buffer
       vim.schedule(function()
-        if not vim.api.nvim_buf_is_valid(ev.buf) then
-          return
-        end
-        local info = tracked[ev.buf]
-        if not info or info.ft ~= vim.bo[ev.buf].filetype then
-          track(ev.buf)
-        end
-        if ev.buf == vim.api.nvim_get_current_buf() then
+        if vim.api.nvim_buf_is_valid(ev.buf) and ev.buf == vim.api.nvim_get_current_buf() then
           M.check(ev.buf)
         end
       end)
@@ -953,18 +907,12 @@ function M.setup()
   vim.api.nvim_create_autocmd("UIEnter", {
     group = group,
     callback = function()
-      vim.schedule(function()
-        local buf = vim.api.nvim_get_current_buf()
-        track(buf)
-        M.check(buf)
-      end)
+      vim.schedule(function() M.check(vim.api.nvim_get_current_buf()) end)
     end,
   })
   vim.api.nvim_create_autocmd({ "BufWipeout", "BufDelete" }, {
     group = group,
-    callback = function(ev)
-      tracked[ev.buf], checked[ev.buf] = nil, nil
-    end,
+    callback = function(ev) checked[ev.buf] = nil end,
   })
   -- A saved mise config drops the answer remembered for it (tools refreshes on the same write): ask again here,
   -- and in other buffers as they are entered

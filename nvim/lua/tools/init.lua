@@ -76,6 +76,7 @@ local shared = {} ---@type table<string, tools.Slot> "global" -> global mise bin
 local projects = {} ---@type table<string, tools.Slot> root -> tools.Project
 local envs = {} ---@type table<string, tools.Slot> scope -> env
 local results = {} ---@type table<string, table<string, tools.Slot>> root -> name -> tools.Result
+local asks = {} ---@type table<string, string> root -> what the project prompt depends on, as of the root's last scan
 
 --- Calls cb with the value in cache[key], starting the work once and queueing callers while it runs.
 --- A slot dropped by refresh while running still answers its callers but is not kept.
@@ -136,6 +137,7 @@ local function scan(root, cb)
       end
       table.sort(project.missing)
       project.active = not s.untrusted and (choice == "use" or choice == "installed")
+      asks[root] = table.concat(configs, "\0") .. "\0" .. tostring(choice) .. "\0" .. tostring(s.untrusted)
       done(project)
     end)
   end, cb)
@@ -436,9 +438,9 @@ local function same(a, b) return a ~= nil and a.path == b.path and a.source == b
 local changed = {} ---@type table<string, { tools: table<string, true>, reason: string }> root -> pending event
 local reasons = { resolved = 1, refresh = 2, accepted = 3, installed = 4 }
 
---- Queues name in the next ToolsChanged for root; events for one root within a tick are merged.
+--- Queues name, if any, in the next ToolsChanged for root; events for one root within a tick are merged.
 ---@param root string
----@param name string
+---@param name? string
 ---@param reason "resolved"|"refresh"|"accepted"|"installed"
 local function notify(root, name, reason)
   local pending = changed[root]
@@ -454,7 +456,9 @@ local function notify(root, name, reason)
   elseif reasons[reason] > reasons[pending.reason] then
     pending.reason = reason
   end
-  pending.tools[name] = true
+  if name then
+    pending.tools[name] = true
+  end
 end
 
 local refresh_reason = "refresh" ---@type "refresh"|"accepted"|"installed"
@@ -605,7 +609,8 @@ function M.project(root, cb)
 end
 
 --- Drops cached results (for root, or everywhere) and resolves the dropped tools again; ToolsChanged fires
---- for those whose result changed. Run after anything that may move a binary.
+--- for those whose result changed, and with no tools for a root whose project configs, answer to the project prompt
+--- or trust changed. Run after anything that may move a binary.
 ---@param root? string
 ---@param reason? "refresh"|"accepted"|"installed" ToolsChanged reason, default "refresh"
 function M.refresh(root, reason)
@@ -628,6 +633,16 @@ function M.refresh(root, reason)
     for _, name in ipairs(names) do
       M.resolve(name, r)
     end
+  end
+  -- Scan again every root scanned before, with or without tools, so a new config or an answer shows (the "?" of the
+  -- statusline's tools indicator) even when no tool's result changes
+  local why = refresh_reason
+  for r, before in pairs(root and { [norm(root)] = asks[norm(root)] } or vim.deepcopy(asks)) do
+    scan(r, function()
+      if asks[r] ~= before then
+        notify(r, nil, why)
+      end
+    end)
   end
 end
 
@@ -897,7 +912,7 @@ M.config_patterns = { "mise.toml", ".mise.toml", "mise.local.toml", ".tool-versi
 ---@param opts? { backend?: tools.Backend }
 function M.setup(opts)
   if opts and opts.backend then
-    backend, shared, projects, envs, results, versions, previous = opts.backend, {}, {}, {}, {}, {}, {}
+    backend, shared, projects, envs, results, versions, previous, asks = opts.backend, {}, {}, {}, {}, {}, {}, {}
   end
   local group = vim.api.nvim_create_augroup("tools", { clear = true })
   -- Start the mise queries for a file's project as it opens, so formatters and linters rarely wait
