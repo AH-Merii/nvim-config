@@ -45,6 +45,7 @@ nvim/
 │   │   └── lsp_servers.lua  # Enabled servers, each run from its resolved binary
 │   ├── lang/                # One data file per language, and the registry that reads them (init.lua)
 │   ├── tools/               # Tool resolver (mise), catalog, prompts and :Tools
+│   ├── ui/                  # facts.lua: what applies to each buffer, for the statusline, the tools indicator and :Status
 │   ├── config/              # Editor configuration
 │   │   ├── options.lua      # Vim options
 │   │   ├── keymaps.lua      # Global keymaps
@@ -95,6 +96,15 @@ nvim/
   skips that declaration and is reported once at startup; the first declaration, in file name order, stays
 - A variant (a dotted filetype such as `yaml.github-actions`) gets its base's servers and linters plus its own, and its
   own formatters if it names any, else its base's. One with `match` rules needs an `example` path
+
+**The statusline** (`plugins/lualine.lua`, step 4 in `docs/rearchitecture-decisions.md`)
+- `require("ui.facts").get(buf)` holds a buffer's servers running, the formatters and linters that will run, the
+  missing tools (and whether the project's mise config waits for an answer), its tools root and its git checkout. It
+  is built from `lang.of`, the resolver's results and the attached clients, cached per buffer, and `User FactsChanged`
+  fires when it changes
+- lualine's spec only draws it: the LSP, formatter and linter lists, the tools indicator (`tools.ux.status`), the
+  branch's condition and the path's project come from the facts. A segment that needs something new about a buffer
+  gets it added to the facts, not computed in the spec. `:Status` reads its LSP and formatter lines there too
 
 ### Adding a language or a tool
 

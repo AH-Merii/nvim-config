@@ -282,20 +282,10 @@ function M.build_status()
   table.insert(lines, string.format("Buffer Status for %s", ft))
   table.insert(lines, "─────────────────────────")
 
-  -- LSP
-  local clients = get_clients(bufnr)
-  local client_names = vim.tbl_map(function(c) return c.name end, clients)
-  table.insert(lines, string.format("󱍔  LSP: %s", next(client_names) and table.concat(client_names, ", ") or "none"))
-
-  -- Formatters
-  local ok_conform, conform = pcall(require, "conform")
-  if ok_conform then
-    local formatters = conform.list_formatters_to_run(bufnr)
-    local names = vim.tbl_map(function(f) return f.name end, formatters)
-    table.insert(lines, string.format("󰁨  Formatters: %s", next(names) and table.concat(names, ", ") or "none"))
-  else
-    table.insert(lines, "󰁨  Formatters: none")
-  end
+  -- The servers running and the formatters that will run, as the statusline shows them (lua/ui/facts.lua)
+  local facts = require("ui.facts").get(bufnr)
+  table.insert(lines, string.format("󱍔  LSP: %s", next(facts.servers) and table.concat(facts.servers, ", ") or "none"))
+  table.insert(lines, string.format("󰁨  Formatters: %s", next(facts.formatters) and table.concat(facts.formatters, ", ") or "none"))
 
   -- Linters, those the filetype's language names
   local found = require("lang").of(ft)
