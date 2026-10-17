@@ -7,7 +7,6 @@ lua/features/init.lua             startup installer
 lua/lsp/buffer.lua                lsp keys which-key
 lua/lsp/init.lua                  lsp tools
 lua/lang/*                        lsp tools format lint treesitter editing keys which-key
-after/ftplugin/*                  lsp format editing
 lua/tools/*                       tools lsp format lint
 lua/tools/ux.lua                  ui
 lua/ui/*                          ui tools lint
@@ -24,7 +23,7 @@ lua/ui/snacks.lua                 ui keys
 lua/features/search.lua           keys editing which-key
 lua/features/windows.lua          keys editing
 lua/features/folds.lua            editing treesitter
-lua/features/lua_dev.lua          editing lsp
+lua/features/lua_dev.lua          editing lsp keys which-key
 lua/features/files.lua            keys editing
 lua/features/profiling.lua        keys
 lua/config/options.lua            editing ui
