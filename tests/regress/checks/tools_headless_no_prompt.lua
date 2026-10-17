@@ -48,7 +48,7 @@ local p
 tools.project(root, function(x) p = x end)
 wait_until(function() return p ~= nil end, 10000)
 check("the project's pin is missing", p and vim.list_contains(p.missing, "shfmt"), p and vim.inspect(p.missing))
-local want = tools.for_filetype("sh").tools
+local want = require("lang").of("sh").tools
 local results
 tools.resolve_all(want, root, function(r) results = r end)
 wait_until(function() return results ~= nil end, 10000)

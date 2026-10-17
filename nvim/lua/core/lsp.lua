@@ -27,37 +27,24 @@ local M = {}
 ---@field method? string|string[] the buffer gets the map while an attached client supports any of these
 ---@field when? fun(buf: integer, clients: vim.lsp.Client[]): boolean the buffer also gets the map while this holds
 
--- A formatter set for the filetype in conform counts before its tool is installed
+-- A formatter the filetype's language names counts before its tool is installed
 ---@param buf integer
 local function has_formatter(buf)
-  local by_ft = require("conform").formatters_by_ft
-  local ft = vim.bo[buf].filetype
-  for _, name in ipairs(vim.list_extend({ ft, "_", "*" }, vim.split(ft, ".", { plain = true }))) do
-    local formatters = by_ft[name]
-    if type(formatters) == "function" or (type(formatters) == "table" and next(formatters)) then
-      return true
-    end
-  end
-  return false
+  local found = require("lang").of(vim.bo[buf].filetype)
+  return found ~= nil and #found.formatters > 0
 end
 
 local function format() require("conform").format_buffer({ async = true, quiet = false }) end
 
--- Diagnostics come from attached clients, and from nvim-lint where it has linters for the filetype
+-- Diagnostics come from attached clients, and from the linters the filetype's language names
 ---@param buf integer
 ---@param clients vim.lsp.Client[]
 local function has_diagnostics(buf, clients)
   if #clients > 0 then
     return true
   end
-  local by_ft = require("lint").linters_by_ft
-  local ft = vim.bo[buf].filetype
-  for _, name in ipairs(vim.list_extend({ ft }, vim.split(ft, ".", { plain = true }))) do
-    if next(by_ft[name] or {}) then
-      return true
-    end
-  end
-  return false
+  local found = require("lang").of(vim.bo[buf].filetype)
+  return found ~= nil and #found.linters > 0
 end
 
 ---@param clients vim.lsp.Client[]

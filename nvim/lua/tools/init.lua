@@ -890,53 +890,6 @@ function M.set_choice(root, choice, cb)
   end)
 end
 
---- The servers, formatters and linters configured for a filetype, and the catalog binaries behind them.
---- Uses each adapter's own lookup: servers match the whole filetype, conform the whole filetype then the most
---- specific part, nvim-lint the whole filetype else every part. Loads conform and nvim-lint.
----@param ft string
----@param buf? integer passed to a conform formatters_by_ft function
----@return { servers: string[], formatters: string[], linters: string[], tools: string[] }
-function M.for_filetype(ft, buf)
-  local out = { servers = {}, formatters = {}, linters = {}, tools = {} }
-  for _, server in ipairs(catalog.servers()) do
-    local ok, config = pcall(function() return vim.lsp.config[server] end)
-    if ok and config and vim.list_contains(config.filetypes or {}, ft) and vim.lsp.is_enabled(server) then
-      add(out.servers, server)
-      add(out.tools, catalog.binary("server", server))
-    end
-  end
-
-  local has_conform, conform = pcall(require, "conform")
-  if has_conform then
-    local parts = vim.iter(vim.split(ft, ".", { plain = true })):rev():totable()
-    for _, key in ipairs({ ft, unpack(parts) }) do
-      local formatters = conform.formatters_by_ft[key]
-      if type(formatters) == "function" then
-        formatters = buf and formatters(buf) or {}
-      end
-      if type(formatters) == "table" and next(formatters) then
-        -- An entry may be a list of alternatives
-        for _, item in ipairs(formatters) do
-          for _, name in ipairs(type(item) == "table" and item or { item }) do
-            add(out.formatters, name)
-            add(out.tools, catalog.binary("formatter", name) or name)
-          end
-        end
-        break
-      end
-    end
-  end
-
-  local has_lint, lint = pcall(require, "lint")
-  if has_lint then
-    for _, name in ipairs(lint._resolve_linter_by_ft(ft)) do
-      add(out.linters, name)
-      add(out.tools, catalog.binary("linter", name) or name)
-    end
-  end
-  return out
-end
-
 --- File patterns of the mise configs a project may have; writing one refreshes everything
 M.config_patterns = { "mise.toml", ".mise.toml", "mise.local.toml", ".tool-versions", "*/mise/config.toml", "*/.mise/config.toml", "*/.config/mise.toml" }
 

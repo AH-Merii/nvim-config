@@ -10,7 +10,8 @@ lint.linters.nvr_probe = {
   stdin = false, append_fname = false, ignore_exitcode = true,
   parser = function() return {} end,
 }
-lint.linters_by_ft.nvrextra = { "nvr_probe" }
+-- a language for nvrextra, as a file in lua/lang/ would declare it; nvrbase is no language's
+require("lang")._declare("nvr_extra", { filetypes = { "nvrextra" }, linters = { nvr_probe = {} } })
 
 vim.cmd.edit("probe.txt")
 local buf = vim.api.nvim_get_current_buf()

@@ -45,16 +45,13 @@ function M.runs(name, buf, root, linter)
   return not M.covered(name, buf) and (not bin or (tools.resolve(bin, root) or {}).path ~= nil)
 end
 
---- The linters that run on buf now, from nvim-lint's own lookup for its filetype (dotted filetypes get each part's).
+--- The linters that run on buf now, of those its filetype's language names.
 ---@param buf integer
 ---@return string[]
 function M.to_run(buf)
-  local ok, lint = pcall(require, "lint")
-  if not ok then
-    return {}
-  end
+  local found = require("lang").of(vim.bo[buf].filetype)
   local root = tools.root(buf)
-  return vim.tbl_filter(function(name) return M.runs(name, buf, root) end, lint._resolve_linter_by_ft(vim.bo[buf].filetype))
+  return vim.tbl_filter(function(name) return M.runs(name, buf, root) end, found and found.linters or {})
 end
 
 return M

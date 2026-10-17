@@ -1,8 +1,8 @@
--- @desc     the format keys (<leader>lf in normal and visual mode, the <leader>Tf toggle) are listed by which-key and act in a buffer iff conform has a formatter configured for its filetype (list, function or a dot-part of the filetype) or an attached client formats, and there <leader>lf runs the formatter
+-- @desc     the format keys (<leader>lf in normal and visual mode, the <leader>Tf toggle) are listed by which-key and act in a buffer iff its filetype's language names a formatter for it (or for a dot-part of the filetype) or an attached client formats, and there <leader>lf runs the formatter
 -- @areas    keys format lsp which-key
 -- @budget   20
--- Judged by pressing the keys and reading which-key's popup, never by which maps exist. Controlled
--- conform.formatters_by_ft entries and in-process fake servers that record their requests.
+-- Judged by pressing the keys and reading which-key's popup, never by which maps exist. Controlled languages
+-- (lua/lang/) and in-process fake servers that record their requests.
 
 local cur, n, bad
 local function done()
@@ -116,7 +116,13 @@ local function buf_of(ft)
   return buf
 end
 
-local conform = require("conform")
+local conform, lang = require("conform"), require("lang")
+-- a language for ft that names formatters, as a file in lua/lang/ would, and conform's entry as lang's views give it
+-- at startup; nil removes both
+local function declare(ft, formatters)
+  lang._declare("nvr_" .. ft, formatters and { filetypes = { ft }, formatters = formatters } or nil)
+  conform.formatters_by_ft[ft] = formatters
+end
 -- a formatter that works: it upper-cases the text
 conform.formatters.nvr_upper = { command = "tr", args = { "a-z", "A-Z" } }
 local NORMAL, VISUAL, TOGGLE = { "<leader>lf", "n" }, { "<leader>lf", "x" }, { "<leader>Tf", "n" }
@@ -179,16 +185,14 @@ local function judge(label, buf, want)
   end
 end
 
-section("conform configuration")
-expect(conform.formatters_by_ft.sbxnone == nil, "precondition: no formatter for sbxnone")
+section("formatter configuration")
+expect(lang.of("sbxnone") == nil and conform.formatters_by_ft.sbxnone == nil, "precondition: no formatter for sbxnone")
 judge("unconfigured ft, no client", buf_of("sbxnone"), false)
-conform.formatters_by_ft.sbxlist = { "a_tool_that_is_not_installed" }
+declare("sbxlist", { "a_tool_that_is_not_installed" })
 local blist = buf_of("sbxlist")
 judge("formatter configured but not installed", blist, true)
-conform.formatters_by_ft.sbxfn = function() return {} end
-judge("formatter function that finds nothing yet", buf_of("sbxfn"), true)
 judge("compound ft with a configured part", buf_of("sbxother.sbxlist"), true)
-conform.formatters_by_ft.sbxlist = nil
+declare("sbxlist", nil)
 vim.bo[blist].filetype = "sbxlist"
 flush()
 judge("config removed, FileType again", blist, false)
@@ -211,7 +215,7 @@ stop(c3)
 judge("late client stopped", bd, false)
 
 section("configured filetype with a client")
-conform.formatters_by_ft.sbxboth = { "a_tool_that_is_not_installed" }
+declare("sbxboth", { "a_tool_that_is_not_installed" })
 local bb = buf_of("sbxboth")
 local c4 = start_fake(bb, "fake-both", { "textDocument/formatting", "textDocument/rangeFormatting" })
 judge("configured and formatting client", bb, true)
@@ -219,7 +223,7 @@ stop(c4)
 judge("configured, client stopped", bb, true)
 
 section("<leader>lf runs the formatter")
-conform.formatters_by_ft.sbxup = { "nvr_upper" }
+declare("sbxup", { "nvr_upper" })
 local bu = buf_of("sbxup")
 vim.cmd.buffer(bu)
 vim.api.nvim_buf_set_lines(bu, 0, -1, false, LINES)
