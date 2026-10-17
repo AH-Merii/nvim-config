@@ -28,7 +28,6 @@ lua/features/lua_dev.lua          editing lsp
 lua/features/files.lua            keys editing
 lua/features/profiling.lua        keys
 lua/config/options.lua            editing ui
-lua/config/autocmds.lua           editing ui
 lua/ui/messages/*                ui
 lua/features/lsp_status.lua      keys lsp
 lua/config/utils.lua              keys lsp

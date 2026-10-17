@@ -416,6 +416,53 @@ function M.setup()
       { "<leader>Ti", toggle = indent_view_toggle() },
     })
   end)
+
+  local autocmd = vim.api.nvim_create_autocmd
+  local group = vim.api.nvim_create_augroup("features.editing", { clear = true })
+
+  -- Disable automatic comment insertion on new lines
+  autocmd("BufEnter", {
+    group = group,
+    callback = function() vim.opt.formatoptions:remove({ "c", "r", "o" }) end,
+  })
+
+  -- Highlight on yank
+  autocmd("TextYankPost", {
+    group = group,
+    callback = function() vim.hl.hl_op({ higroup = "Search", timeout = 200 }) end,
+  })
+
+  -- Wrap words softly in mail buffer
+  autocmd("FileType", {
+    group = group,
+    pattern = "mail",
+    callback = function()
+      vim.opt_local.textwidth = 0
+      vim.opt_local.wrapmargin = 0
+      vim.opt_local.wrap = true
+      vim.opt_local.linebreak = true
+      vim.opt_local.columns = 80
+      vim.opt_local.colorcolumn = "80"
+    end,
+  })
+
+  -- Enable spell checking and wrapping for text-based files
+  autocmd("FileType", {
+    group = group,
+    pattern = { "gitcommit", "oil", "markdown", "text", "tex", "NeogitCommitMessage", "typst" },
+    callback = function()
+      vim.opt_local.spell = true
+      vim.opt_local.spelllang = "en"
+      vim.opt_local.wrap = true
+    end,
+  })
+
+  -- Fix terraform and HCL comment string
+  autocmd("FileType", {
+    group = group,
+    pattern = { "terraform", "hcl" },
+    callback = function(event) vim.bo[event.buf].commentstring = "# %s" end,
+  })
 end
 
 return M
