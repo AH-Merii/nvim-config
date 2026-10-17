@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/AH-Merii/nvim-config/compare/v0.3.0...v0.4.0) (2026-10-17)
+
+
+### Bug Fixes
+
+* **lsp:** quitting Neovim leaves no server process behind, tflint's plugin child included ([#37](https://github.com/AH-Merii/nvim-config/issues/37)) ([a498512](https://github.com/AH-Merii/nvim-config/commit/a49851231e390f6b1ee729a393607acadfcaed2a))
+
 ## [0.3.0](https://github.com/AH-Merii/nvim-config/compare/v0.2.0...v0.3.0) (2026-10-17)
 
 
