@@ -169,8 +169,8 @@ function M.setup()
     callback = function(event) vim.bo[event.buf].commentstring = "# %s" end,
   })
 
-  -- LSP progress as progress-messages, so vim.ui.progress_status() (in lualine) counts it (:h LspProgress).
-  -- Silent: the Progress event still fires but no message is drawn, so lualine is the one place it shows.
+  -- LSP progress as progress-messages, so vim.ui.progress_status() (in the statusline) counts it (:h LspProgress).
+  -- Silent: the Progress event still fires but no message is drawn, so the statusline is the one place it shows.
   autocmd("LspProgress", {
     group = user_group,
     callback = function(ev)

@@ -36,7 +36,6 @@ return {
           -- hidden chars ('list'): set here, since the colorscheme's hi clear wipes highlights set before it loads
           NonText = { fg = "#cccccc" },
           SpecialKey = { fg = "#cccccc" },
-          -- Make statusline/lualine background transparent
           StatusLine = { bg = "none" },
 
           String = { fg = "$str" },
@@ -61,11 +60,6 @@ return {
           IlluminatedWordText = { fg = "none", bg = "none", fmt = "bold" },
           IlluminatedWordRead = { fg = "none", bg = "none", fmt = "bold" },
           IlluminatedWordWrite = { fg = "none", bg = "none", fmt = "bold" },
-        },
-
-        -- Lualine options --
-        lualine = {
-          transparent = true, -- lualine center bar transparency
         },
 
         -- Plugins Config --

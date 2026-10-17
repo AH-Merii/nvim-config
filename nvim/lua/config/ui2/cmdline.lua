@@ -86,7 +86,7 @@ local function restore()
 end
 
 --- ui2 raises 'cmdheight' to 1 on every show (ui2/cmdline.lua:27-33); undo it before ui2 redraws (ui2.lua:163-174)
---- so lualine keeps the last row. Same idiom as ui2's.
+--- so the statusline keeps the last row. Same idiom as ui2's.
 local function keep_cmdheight()
   if vim.o.cmdheight ~= 0 then
     vim._with({ noautocmd = true, o = { splitkeep = "screen" } }, function() vim.o.cmdheight = 0 end)

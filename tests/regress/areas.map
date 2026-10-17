@@ -23,7 +23,7 @@ lua/plugins/auto-pairs-tags-comments.lua editing
 lua/plugins/trouble.lua           ui lsp
 lua/plugins/tiny-inline-diagnostic.lua ui lsp
 lua/plugins/snacks.lua            ui keys
-lua/plugins/lualine.lua           ui
+lua/plugins/statusline.lua        ui
 lua/plugins/colorschemes.lua      ui
 lua/plugins/flash.lua             keys editing
 lua/plugins/extras.lua            ui editing keys

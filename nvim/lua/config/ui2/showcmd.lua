@@ -2,7 +2,7 @@
 -- 'showcmd' while its command runs, and with 'showcmdloc' "statusline" that drew one frame of "w" or "^D" per
 -- keypress (docs/profiling-scrolling.md). With 'showcmdloc' "last" the text comes to ui2 as msg_showcmd events
 -- instead (:h ui-messages), which this replaces: a lone key is left out unless its command waits for more keys.
--- lualine draws M.get() (plugins/lualine.lua). Without this hook 'showcmdloc' stays "statusline".
+-- The statusline draws M.get() (plugins/statusline.lua). Without this hook 'showcmdloc' stays "statusline".
 --
 -- Not a delay: while a command waits for its next key (after a count or a g), Neovim runs no scheduled callbacks,
 -- so a delayed count would never show.
@@ -25,7 +25,7 @@ local shown = ""
 --- The pending keys to show, last 10 characters as ui2 shows them (R/ui2/messages.lua:584).
 function M.get() return shown end
 
---- Whether the hook is installed, so lualine draws M.get() rather than %S.
+--- Whether the hook is installed, so the statusline draws M.get() rather than %S.
 M.active = false
 
 --- The 'showcmd' text to show: all of it, unless it is one key whose command needs nothing more. Visual mode's
