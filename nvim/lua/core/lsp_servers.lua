@@ -232,25 +232,36 @@ function M.setup()
   })
   vim.lsp.enable(vim.tbl_keys(bins))
 
-  -- vim.lsp's exit handler (made when vim.lsp loaded, so it runs before this one) stops the initialized clients and
-  -- waits up to their exit_timeout, then Neovim exits and closes the pipes of every server still running. tflint then
-  -- dies of SIGPIPE without stopping its plugin child (tflint --act-as-bundled-plugin), which runs on, orphaned. So
-  -- terminate what Client:stop would have, had Neovim stayed: a server still initializing (vim.lsp.get_clients() lists
-  -- none), and one that outlived its exit_timeout; then wait for them to exit.
+  -- vim.lsp's exit handler (made when vim.lsp loaded, so it runs before this one) sends shutdown to the initialized
+  -- clients and waits up to their exit_timeout, 0 for the default exit_timeout = false; then Neovim exits and closes
+  -- the pipes of every server still running. A server busy then (yamlls parsing a big file) runs on until it reads the
+  -- EOF, and tflint dies of SIGPIPE without stopping its plugin child (tflint --act-as-bundled-plugin), which runs on,
+  -- orphaned. So every server process started here gets one rule: one still initializing was sent no shutdown and is
+  -- terminated at once; an initialized one with exit_timeout = false gets quit_grace ms to finish the shutdown (one
+  -- with a number had it in vim.lsp's handler); then whatever still runs is terminated, as Client:stop force-stops,
+  -- and given quit_wait ms to exit.
+  local quit_grace, quit_wait = 100, 400
   vim.api.nvim_create_autocmd("VimLeavePre", {
     group = group,
     callback = function()
-      local spared = {} -- exit_timeout false: Client:stop never kills it
+      local graced = {} ---@type table<vim.lsp.rpc.PublicClient, true>
       for _, client in ipairs(vim.lsp.get_clients()) do
-        spared[client.rpc] = client.exit_timeout == false or nil
+        graced[client.rpc] = processes[client.rpc] and client.exit_timeout == false or nil
       end
-      local left = vim.tbl_filter(function(rpc) return not (spared[rpc] or rpc.is_closing()) end, vim.tbl_keys(processes))
+      local left = vim.tbl_filter(function(rpc) return not rpc.is_closing() end, vim.tbl_keys(processes))
+      local function closed(rpcs)
+        return vim.iter(rpcs):all(function(rpc) return rpc.is_closing() end)
+      end
+      for _, rpc in ipairs(left) do
+        if not graced[rpc] then
+          rpc.terminate()
+        end
+      end
+      vim.wait(quit_grace, function() return closed(vim.tbl_keys(graced)) end, 5)
       for _, rpc in ipairs(left) do
         rpc.terminate()
       end
-      vim.wait(1000, function()
-        return vim.iter(left):all(function(rpc) return rpc.is_closing() end)
-      end, 10)
+      vim.wait(quit_wait, function() return closed(left) end, 5)
     end,
   })
 
