@@ -18,13 +18,15 @@ Neovim nightly (`$VIMRUNTIME/lua/vim/lsp/`, v0.13.0-dev-1868):
 
 ### Enable drawing globally, toggle per buffer
 
-- Decision: `vim.lsp.codelens.enable(true)` once in `config/autocmds.lua`, next to `vim.lsp.document_color`.
-  `<leader>Tc` hides or shows the lenses of the current buffer (`vim.lsp.codelens.enable(state, { bufnr = 0 })`).
+- Decision: `vim.lsp.codelens.enable(true)` once in `config/autocmds.lua` (now `lsp/buffer.lua`), next to
+  `vim.lsp.document_color`. `<leader>Tc` hides or shows the lenses of the current buffer
+  (`vim.lsp.codelens.enable(state, { bufnr = 0 })`).
 - Why: a server that has none is never asked, so the global switch costs nothing there. The key is gated on
-  `textDocument/codeLens` in `core/lsp.lua`, like `<leader>Th` on inlay hints, so it only exists where it does
-  something.
+  `textDocument/codeLens` in `core/lsp.lua` (now `lsp/buffer.lua`), like `<leader>Th` on inlay hints, so it only
+  exists where it does something.
 - Key: `c` for code lens; free in the `<leader>T` group, which uses t G h e f T i s w L d l m g D H
-  (`plugins/snacks.lua`, `plugins/git.lua`, `plugins/nvim-treesitter.lua`, `plugins/colorschemes.lua`).
+  (`plugins/snacks.lua`, `plugins/git.lua`, `plugins/nvim-treesitter.lua`, `plugins/colorschemes.lua`; now
+  each owner's file under `features/`, `lsp/buffer.lua`, `ui/snacks.lua` and `ui/theme.lua`).
 - Rejected: per-server `on_attach` enables, as nvim-lspconfig does for terraformls only
   (`nvim-lspconfig/lsp/terraformls.lua:44-46`); a new server would need a line each.
 

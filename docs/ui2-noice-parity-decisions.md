@@ -7,9 +7,9 @@ was made.
 ## Status
 
 - Decided: every behaviour below (2026-10-12).
-- Built (2026-10-12) in `nvim/lua/config/ui2/`. Full suite 40/40 PASS on nightly. The new tmux check
-  `tests/regress/work/ui2-noice/ui2_noice.sh` passes, and fails when the hooks are off. One niri-screen-lab
-  pass covered all six behaviours.
+- Built (2026-10-12) in `nvim/lua/config/ui2/` (now `nvim/lua/ui/messages/`). Full suite 40/40 PASS on nightly.
+  The new tmux check `tests/regress/work/ui2-noice/ui2_noice.sh` passes, and fails when the hooks are off. One
+  niri-screen-lab pass covered all six behaviours.
 - Follow-ups (2026-10-12): routine errors time out; the split measures a typed command's output as a whole and
   other messages one at a time. The tmux check covers both.
 
@@ -69,7 +69,7 @@ Runtime refs: `R` = nightly runtime (NVIM v0.13.0-dev-1808+g561857c4a8), `N` = n
 | `ui/messages/cmdline.lua` | `:` and `input()` popup; `/` `?` at the bottom |
 | `ui/messages/messages.lua` | Routes messages to toasts or the split; keeps a ring of every message |
 | `ui/messages/history.lua` | `<leader>n` picker over the ring plus `vim.notify` history |
-| `plugins/snacks.lua` | `notifier.keep` keeps errors; `<leader>n` history, `<leader>N` dismiss; removed the `vim._print` → `dd` override, which sent every `:lua =expr` to a debug toast |
+| `ui/snacks.lua` | `notifier.keep` keeps errors; `<leader>n` history, `<leader>N` dismiss; removed the `vim._print` → `dd` override, which sent every `:lua =expr` to a debug toast |
 
 ### `:` popup (cmdline.lua)
 
@@ -100,7 +100,7 @@ Runtime refs: `R` = nightly runtime (NVIM v0.13.0-dev-1808+g561857c4a8), `N` = n
   (E486, E384/E385, E35, E348/E349), quickfix and location lists (E42, E553, E776, E380/E381), tags, include
   search, change list, marks, folds, `:next`/`:bnext` ends and `gf`, each with its `:h` source. A toast whose
   errors are all routine gets snacks' default 3s timeout (`S/notifier.lua:113`), which noice's notify view also
-  used (no `timeout` in `N/config/views.lua:66-72`). It is passed as `routine = true`; `plugins/snacks.lua`'s
+  used (no `timeout` in `N/config/views.lua:66-72`). It is passed as `routine = true`; `ui/snacks.lua`'s
   `notifier.keep`, which holds every other error (including `vim.notify` ones), skips it.
 - Split: when the rows a toast would need (counted the way snacks sizes it, `S/notifier.lua:513-517,588-603`) pass
   `min(20, 0.6*lines - 2)`, the message opens a non-entered `[Output]` split; `q` closes it. 20 is noice's
