@@ -1,40 +1,4 @@
--- palletes
-local function get_onedark_palette()
-  -- onedark.palette holds one table per style
-  local ok, palettes = pcall(require, "onedark.palette")
-  local c = ok and vim.g.onedark_config and palettes[vim.g.onedark_config.style]
-  if c then
-    return {
-      bg = c.bg0 or "#282c34",
-      fg = c.fg or "#abb2bf",
-      red = c.red or "#e06c75",
-      yellow = c.yellow or "#e5c07b",
-      green = c.green or "#98c379",
-      cyan = c.cyan or "#56b6c2",
-      blue = c.blue or "#61afef",
-      magenta = c.purple or "#c678dd",
-      orange = c.orange or "#d19a66",
-      violet = c.violet or "#a9a1e1",
-    }
-  else
-    vim.notify("Unable to Load onedark pallette in the statusline", vim.log.levels.WARN)
-    -- Fallback OneDark colors (from official theme)
-    return {
-      bg = "#282c34",
-      fg = "#abb2bf",
-      red = "#e06c75",
-      yellow = "#e5c07b",
-      green = "#98c379",
-      cyan = "#56b6c2",
-      blue = "#61afef",
-      magenta = "#c678dd",
-      orange = "#d19a66",
-      violet = "#a9a1e1",
-    }
-  end
-end
-
-local function get_colors() return get_onedark_palette() end
+local function get_colors() return require("ui.theme").palette() end
 
 local spec = {
   "AH-Merii/neoblocks.nvim",
