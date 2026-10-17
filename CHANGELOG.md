@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/AH-Merii/nvim-config/compare/v0.2.0...v0.3.0) (2026-10-17)
+
+
+### Restructuring
+
+* one module each owns formatting and linting, and the facts read their plans ([#34](https://github.com/AH-Merii/nvim-config/issues/34)) ([0c1277f](https://github.com/AH-Merii/nvim-config/commit/0c1277f674e982eccd74d2bc9bf1ef5652ff9913))
+
 ## [0.2.0](https://github.com/AH-Merii/nvim-config/compare/v0.1.0...v0.2.0) (2026-10-17)
 
 
