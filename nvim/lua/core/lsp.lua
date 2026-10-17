@@ -1,4 +1,5 @@
--- Diagnostics display and LSP keymaps gated on what the attached clients support; core.lsp_servers starts the servers
+-- Diagnostics display and the LSP keys, which act where an attached client supports their method (lua/keys/);
+-- core.lsp_servers starts the servers
 vim.diagnostic.config({
   virtual_text = true,
   underline = true,
@@ -18,202 +19,63 @@ vim.diagnostic.config({
   },
 })
 
-local M = {}
-
----@class core.lsp.Key: vim.keymap.set.Opts
----@field [1] string lhs
----@field [2]? string|fun() rhs, or nil until a Snacks toggle supplies it through M.map
----@field mode? string
----@field method? string|string[] the buffer gets the map while an attached client supports any of these
----@field when? fun(buf: integer, clients: vim.lsp.Client[]): boolean the buffer also gets the map while this holds
+local keys = require("keys")
 
 -- Loaded here, at startup, so their plans are dropped on attach, detach and ToolsChanged before any other handler
 -- reads them (the statusline's)
 local formatting, linting = require("format"), require("linting")
 
--- The "formatter" need: a formatter the filetype's language names, installed or not, or an attached client that
--- formats (a range, in visual mode)
----@param buf integer
-local function has_formatter(buf) return formatting.has(buf) end
----@param buf integer
-local function has_range_formatter(buf) return formatting.has(buf, true) end
+-- A formatter the filetype's language names, installed or not, or an attached client that formats (a range, for a
+-- selection)
+keys.need("formatter", function(buf) return formatting.has(buf) end)
+keys.need("range formatter", function(buf) return formatting.has(buf, true) end)
+-- Diagnostics come from attached clients, and from the linters the filetype's language names
+keys.need("diagnostics", function(buf) return #vim.lsp.get_clients({ bufnr = buf }) > 0 or linting.has(buf) end)
 
 local function format() formatting.buffer() end
 
--- Diagnostics come from attached clients, and from the linters the filetype's language names
----@param buf integer
----@param clients vim.lsp.Client[]
-local function has_diagnostics(buf, clients) return #clients > 0 or linting.has(buf) end
+local key = keys.feature("lsp")
+local PURPLE = "purple"
+---@param icon string
+local function purple(icon) return { icon = icon, color = PURPLE } end
 
----@param clients vim.lsp.Client[]
-local function has_pyrefly(_, clients)
-  return vim.iter(clients):any(function(client) return client.name == "pyrefly" end)
-end
+key({
+  { "<leader>l", group = "LSP", mode = { "n", "x" }, icon = purple("󱍔") },
+  { "<leader>c", group = "LSP (Trouble)", icon = purple("󰙎") },
+  { "<leader>x", group = "Diagnostics", icon = { icon = "", color = "orange" } },
+  { "g", group = "Goto", mode = { "n", "x" }, icon = { icon = "", color = "cyan" } },
+  { "gr", group = "LSP", mode = { "n", "x" }, icon = purple("󱍔") },
+  { "gC", group = "calls", icon = { icon = "󰃻", color = "yellow" } },
 
----@type core.lsp.Key[]
-M.keys = {
-  { "gd", function() Snacks.picker.lsp_definitions() end, desc = "Definition", method = "textDocument/definition" },
-  { "gD", function() Snacks.picker.lsp_declarations() end, desc = "Declaration", method = "textDocument/declaration" },
-  { "gI", function() Snacks.picker.lsp_implementations() end, desc = "Implementations", method = "textDocument/implementation" },
-  { "grr", function() Snacks.picker.lsp_references() end, desc = "References", method = "textDocument/references" },
-  { "gt", function() Snacks.picker.lsp_type_definitions() end, desc = "Type Definition", method = "textDocument/typeDefinition" },
-  { "gCi", function() Snacks.picker.lsp_incoming_calls() end, desc = "Incoming Calls", method = "textDocument/prepareCallHierarchy" },
-  { "gCo", function() Snacks.picker.lsp_outgoing_calls() end, desc = "Outgoing Calls", method = "textDocument/prepareCallHierarchy" },
-  { "]]", function() Snacks.words.jump(vim.v.count1) end, desc = "Reference (word)", method = "textDocument/documentHighlight" },
-  { "[[", function() Snacks.words.jump(-vim.v.count1) end, desc = "Reference (word)", method = "textDocument/documentHighlight" },
-  { "K", function() vim.lsp.buf.hover() end, desc = "Hover", method = "textDocument/hover" },
-  { "<leader>lr", function() vim.lsp.buf.rename() end, desc = "LSP Rename", method = "textDocument/rename" },
-  { "<leader>cs", "<cmd>Trouble symbols toggle focus=false<cr>", desc = "Symbols (Trouble)", method = "textDocument/documentSymbol" },
+  { "gd", function() Snacks.picker.lsp_definitions() end, "Definition", need = "definition", icon = purple("󰊕") },
+  { "gD", function() Snacks.picker.lsp_declarations() end, "Declaration", need = "declaration", icon = purple("󱈸") },
+  { "gI", function() Snacks.picker.lsp_implementations() end, "Implementations", need = "implementation", icon = purple("󰡱") },
+  { "gt", function() Snacks.picker.lsp_type_definitions() end, "Type Definition", need = "typeDefinition", icon = purple("") },
+  { "gCi", function() Snacks.picker.lsp_incoming_calls() end, "Incoming Calls", need = "prepareCallHierarchy", icon = { icon = "󰃺", color = "cyan" } },
+  { "gCo", function() Snacks.picker.lsp_outgoing_calls() end, "Outgoing Calls", need = "prepareCallHierarchy", icon = { icon = "󰃷", color = "orange" } },
+  { "]]", function() Snacks.words.jump(vim.v.count1) end, "Reference (word)", need = "documentHighlight" },
+  { "[[", function() Snacks.words.jump(-vim.v.count1) end, "Reference (word)", need = "documentHighlight" },
+  -- A global K also keeps Neovim from mapping K in each buffer a hover server attaches to (runtime lua/vim/lsp.lua)
+  { "K", function() vim.lsp.buf.hover() end, "Hover", need = "hover" },
+  { "<leader>lr", function() vim.lsp.buf.rename() end, "LSP Rename", need = "rename" },
+  { "<leader>cs", "<cmd>Trouble symbols toggle focus=false<cr>", "Symbols (Trouble)", need = "documentSymbol" },
   {
     "<leader>cl",
     "<cmd>Trouble lsp toggle focus=false win.position=right<cr>",
-    desc = "LSP Definitions / references / ... (Trouble)",
-    method = {
-      "textDocument/definition",
-      "textDocument/references",
-      "textDocument/implementation",
-      "textDocument/typeDefinition",
-      "textDocument/declaration",
-      "textDocument/prepareCallHierarchy",
-    },
+    "LSP Definitions / references / ... (Trouble)",
+    need = { "definition", "references", "implementation", "typeDefinition", "declaration", "prepareCallHierarchy" },
   },
-  { "<leader>Th", method = "textDocument/inlayHint" },
-  { "<leader>Tc", method = "textDocument/codeLens" },
-  { "<leader>Te", when = has_pyrefly },
-  { "<leader>lf", format, desc = "Format buffer", when = has_formatter },
-  { "<leader>lf", format, mode = "x", desc = "Format selection", when = has_range_formatter },
-  { "<leader>Tf", when = has_formatter },
-  { "<leader>xX", "<cmd>Trouble diagnostics toggle filter.buf=0<cr>", desc = "Buffer Diagnostics (Trouble)", when = has_diagnostics },
-  { "<leader>sd", function() Snacks.picker.diagnostics_buffer() end, desc = "Diagnostics (Buffer)", when = has_diagnostics },
-  { "<leader>sS", function() Snacks.picker.lsp_workspace_symbols() end, desc = "Workspace symbols", method = "workspace/symbol" },
-}
-
--- Neovim maps its LSP defaults globally; move them into the table so they are gated too
-for _, builtin in ipairs({
-  { "grn", "textDocument/rename", desc = "Rename" },
-  { "gra", "textDocument/codeAction", desc = "Code action" },
-  { "gri", "textDocument/implementation", desc = "Implementation" },
-  { "grt", "textDocument/typeDefinition", desc = "Type definition" },
-  { "grx", "textDocument/codeLens", desc = "Run code lens" },
-  { "gO", "textDocument/documentSymbol", desc = "Document symbols" },
-}) do
-  local lhs, method = builtin[1], builtin[2]
-  for _, mode in ipairs({ "n", "x" }) do
-    local map = vim.fn.maparg(lhs, mode, false, true)
-    if map.callback then
-      vim.keymap.del(mode, lhs)
-      table.insert(M.keys, { lhs, map.callback, mode = mode, desc = builtin.desc or map.desc, method = method })
-    end
-  end
-end
-pcall(vim.keymap.del, "n", "grr")
-
-local not_opts = { mode = true, method = true, when = true }
-
----@param key core.lsp.Key
----@param buf integer
----@param clients vim.lsp.Client[]
-local function supported(key, buf, clients)
-  local methods = type(key.method) == "table" and key.method or { key.method }
-  for _, client in ipairs(clients) do
-    for _, method in ipairs(methods) do
-      if client:supports_method(method, buf) then
-        return true
-      end
-    end
-  end
-  return key.when ~= nil and key.when(buf, clients)
-end
-
---- Adds or deletes each gated map in buf, leaving buffer-local maps of the same lhs from ftplugins alone.
----@param buf integer
----@param gone? integer id of a client that is detaching from buf
-local function sync(buf, gone)
-  if not vim.api.nvim_buf_is_valid(buf) then
-    return
-  end
-  local clients = vim.tbl_filter(function(client) return client.id ~= gone end, vim.lsp.get_clients({ bufnr = buf }))
-  -- Neovim maps K to hover per buffer on attach and on registration; drop it for the gated K in the table
-  for _, map in ipairs(vim.api.nvim_buf_get_keymap(buf, "n")) do
-    if map.lhs == "K" and map.desc == "vim.lsp.buf.hover()" then
-      vim.keymap.del("n", "K", { buf = buf })
-    end
-  end
-  -- Each mode's buffer maps by lhs, read once per sync rather than once per key (3.9 ms a sync on app.py); a map this
-  -- sync adds goes into the index, and one it deletes has the mode read again
-  local held_by_mode = {} ---@type table<string, table<string, table>>
-  local function held_map(mode, lhs)
-    if not held_by_mode[mode] then
-      local by_lhs = {}
-      for _, map in ipairs(vim.api.nvim_buf_get_keymap(buf, mode)) do
-        by_lhs[map.lhsraw] = map
-        if map.lhsrawalt then
-          by_lhs[map.lhsrawalt] = map
-        end
-      end
-      held_by_mode[mode] = by_lhs
-    end
-    return held_by_mode[mode][lhs]
-  end
-  for _, key in ipairs(M.keys) do
-    if key[2] then
-      local mode, lhs = key.mode or "n", vim.keycode(key[1])
-      local held = held_map(mode, lhs)
-      if supported(key, buf, clients) then
-        if not held then
-          local opts = { buf = buf }
-          for k, v in pairs(key) do
-            if type(k) == "string" and not not_opts[k] then
-              opts[k] = v
-            end
-          end
-          vim.keymap.set(mode, key[1], key[2], opts)
-          held_by_mode[mode][lhs] = { desc = opts.desc }
-        end
-      elseif held and held.desc == key.desc then
-        vim.keymap.del(mode, key[1], { buf = buf })
-        held_by_mode[mode] = nil
-      end
-    end
-  end
-end
-
---- Supplies the rhs of a gated entry; pass it as Snacks.toggle's `map` so the toggle keeps its which-key label.
----@param mode string
----@param lhs string
----@param rhs string|fun()
----@param opts? vim.keymap.set.Opts
-function M.map(mode, lhs, rhs, opts)
-  for _, key in ipairs(M.keys) do
-    if key[1] == lhs and (key.mode or "n") == mode then
-      key[2], key.desc = rhs, opts and opts.desc
-      for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-        sync(buf)
-      end
-      return
-    end
-  end
-  error(("core.lsp: no gated entry for %s %s"):format(mode, lhs))
-end
-
-local group = vim.api.nvim_create_augroup("core.lsp.keys", { clear = true })
-vim.api.nvim_create_autocmd({ "FileType", "LspAttach" }, {
-  group = group,
-  callback = function(ev)
-    -- Buffers vim.lsp.enable skips, like lazy's first-start install window, where requiring conform, even in a pcall, breaks the install
-    if vim.bo[ev.buf].buftype ~= "" and vim.bo[ev.buf].buftype ~= "help" then
-      return
-    end
-    vim.schedule(function() sync(ev.buf) end)
-  end,
+  { "<leader>lf", format, "Format buffer", need = "formatter", icon = purple("󱍔") },
+  { "<leader>lf", format, "Format selection", mode = "x", need = "range formatter", icon = purple("󱍔") },
+  { "<leader>Tf", toggle = formatting.on_save, label = "Format on Save", need = "formatter" },
+  { "<leader>xX", "<cmd>Trouble diagnostics toggle filter.buf=0<cr>", "Buffer Diagnostics (Trouble)", need = "diagnostics" },
+  { "<leader>sd", function() Snacks.picker.diagnostics_buffer() end, "Diagnostics (Buffer)", need = "diagnostics", icon = { icon = "", color = "orange" } },
+  { "<leader>sS", function() Snacks.picker.lsp_workspace_symbols() end, "Workspace symbols", need = "workspace/symbol", icon = purple("󱔁") },
+  -- Neovim's gr* default is vim.lsp.buf.references; the picker instead
+  { "grr", function() Snacks.picker.lsp_references() end, "References", need = "references", icon = purple("") },
 })
-vim.api.nvim_create_autocmd("LspDetach", {
-  group = group,
-  callback = function(ev)
-    local id = ev.data.client_id
-    vim.schedule(function() sync(ev.buf, id) end)
-  end,
-})
+
+-- Neovim's own gr* keys are rows in keys/neovim.lua
 
 -- Linked editing: renaming a tag renames its pair, where the server supports it (html, and tsc in JSX/TSX)
 vim.api.nvim_create_autocmd("LspAttach", {
@@ -225,22 +87,3 @@ vim.api.nvim_create_autocmd("LspAttach", {
     end
   end,
 })
-
--- Servers may (un)register methods after LspAttach, which fires no autocmd
-for _, method in ipairs({ "client/registerCapability", "client/unregisterCapability" }) do
-  local handler = vim.lsp.handlers[method]
-  vim.lsp.handlers[method] = function(err, params, ctx)
-    local result = handler(err, params, ctx)
-    local client = vim.lsp.get_client_by_id(ctx.client_id)
-    if client then
-      vim.schedule(function()
-        for buf in pairs(client.attached_buffers) do
-          sync(buf)
-        end
-      end)
-    end
-    return result
-  end
-end
-
-return M

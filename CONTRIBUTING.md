@@ -24,14 +24,15 @@ The loading sequence is strictly ordered in `init.lua`:
 
 1. `lang`, `tools` and `tools.ux` - The languages' variant filetypes and buffer options, the tool resolver, install prompts
    and `:Tools` (before any plugin looks a tool up)
-2. `core.lsp` - Configure diagnostic appearance before any LSP loads
-3. `config.options` - Set Vim options & define `mapleader`
-4. `config.keymaps` - Register global keymaps
+2. `config.options` - Set Vim options & define `mapleader`
+3. `keys.neovim` - Neovim's own keys as key rows, its LSP defaults included
+4. `core.lsp` and `config.keymaps` - diagnostic appearance and the LSP keys; the editor's keys
 5. `config.autocmds` - Setup autocommands and event hooks
 6. `core.lazy` - Bootstrap Lazy.nvim and load all plugins
 7. `config.helpers` - Loaded on `VeryLazy` event after plugins ready
 
-**Critical**: This order ensures dependencies are met (e.g., `mapleader` defined before keymaps).
+**Critical**: This order ensures dependencies are met (e.g., `mapleader` defined before any key row; `keys` raises
+for a `<leader>` row added without it).
 
 ### Directory Structure
 
@@ -46,9 +47,10 @@ nvim/
 │   ├── lang/                # One data file per language, and the registry that reads them (init.lua)
 │   ├── tools/               # Tool resolver (mise), catalog, prompts and :Tools
 │   ├── ui/                  # facts.lua: what applies to each buffer, for the statusline, the tools indicator and :Status
+│   ├── keys/                # Key rows and needs (init.lua), the which-key adapter, Neovim's own keys as rows
 │   ├── config/              # Editor configuration
 │   │   ├── options.lua      # Vim options
-│   │   ├── keymaps.lua      # Global keymaps
+│   │   ├── keymaps.lua      # The editor's own keys, as rows
 │   │   ├── autocmds.lua     # Autocommands
 │   │   ├── helpers.lua      # LSP debugging commands (:LspInfo, :Status, ...)
 │   │   ├── textobjects.lua  # Custom text objects
@@ -56,12 +58,12 @@ nvim/
 │   │   └── ui2/             # Messages, command line and pending keys on Neovim's ui2
 │   └── plugins/             # Plugin specifications, one file per plugin or group
 ├── after/
-│   └── ftplugin/            # Filetype keymaps, and labels for the runtime ftplugins' maps
+│   └── ftplugin/            # Filetype keymaps (lua, vim)
 ```
 
 ### Module Dependencies
 
-- `config.keymaps` depends on `config.options` (needs `mapleader`)
+- Every key row depends on `config.options` (needs `mapleader`)
 - `config.helpers` depends on LSP clients being loaded (deferred via `VeryLazy`)
 - `blink.cmp` adds its completion capabilities to every server through `vim.lsp.config('*')`
   (`blink.cmp/plugin/blink-cmp.lua:1-7`), so a server's config doesn't merge them
@@ -181,7 +183,7 @@ catalog's args.
 
 1. Create `lua/plugins/[name].lua`
 2. Return Lazy plugin spec with appropriate loading strategy
-3. Include keymaps in the `keys` table for lazy loading
+3. Add its keys as rows (see "Adding a key"); use lazy's `keys` table only for a key that should load the plugin
 4. Add `config` function for setup
 5. Use `dependencies` table for plugin dependencies
 
@@ -190,7 +192,7 @@ catalog's args.
 ### Adding Filetype Behavior
 
 **Option 1**: Buffer options go in the language's file (`options` in `lua/lang/<lang>.lua`); keymaps go in
-`after/ftplugin/[filetype].lua`
+`after/ftplugin/[filetype].lua`, or as `keys.language(ft)` rows (see "Adding a key")
 
 Example structure:
 ```lua
@@ -261,6 +263,34 @@ vim.api.nvim_create_autocmd("BufEnter", {
     callback = function() ... end,
 })
 ```
+
+## Adding a key
+
+Every key is a row in `lua/keys/` (step 3 in `docs/rearchitecture-decisions.md`, D48 and D49). The owner declares
+its rows where it lives (a plugin spec, `core/lsp.lua`, `config/keymaps.lua`), with an adder for itself:
+
+```lua
+local keys = require("keys")
+local key = keys.feature("git", { need = "git" })   -- defaults go into each row
+key({ "]g", function() require("gitsigns").nav_hunk("next") end, "Next git hunk", icon = { icon = "", color = "green" } })
+key({ "<leader>TG", toggle = Snacks.toggle.new({ ... }) })   -- or toggle = { get = fn, set = fn }, label = "Name"
+keys.language("python")({ "]]", label = "Next top-level def/class" })  -- a label for the ftplugin's own map
+```
+
+- A row is `{ lhs, action, label }` plus `need`, `toggle`, `icon`, `mode`, `group`, `native` (Vim's own key with no
+  map), `hidden`, `echo`, `listed`, `remap`, `silent`, `nowait`. An unknown field raises.
+- `need` says where the key acts: a word defined with `keys.need(word, test)`, an LSP method (`"rename"`,
+  `"workspace/symbol"`) or `"client:<name>"`. A test runs on every press and once per popup rebuild, so it must be a
+  lookup; cache anything slow in the owner, filled by the owner's own events (`plugins/snacks.lua`'s git needs).
+- Where the need fails the key does what it did before: the global map it took over, or Vim's own key. A `<leader>`
+  key, or a row with `echo = true` (Neovim's `gr*` and `gO`), echoes the need it lacks instead.
+- Rows are global maps; only `keys.language(ft)` rows are buffer-local, and a buffer's own map (an ftplugin's) wins.
+- `keys.holds(need, buf)` and `keys.menu(buf, mode)` say where a key acts and what the popup lists; `keys.list()` gives
+  every row with its owner and `file:line`. `:map` and the keymaps picker list a gated key in every buffer.
+- `keys/which_key.lua` is the only code that knows which-key. Don't call `require("which-key").add`: a row's label,
+  icon and group are the popup's spec.
+- Test a key by pressing it and reading the popup (`wk_lists`, `wk_menu`, `wk_wait` in the regress harness), never by
+  which maps exist; unit tests drive `keys` directly (`tests/unit/keys_test.lua`).
 
 ## Key Integrations
 

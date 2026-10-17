@@ -5,15 +5,6 @@ return {
     config = function()
       local gs = require("gitsigns")
       local gsc = require("gitsigns.config")
-      -- one which-key spec, with the toggle's live label and icon, for the key mapped in every buffer
-      local signs_column = Snacks.toggle.new({
-        name = "Git Signs Column",
-        get = function() return gsc.config.signcolumn end,
-        set = function(state) gs.toggle_signs(state) end,
-        which_key = false,
-      })
-      Snacks.util.on_module("which-key", function() signs_column:_wk("<leader>TG", "n") end)
-
       -- stage_hunk() stages an unstaged hunk under the cursor and unstages a staged one
       local function unstage_hunk()
         local lnum = vim.fn.line(".")
@@ -26,17 +17,34 @@ return {
         require("gitsigns").stage_hunk()
       end
 
-      local hunk_keys = {
-        { "[g", function() require("gitsigns").nav_hunk("prev", { navigation_message = false }) end, desc = "Prev Hunk" },
-        { "]g", function() require("gitsigns").nav_hunk("next", { navigation_message = false }) end, desc = "Next Hunk" },
-        { "<leader>gb", function() require("gitsigns").blame_line() end, desc = "Blame" },
-        { "<leader>gd", function() require("gitsigns").preview_hunk() end, desc = "Diff (Preview)" },
-        { "<leader>Gr", function() require("gitsigns").reset_hunk() end, desc = "Reset Hunk" },
-        { "<leader>GR", function() require("gitsigns").reset_buffer() end, desc = "Reset Buffer" },
-        { "<leader>Gs", function() require("gitsigns").stage_hunk() end, desc = "Stage Hunk" },
-        { "<leader>Gu", unstage_hunk, desc = "Unstage Hunk" },
-        { "<leader>Gd", function() vim.cmd("Gitsigns diffthis HEAD") end, desc = "Diff (vs HEAD)" },
-      }
+      -- The hunk keys act where gitsigns is attached: it sets the status dict then, and clears it when it detaches
+      -- (e.g. after the file is renamed out of the repo)
+      local keys = require("keys")
+      keys.need("git", function(buf) return vim.b[buf].gitsigns_status_dict ~= nil end)
+      keys.feature("git", { need = "git" })({
+        { "[g", function() require("gitsigns").nav_hunk("prev", { navigation_message = false }) end, "git hunk", icon = { icon = "", color = "green" } },
+        { "]g", function() require("gitsigns").nav_hunk("next", { navigation_message = false }) end, " git hunk", icon = { icon = "", color = "green" } },
+        { "<leader>gb", function() require("gitsigns").blame_line() end, "Blame", icon = { icon = "󰩔", color = "yellow" } },
+        { "<leader>gd", function() require("gitsigns").preview_hunk() end, "Diff (Preview)", icon = { icon = "󰦓", color = "cyan" } },
+        { "<leader>Gr", function() require("gitsigns").reset_hunk() end, "Reset Hunk", icon = { icon = "󰁯", color = "orange" } },
+        { "<leader>GR", function() require("gitsigns").reset_buffer() end, "Reset Buffer", icon = { icon = "󱄍", color = "red" } },
+        { "<leader>Gs", function() require("gitsigns").stage_hunk() end, "Stage Hunk", icon = { icon = "", color = "green" } },
+        { "<leader>Gu", unstage_hunk, "Unstage Hunk", icon = { icon = "", color = "yellow" } },
+        { "<leader>Gd", function() vim.cmd("Gitsigns diffthis HEAD") end, "Diff (vs HEAD)", icon = { icon = "", color = "purple" } },
+        {
+          "<leader>TG",
+          toggle = Snacks.toggle.new({
+            name = "Git Signs Column",
+            get = function() return gsc.config.signcolumn end,
+            set = function(state) gs.toggle_signs(state) end,
+          }),
+        },
+      })
+      keys.feature("git")({
+        -- high level group for Git actions (capital G to mirror your <leader>T etc.)
+        { "<leader>G", group = "Git (Actions)", icon = { icon = "", color = "cyan" } },
+        { "<leader>g", group = "Git (Inspect)", icon = { icon = "", color = "cyan" } },
+      })
 
       gs.setup({
         signs = {
@@ -82,50 +90,7 @@ return {
           row = 0,
           col = 1,
         },
-        on_attach = function(buf)
-          for _, key in ipairs(hunk_keys) do
-            vim.keymap.set("n", key[1], key[2], { buf = buf, desc = key.desc })
-          end
-          signs_column:map("<leader>TG", { buf = buf })
-        end,
       })
-
-      -- gitsigns clears the status dict when it detaches, e.g. after the file is renamed out of the repo
-      vim.api.nvim_create_autocmd("User", {
-        pattern = "GitSignsUpdate",
-        group = vim.api.nvim_create_augroup("GitsignsKeys", { clear = true }),
-        callback = function(ev)
-          local buf = ev.data and ev.data.buffer
-          if buf and vim.api.nvim_buf_is_valid(buf) and vim.b[buf].gitsigns_status_dict == nil then
-            for _, key in ipairs(hunk_keys) do
-              pcall(vim.keymap.del, "n", key[1], { buf = buf })
-            end
-            pcall(vim.keymap.del, "n", "<leader>TG", { buf = buf })
-          end
-        end,
-      })
-
-      -- Optional which-key sugar (just like in Snacks)
-      local ok, wk = pcall(require, "which-key")
-      if ok then
-        wk.add({
-          -- high level group for Git actions (capital G to mirror your <leader>T etc.)
-          { "<leader>G", group = "Git (Actions)", icon = { icon = "", color = "cyan" } },
-          { "<leader>g", group = "Git (Inspect)", icon = { icon = "", color = "cyan" } },
-
-          -- actions
-          { "<leader>Gs", icon = { icon = "", color = "green" }, real = true }, -- stage hunk
-          { "<leader>Gu", icon = { icon = "", color = "yellow" }, real = true }, -- unstage hunk
-          { "<leader>Gr", icon = { icon = "󰁯", color = "orange" }, real = true }, -- reset hunk
-          { "<leader>GR", icon = { icon = "󱄍", color = "red" }, real = true }, -- reset buffer
-          { "<leader>Gd", icon = { icon = "", color = "purple" }, real = true }, -- diff (HEAD)
-
-          { "<leader>gb", icon = { icon = "󰩔", color = "yellow" }, real = true }, -- blame
-          { "<leader>gd", icon = { icon = "󰦓", color = "cyan" }, real = true }, -- diff preview
-        })
-      else
-        vim.notify("which-key.nvim not found. Install it for Git icons/groups.", vim.log.levels.WARN, { title = "gitsigns.nvim" })
-      end
     end,
   },
 

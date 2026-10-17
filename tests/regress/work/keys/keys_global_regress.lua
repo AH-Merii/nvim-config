@@ -90,7 +90,8 @@ local toggled = 0
 for id, toggle in pairs(Snacks.toggle.toggles) do
   local desc = "Toggle " .. toggle.opts.name
   for _, m in ipairs(vim.api.nvim_get_keymap("n")) do
-    if m.desc == desc and m.callback then
+    -- an expr map is a gated key (D48): it acts only where its need holds, which plain.txt here lacks
+    if m.desc == desc and m.callback and m.expr ~= 1 then
       local before = toggle:get()
       local ok1, err1 = pcall(m.callback)
       local mid = toggle:get()
