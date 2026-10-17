@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/AH-Merii/nvim-config/compare/v0.6.0...v0.7.0) (2026-10-17)
+
+
+### Bug Fixes
+
+* **lsp:** quitting stops every server, a busy one included, within 0.5 s ([#42](https://github.com/AH-Merii/nvim-config/issues/42)) ([7349326](https://github.com/AH-Merii/nvim-config/commit/7349326adaa3c2e8fe850287f1d892d81646827e))
+
 ## [0.6.0](https://github.com/AH-Merii/nvim-config/compare/v0.5.0...v0.6.0) (2026-10-17)
 
 
