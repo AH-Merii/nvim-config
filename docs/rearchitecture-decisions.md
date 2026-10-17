@@ -17,7 +17,7 @@ The full proposal, with its measurements and sources, was written outside the re
 
 - Decided (2026-10-17): D45 to D49 below.
 - Planned: the path-B steps, in the order under "Path B".
-- Built: nothing yet.
+- Built: the unit tier and the tool backend seam ("Unit tier and tool backend seam" below).
 
 ## Target layout
 
@@ -170,3 +170,64 @@ server silently edits text.
   `origin/main`, and lands as one PR once the full suite passes and review findings are answered.
 - A GitHub release is tagged after each step lands.
 - Each step records its own decisions and deviations in a section of this file.
+
+## Unit tier and tool backend seam (2026-10-17)
+
+**Context.** Principle 7 of the proposal asks for two test tiers: fast in-process tests at each deep module's
+interface, and the regress suite for the whole. Its seam ledger finds one real seam under `tools/`: mise, a
+third-party CLI that installs over the network (`tools/init.lua:660,672` on main), with a port at
+`tools.setup({ backend })` and a fake for the unit tier. The tier starts alongside path-B step 1 (D47).
+
+**Decision: the tool backend seam.** `tools.Backend` (`nvim/lua/tools/init.lua:56-68`) is everything the resolver
+asks mise or has mise do, and nothing else:
+
+- Queries: `bin_paths("/")` (the global tools), `scan_project(root)` (what the project's configs pin, installed or
+  not, and their bin dirs), `env(scope, dirs)` (the env of a tool that needs a runtime), `install_version(path)`
+  (a version read from mise's install dir), `clean_path()` (Neovim's PATH without mise's shims and install dirs,
+  which the system layer searches).
+- Installs: `use_global`, `install` (a pinned version), `trust` and `install_project`, plus `missing()`, which says
+  why installs can't run ("mise is not installed"). The resolver still decides whether installs may run at all
+  (`can_install`, `tools/init.lua:635`).
+- `tools/mise.lua` is the mise adapter, its queries unchanged. The install commands, and their error text
+  (`<command>: <stderr>`), moved there from the resolver unchanged. `tools.setup({ backend = … })` swaps the
+  adapter and drops every cached answer (`tools/init.lua:945`); `tools.setup()` keeps mise.
+
+What stays real, outside the seam:
+
+- The project env dirs (`.venv/bin`, `node_modules/.bin`, searched upward) and the system PATH. They are file
+  system probes the resolver does itself, cheap and local; unit tests make them in throwaway dirs and set PATH.
+  Faking them would leave the resolver's own upward search untested.
+- Running a found copy (`--version` for the minimum-version check) and rustup (`rustup which`,
+  `rustup component add`). They go through `tools/proc.lua`, where `run` moved from `tools/mise.lua`: they are not
+  mise. The fake's tools are real executables, so the version check runs for real.
+- The saved answers to the project prompt (`tools/state.lua`), a local file; tests point `state.file` at a temp dir.
+
+**Decision: the unit tier.** `tests/unit/<module>_test.lua`, each runnable alone from the repo root with
+`nvim --clean --headless -l tests/unit/<file>`. Its first lines put `nvim/lua` (relative to the file) and
+`tests/unit` on `package.path`; it loads no plugins and fails by raising. `tests/unit/run.sh [regex]` (and
+`mise run test:unit`) runs each file in its own Neovim with throwaway XDG and temp dirs, prints PASS/FAIL with the
+time, and exits non-zero on a failure. Helpers: `helper.lua` (cases, assertions, temp files),
+`fake_backend.lua` (the fake tool backend) and `fake_server.lua` (an in-process language server started through
+the real `vim.lsp` with a Lua `cmd`, as `tests/regress/work/keys/keys_lsp_gate.lua` does, with control of its
+capabilities and registrations and a log of its requests). The whole tier runs in about 0.2 s (`tests/unit/run.sh`:
+`fake_server_test` 35 ms, `tools_test` 142 ms).
+
+`tests/unit/tools_test.lua` tests the rules of `docs/mise-tooling-decisions.md`, not today's code paths: the
+resolution order (project env, then an accepted project mise config, then global mise, then the system PATH,
+`:30-36`), a project env above the root (`:32`), an unanswered or "global only" project config isn't used (`:33`,
+`:62-66`), a copy below the minimum version is skipped and one at the minimum is used (case 9), and a tool missing
+its runtime installs both in one `mise use -g`, or only the runtime when the tool is there (case 10). Each rule
+was shown to bite with a one-bug variant of the resolver.
+
+**Rejected.**
+
+- The backend owning `run`, a seam at the process boundary: the fake would either have to run real processes for
+  the version checks anyway or fake every executable, and rustup is not mise.
+- The proposal's fake shape, `project = { [".venv"] = { ruff = "0.16.0" } }`: `.venv` is a file system probe,
+  not a mise answer. The fake takes `global = { <binary> = <version> }` and `projects = { [root] = { <binary> =
+  <version or { version, installed = false }> } }`.
+- The fake in `nvim/lua/tools/`: it ships nothing to the editor, so it lives in `tests/unit`. It supports only
+  what the tests use; its pinned and project installs raise.
+- Overriding `tools.can_install` to let a test install: the test stubs `nvim_list_uis` instead, as
+  `tests/regress/checks/tools_indicator.lua:9` does, so the headless guard itself stays real.
+- A test framework (busted, mini.test, plenary): a dependency for what `nvim -l` and a 95-line helper do.

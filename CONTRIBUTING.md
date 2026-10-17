@@ -270,6 +270,13 @@ After modifying configuration:
 4. Check LSP status: `:LspStatus` or `:Status`
 5. Check for errors: `:messages`
 
+### Unit tests
+
+`tests/unit/` tests a module through its interface, in-process, with no plugins: `mise run test:unit` (or
+`tests/unit/run.sh [name-regex]`) runs every `*_test.lua` in a few seconds, with throwaway Neovim dirs. The tool
+resolver runs there on a fake tool backend instead of mise, and LSP code on an in-process fake server;
+`tests/unit/README.md` has the conventions. Run them while iterating; they don't replace the suite.
+
 ### Regression suite
 
 `tests/regress/suite.sh` runs the config headless against fixtures, on nightly, without touching your own Neovim
