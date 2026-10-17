@@ -23,6 +23,7 @@ The full proposal, with its measurements and sources, was written outside the re
 - Built: step 1, `lang/` ("Step 1: lang/" below).
 - Built: step 4's first half, `ui/facts` and the statusline adapter ("Step 4: ui/facts and the statusline adapter"
   below); the swap to neoblocks follows separately.
+- Built: step 2, `format/` and `linting/` ("Step 2: format/ and lint/" below).
 
 ## Target layout
 
@@ -36,7 +37,7 @@ nvim/
     ├── tools/          resolver (kept), mise backend, catalog, prompts, :Tools, indicator
     ├── lsp/            server lifecycle and wiring
     ├── format/         format, on save, conform adapter
-    ├── lint/           lint, what runs, nvim-lint adapter
+    ├── linting/        lint, what runs, nvim-lint adapter (not lint/: step 2)
     ├── keys/           rows, needs, which-key adapter, toggles, Neovim's keys as rows
     ├── textobjects/    treesitter objects and moves (kept)
     ├── ui/             facts, statusline, theme, messages (ui2, kept), picker, notify
@@ -534,3 +535,149 @@ memory shows it. The regress checks were run against configs with one bug each:
 - facts that run a covered linter fail `ui_facts`;
 - facts whose formatters are in another order than conform's fail `ui_facts`;
 - an indicator count off by one fails `statusline_facts` and `tools_indicator`.
+
+## Step 2: format/ and lint/ (2026-10-17)
+
+Built on `rearch/format-lint` from `origin/main` 30877d7 (step 1 included). Behaviour is unchanged; what the card in
+the proposal (Part 4, "Formatting · format/" and "Linting · lint/") sketched, and what changed from it.
+
+**Built.** `nvim/lua/format/` and `nvim/lua/linting/`, each a module with one adapter file that is the only code
+knowing its plugin (`format/conform.lua`, `linting/nvim_lint.lua`). The plugin specs shrink to loading the plugin and
+calling `setup()` (`plugins/conform.lua`, `plugins/nvim-lint.lua`, which keeps the `<leader>ll`/`<leader>li` maps
+until step 3). Gone: `format_buffer` patched onto conform's table, the save hook and `vim.g.snacks_format_on_save` in
+the snacks spec (nothing else read the flag: `grep -rn snacks_format_on_save nvim tests` finds none),
+`has_formatter`'s and `has_diagnostics`'s bodies in `core/lsp.lua`, and `tools/lint.lua`.
+
+Interfaces:
+
+- `format.buffer(buf?, { async? })` formats with the formatters that run, else an attached server (conform's
+  `lsp_format = "fallback"`), and reports once what ran, the formatter's or server's own error (the adapter turns a
+  server's error table into text), or that nothing can format the buffer; it waits for binaries still being looked
+  up, as conform's command did (`nvim/lua/format/init.lua:103`). `<leader>lf`, `:FormatWithConform` and the save hook
+  call it; in visual mode conform formats the selection. A `range` option waits for a caller (step 3 at the earliest).
+- `format.on_save` is a `{ get, set }` pair (`format/init.lua:158`), the shape the keys card's
+  `toggle = format.on_save` takes; the snacks toggle row passes them through.
+- `format.plan(buf)` is `{ formatters, run }`, `linting.plan(buf)` is `{ linters, run, covered }`: what the language
+  names, what of it runs now (a binary still being looked up does not), and which linters an attached server covers.
+  Cached per buffer (`format/init.lua:71`, `linting/init.lua:91`). A first build also had `resolving`, which only the
+  tests read; review had it dropped, as `run` already leaves out what is being looked up.
+- `format.has(buf, range?)` and `linting.has(buf)` are the "formatter" and "linter" needs: a formatter the language
+  names, installed or not, or a server that formats (a range, with `range`); a linter the language names. These are
+  the answers today's gates give (`checks/keys_format_gate.lua`, `checks/keys_diag_gate.lua` pass unchanged), and
+  `core/lsp.lua`'s rows now call them.
+- `linting.buffer(buf?, names?)` lints with the resolved binaries; the module lints on BufEnter, BufWritePost and
+  InsertLeave as before (the BufEnter question stays open, Part 9), drops a covered linter's findings when its server
+  attaches, and lints a root's buffers again on ToolsChanged with the linters that changed.
+
+**Decisions.**
+
+- *The module is `linting/`, not `lint/`.* nvim-lint's own Lua module is `lint` (`nvim-lint/lua/lint.lua`, with
+  `lua/lint/linters/*.lua`), and the config dir comes first on the runtimepath, so a `lua/lint/init.lua` here would
+  shadow it for every `require("lint")`, nvim-lint's and the checks' included. `format/` collides with nothing (no
+  plugin in `tests/regress/data/nvim/lazy/*/lua/` has a `format` module).
+  Rejected: `formatting/` and `linting/` for symmetry, which renames a module the task and the layout name.
+- *A plan is computed from `lang.of` and the resolver, not from conform's `list_formatters_to_run`.* For a formatter
+  with a catalog binary, conform's availability check is "the command is executable"
+  (`conform/init.lua:755-820`), and the command is the resolved path, so "the binary is found" is the same answer.
+  None of the 16 formatters the languages name has a `condition` or `require_cwd` (grep over
+  `conform.nvim/lua/conform/formatters/<name>.lua` finds none). A name with no catalog binary, which only test
+  languages use, asks conform (`format/conform.lua:56`). This keeps the plan readable with no plugin loaded, and costs
+  a quarter of conform's list (below).
+- *What drops a plan.* FileType, BufFilePost (a new root), DirChanged (a buffer that isn't a file has the cwd as its
+  root), BufWipeout, ToolsChanged for the plan's root, and a lookup the plan started finishing: a lookup whose result
+  did not change fires no ToolsChanged (`tools/init.lua:519-551`), so a plan made during a refresh would otherwise
+  leave that tool out until the next drop. `linting.plan` is dropped on LspAttach and LspDetach too, and again on the next tick after LspDetach,
+  since the detaching client counts as attached while the event runs (`vim/lsp/client.lua:1435-1469` on nightly
+  0.13.0-dev-1868) and `ui.facts` can read plans from that event. A filetype set with `noautocmd` makes a new plan on
+  the next read.
+- *A root that moves with no event is caught where the root is found anyway.* A project marker made outside Neovim
+  (`git init` in a terminal) moves a buffer's root and fires nothing. A lint finds the buffer's root before it runs,
+  so it makes a new plan when the cached one was made for another root (`plan_in`, `linting/init.lua:107`), and the
+  ToolsChanged relint uses the event's root. Review found the first build mixing the two: the filter passed a linter
+  from the old root's plan while the wrap looked its binary up in the new root, found nothing, and ran the bare
+  command from PATH with no cwd, on every BufEnter, until the next drop (probe in
+  `~/.cache/nvim-config/rearch/format-lint-review/tmp/rootprobe/`, `out-main.txt` against `out-branch.txt`).
+  `format.buffer` always makes a new plan. A `format.plan` or `linting.plan` read sees the new root at the next drop;
+  checking the root on every read would cost `tools.root`'s 131-135 µs a read (below).
+- *Servers are not cached for the format need.* A server's formatting can be registered after it attaches, and
+  registration fires no autocmd (D48), so `format.has` reads `vim.lsp.get_clients({ bufnr, method })` when called;
+  its language half is `lang.of`, a table lookup cached for the session. Neither half makes a plan, so a press or a
+  which-key rebuild never pays the uncached plan. `linting.plan`'s `covered` is cached, since covering depends on a
+  server attaching by name, which LspAttach and LspDetach report.
+- *The plan watchers are made when the modules load, and `core/lsp.lua` loads them at startup.* Neovim runs an
+  event's handlers in the order they were made, and `ui.facts` reads plans after its ToolsChanged and LspDetach
+  handlers, so the drops must come first. `ui/facts.lua` requires both modules before it makes its handlers, so the
+  order holds wherever facts loads first. The first build made them on the first read, which a statusline handler
+  could be.
+- *Formatter and linter definitions live in the adapters, by tool* (`definitions` in `format/conform.lua:9` and
+  `linting/nvim_lint.lua:13`, with `keep_cwd` and golangci-lint's per-binary args beside them). conform and nvim-lint
+  key a definition by tool name for every filetype, as the catalog keys binaries, and one tool serves several
+  languages (prettierd: html, css, markdown, yaml), so no one language file owns its args. golangci-lint's args and
+  `keep_cwd` are how the adapter runs nvim-lint, not language facts. Both adapters merge an entry over the plugin's
+  own definition, so an entry with only `args` keeps the built-in's command and parser; the first build replaced
+  nvim-lint's (raised in review).
+- *The adapters keep the plugins' shapes.* `format/conform.lua` hands `format.buffer` its error as text, and
+  `linting/nvim_lint.lua` answers which binary a linter runs (`M.binary`, `:68`: the catalog's, else a bare `cmd`),
+  so `lint.Linter` and `lsp.ResponseError` stay out of the modules (raised in review).
+  Rejected: the language files, beside each server's settings (D46): a shared tool's args would sit in one language
+  and apply to the others unseen, and `lang.Formatters` would stop being a plain list of names.
+- *conform still loads at VeryLazy.* It loaded there because the snacks spec required it for the save hook; the spec
+  now lists only `VeryLazy`, so the save hook and conform's `formatexpr` start at the same point. A probe in the
+  suite's sandbox read lazy's load reason on `main.lua`: `{ require = "conform", source = ".../plugins/snacks.lua" }`
+  on main, `{ event = "VeryLazy" }` on the branch, with `formatexpr` set to conform's in both. The first build kept
+  `BufWritePre` in the events too, which made a write before VeryLazy load conform, add the hook and format
+  (`nvim --headless a.lua -c w`, found in review); a write before VeryLazy is again not formatted, as on main.
+- *The save hook formats the written buffer (`ev.buf`)*, where it formatted buffer 0; Neovim makes the written buffer
+  current for BufWritePre, so they are the same buffer.
+
+- *A covering server counts while `core.lsp_servers.running` counts it* (`core/lsp_servers.lua:172`: attached and not
+  stopping), the definition `ui.facts` uses, so `linting/init.lua` doesn't define "running" again. After `:LspStop
+  ruff` the cached plan says covered until ruff's LspDetach drops it, as the facts keep listing ruff until that event.
+
+**Deviations from the card.** `lint.running(buf)` is `linting.plan(buf).run`: one cached read gives `ui.facts`
+its list and the gates `covered`, and "running" reads like nvim-lint's `get_running` (processes in flight). The unit
+file is `tests/unit/linting_test.lua`, after the module.
+
+**After step 4 (#32).** This branch was rebased onto step 4, which changed three things here:
+
+- The facts' formatters and linters are `format.plan(buf).run` and `linting.plan(buf).run` (`ui/facts.lua`), which
+  replaced its own `plan()`. A name with no catalog binary now runs when conform finds it, or when nvim-lint's bare
+  command resolves, as on main, where the facts' first build counted it as always running; only test languages have
+  such names. `ui_facts` still compares the formatters with conform's `list_formatters_to_run`.
+- `facts.setup` lost `opts.lang`, which step 4's "Test seam" describes: the plans read the registry from
+  `require("lang")`, so `tests/unit/facts_test.lua` sets `package.loaded.lang` to its `lang._from` registry, as the
+  format and linting tests do. A seam only the facts saw would have given the plans another language than the facts.
+- `tools/lint.lua` is gone, which step 4 left for this step, and the lualine change this branch had is dropped: step 4's
+  spec draws only the facts. `:Status` already took its formatters from the facts.
+
+**Cost.** Measured in the regress sandbox on `app.py` with pyrefly and ruff attached and every tool resolved, best of
+five rounds per run, three runs (`~/.cache/nvim-config/rearch/format-lint/evidence/perf/`: `perf_needs.lua`,
+`run-{1,2,3}.txt`):
+
+| read | µs per call |
+| --- | --- |
+| `format.has(buf)`, `format.has(buf, true)`, `linting.has(buf)` | 1.1–2.5 |
+| `format.has` on a filetype no language names, two clients attached | 1.2–2.3 |
+| `format.plan(buf)`, `linting.plan(buf)`, cached | 1.2–1.9 |
+| a plan made afresh (format, linting) | 132–166 |
+| of which `tools.root(buf)` | 131–135 |
+| conform's `list_formatters_to_run`, which main's statusline asked for its formatters | 576–637 |
+
+A plan is made once per buffer and again only after a drop. A buffer whose language names no formatter (or linter)
+skips the root lookup.
+
+**Tests.** `tests/unit/format_test.lua` (10 cases) and `tests/unit/linting_test.lua` (11 cases) run the modules through
+their interface on fixture languages (`lang._from`), the fake tool backend and fake servers, with a fake conform
+(`format`) and a fake nvim-lint (`try_lint`'s filter and wrap, `get_namespace`) at the plugin boundary: the plan for a
+buffer, a plan following a lookup, a refresh and ToolsChanged, the needs following attach, registration and detach,
+the LSP fallback and the report, a plan following `:cd`, a rename and a project marker that appears, a covered
+linter's findings dropping when its server attaches, and the relint of only the root's buffers with only the changed
+linter. 32 sibling wrong implementations and a do-nothing stub of each module fail them (`~/.cache/nvim-config/rearch/format-lint/evidence/mutants/`: `unit.sh all.tsv`,
+`unit-results.txt`). In the suite, `checks/format_on_save.lua` is new: writing a Lua file writes it formatted, and
+after `<leader>Tf` it is written as it is (it turns formatting on save on first, so it tests the rule, not the
+default); three wrong save hooks fail it (ignoring the toggle, no hook, an async
+format), `save-check-results.txt` there. `checks/format_buffer.lua` changed only its call, from
+`conform.format_buffer` to `format.buffer`.
+
+**Left for later steps.** The keys stay where they are (step 3): `core/lsp.lua`'s rows, the snacks toggle row and
+nvim-lint's `<leader>ll`/`<leader>li` maps call the interface above.

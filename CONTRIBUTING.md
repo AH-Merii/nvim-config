@@ -85,9 +85,8 @@ nvim/
   settings, formatters, linters, variants and buffer options. `lua/tools/catalog.lua` only says how to install each
   binary; a language names a server, formatter or linter, and the catalog gives its binary
 - `lang.of(ft)` answers what applies to a filetype: its servers, formatters, linters (with the server that covers each),
-  their binaries and its options. The install prompts, `:Tools`, the statusline, `:Status`, the format and diagnostics
-  key gates (`<leader>lf`, `<leader>Tf`, `<leader>xX`, `<leader>sd`), nvim-lint's runs and its `<leader>ll` and
-  `<leader>li` ask it. A dotted filetype no language declares gets its parts' formatters, linters and options as
+  their binaries and its options. The install prompts, `:Tools`, the statusline, `:Status`, and the format and linting
+  modules below ask it. A dotted filetype no language declares gets its parts' formatters, linters and options as
   conform, nvim-lint and the ftplugins combine them, and no servers
 - `lang.views()` builds the tables the plugins get: conform's `formatters_by_ft`, nvim-lint's `linters_by_ft`, each
   server's `vim.lsp.config` fields (applied above nvim-lspconfig's `lsp/<name>.lua`), the variants' filetype rules and
@@ -99,9 +98,9 @@ nvim/
 
 **The statusline** (`plugins/lualine.lua`, step 4 in `docs/rearchitecture-decisions.md`)
 - `require("ui.facts").get(buf)` holds a buffer's servers running, the formatters and linters that will run, the
-  missing tools (and whether the project's mise config waits for an answer), its tools root and its git checkout. It
-  is built from `lang.of`, the resolver's results and the attached clients, cached per buffer, and `User FactsChanged`
-  fires when it changes
+  missing tools (and whether the project's mise config waits for an answer), its tools root and its git checkout. What
+  will run is `format.plan(buf).run` and `linting.plan(buf).run`; the rest is built from `lang.of`, the resolver's
+  results and the attached clients. It is cached per buffer, and `User FactsChanged` fires when it changes
 - lualine's spec only draws it: the LSP, formatter and linter lists, the tools indicator (`tools.ux.status`), the
   branch's condition and the path's project come from the facts. A segment that needs something new about a buffer
   gets it added to the facts, not computed in the spec. `:Status` reads its LSP and formatter lines there too
@@ -271,7 +270,19 @@ For each language, the tooling chain is:
 Configure in:
 - `lua/lang/<lang>.lua` - `formatters` and `linters`; conform's and nvim-lint's tables are built from them
 - `lua/tools/catalog.lua` - The tool's binary and mise spec (`formatters = { ... }` or `linters = { ... }`)
-- `lua/plugins/conform.lua` and `lua/plugins/nvim-lint.lua` - Only a formatter's or linter's own definition or args
+- `definitions` in `lua/format/conform.lua` and `lua/linting/nvim_lint.lua` - Only a formatter's or linter's own
+  definition or args, kept by tool since conform and nvim-lint key them by name for every filetype
+
+Two modules own them (step 2 in `docs/rearchitecture-decisions.md`); the plugin specs only load the plugin and call
+their `setup()`, and each module's adapter file is the only one that knows its plugin:
+- `lua/format/` (`format/conform.lua` the adapter): `format.buffer(buf)` formats with the formatters that run, else an
+  attached server, and reports once what ran (`<leader>lf`, `:FormatWithConform`, and on save while
+  `format.on_save.get()`, which `<leader>Tf` flips); `format.plan(buf)` is what the language names and what of it runs
+  now, cached per buffer; `format.has(buf, range?)` is the key gates' need, a named formatter or a formatting server
+- `lua/linting/` (`linting/nvim_lint.lua` the adapter; not `lint/`, which is nvim-lint's own module): it lints on
+  entering a buffer, writing and leaving insert mode, drops a linter's findings when its covering server attaches, and
+  lints again when ToolsChanged finds a linter; `linting.plan(buf)` (`.run` is what `ui.facts` lists) and
+  `linting.has(buf)` as for format
 
 ### Utilities
 
