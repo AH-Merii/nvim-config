@@ -451,6 +451,15 @@ return {
           :map("<leader>Th")
         Snacks.toggle
           .new({
+            name = "Code Lens",
+            get = function() return vim.lsp.codelens.is_enabled({ bufnr = 0 }) end,
+            set = function(state) vim.lsp.codelens.enable(state, { bufnr = 0 }) end,
+            wk_desc = { enabled = "Hide ", disabled = "Show " },
+            map = require("core.lsp").map,
+          })
+          :map("<leader>Tc")
+        Snacks.toggle
+          .new({
             name = "Type Errors",
             get = function()
               local client = vim.lsp.get_clients({ bufnr = 0, name = "pyrefly" })[1]
