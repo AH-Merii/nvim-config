@@ -643,7 +643,7 @@ function M.restart(servers, buf)
     end
   end
   if #clients > 0 then
-    require("core.lsp_servers").restart(clients)
+    require("lsp").restart(clients)
   end
   if #stopped > 0 then
     -- Enabling again re-runs the enable FileType handler on every buffer, which starts what is not running

@@ -7,7 +7,7 @@
 require("lazy").load({ plugins = { "conform.nvim", "nvim-lint", "nvim-lspconfig" } })
 local catalog, lang = require("tools.catalog"), require("lang")
 local conform, lint = require("conform"), require("lint")
-local enabled = require("core.lsp_servers").servers
+local enabled = require("lsp").servers
 local subfts = lang.views().variants
 local none = { servers = {}, formatters = {}, linters = {}, tools = {} }
 --- What applies to ft (lang.of), or empty lists for a filetype no language knows.

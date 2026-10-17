@@ -8,7 +8,7 @@ local NXO = { "n", "x", "o" }
 
 -- Neovim's LSP keys (:h lsp-defaults) as rows that act where a server supports the method. Its global maps go, so they
 -- are no fallback: where no server can act the key says which method it lacks, instead of Vim's gr{char} editing the
--- text (D49). Loaded before core/lsp, whose grr row (the references picker) replaces Neovim's grr.
+-- text (D49). Loaded before lsp/buffer, whose grr row (the references picker) replaces Neovim's grr.
 pcall(vim.keymap.del, "n", "grr")
 local lsp = keys.feature("neovim lsp")
 for _, builtin in ipairs({

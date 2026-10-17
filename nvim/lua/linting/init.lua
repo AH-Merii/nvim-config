@@ -3,7 +3,7 @@
 -- resolver finds their binaries (lua/tools/), and nvim-lint runs them, through linting/nvim_lint.lua, the only file
 -- that knows the plugin. Named linting/ because nvim-lint's own module is lint/.
 --
--- Requiring this module loads no plugin: core/lsp.lua requires it at startup, and its key gates read M.has.
+-- Requiring this module loads no plugin: lsp/buffer.lua requires it at startup, and its key gates read M.has.
 
 local tools = require("tools")
 
@@ -52,7 +52,7 @@ end
 local function covered(name, buf)
   local found = require("lang").of(vim.bo[buf].filetype)
   local server = found and found.covered_by[name]
-  return server ~= nil and #require("core.lsp_servers").running(buf, server) > 0
+  return server ~= nil and #require("lsp").running(buf, server) > 0
 end
 
 ---@param buf integer
@@ -64,7 +64,7 @@ local function make(buf)
   local root = #plan.linters > 0 and tools.root(buf) or ""
   for _, name in ipairs(plan.linters) do
     local server = found and found.covered_by[name]
-    if server and #require("core.lsp_servers").running(buf, server) > 0 then
+    if server and #require("lsp").running(buf, server) > 0 then
       plan.covered[name] = server
     else
       -- A binary not resolved yet counts as missing; a lookup whose result did not change fires no ToolsChanged, so

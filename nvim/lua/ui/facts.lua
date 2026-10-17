@@ -29,12 +29,12 @@ local detaching = {} ---@type table<integer, table<integer, true>> buf -> client
 local waiting = {} ---@type table<integer, true> buffers waiting for a tool or project scan their facts left pending
 local queued = false
 
---- The servers running on buf (core.lsp_servers.running), less those in their LspDetach from it, by name.
+--- The servers running on buf (lsp.running), less those in their LspDetach from it, by name.
 ---@param buf integer
 ---@return string[]
 local function running(buf)
   local names, seen, skip = {}, {}, detaching[buf] or {}
-  for _, client in ipairs(require("core.lsp_servers").running(buf)) do
+  for _, client in ipairs(require("lsp").running(buf)) do
     if not seen[client.name] and not skip[client.id] then
       seen[client.name] = true
       names[#names + 1] = client.name

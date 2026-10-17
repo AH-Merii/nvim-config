@@ -80,7 +80,7 @@ nvim/
 - A missing tool is offered once, in one batched prompt ("python needs pyrefly and ruff" / "Install them globally with mise"), and only on files it would run on. A missing runtime (node, go) is installed in the same step; a pinned version can be installed for the project without trusting its config. Workflow YAML is `yaml.github-actions`, `pyproject.toml` is `toml.pyproject`, and Compose and Bake files are `yaml.docker-compose` and `hcl.docker-bake` (variants in `lua/lang/`), so jactionlint, zizmor, pyproject-fmt and the Docker language server run and are offered only there
 - Never prompts for library code (site-packages, node_modules, cargo registry, Go module cache), git commit messages, special buffers, headless runs, or with `vim.g.install_tools = "off"`
 - After that: a statusline indicator (a wrench with the missing count, `?` for an unanswered project config; hidden when nothing is missing) and `:Tools` (per tool: roles, source and version; a tool's menu starts or restarts its server or installs it; a row to use or stop using the project's mise config; `Rescan tool sources`; `:Tools install|rescan|restart|project`)
-- `core/lsp_servers.lua` enables every server a language names, with its fields from `lang.views().lsp`. A server whose binary is missing is not started and raises no error; it starts once the binary turns up, and restarts when a refresh or install moves its binary
+- `lsp/init.lua` enables every server a language names, with its fields from `lang.views().lsp`. A server whose binary is missing is not started and raises no error; it starts once the binary turns up, and restarts when a refresh or install moves its binary
 
 **Languages** (`lua/lang/`, decision D46 in `docs/rearchitecture-decisions.md`)
 - One data file per language (`python.lua`, `go.lua`, ...) holds its filetypes, treesitter parsers, servers with their
@@ -147,7 +147,7 @@ return {
 ```
 
 A server, the formatters or a linter can name their own `filetypes` where they differ from the language's (clangd also
-serves `objc`; Go formats only `go`). `cmd` has no effect: `core/lsp_servers.lua` runs the resolved binary with the
+serves `objc`; Go formats only `go`). `cmd` has no effect: `lsp/init.lua` runs the resolved binary with the
 catalog's args.
 
 ## Plugin Management

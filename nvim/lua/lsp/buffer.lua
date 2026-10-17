@@ -1,5 +1,5 @@
 -- Diagnostics display and the LSP keys, which act where an attached client supports their method (lua/keys/);
--- core.lsp_servers starts the servers
+-- the lsp module (lsp/init.lua) starts the servers
 vim.diagnostic.config({
   virtual_text = true,
   underline = true,

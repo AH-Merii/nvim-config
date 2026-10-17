@@ -36,7 +36,7 @@ What to take from it:
 
 Why this is a hard step: a definition of your own for a tool the plugin ships (an `opts.formatters.<new name>` running the same binary as a conform formatter, a `lint.linters.<name>` table for a linter nvim-lint has) shadows or duplicates the maintained one, and it drifts as upstream fixes its args and parser. `check.sh` fails on both cases.
 
-You write a definition only when no file exists. For a linter, see `edit-files.md`, "Linter" (jactionlint is the example). For a formatter, see "Formatter". For a server, nvim-lspconfig must have it: `core/lsp_servers.lua` (`setup`) warns on unknown names, and `checks/startup.lua` fails on that warning.
+You write a definition only when no file exists. For a linter, see `edit-files.md`, "Linter" (jactionlint is the example). For a formatter, see "Formatter". For a server, nvim-lspconfig must have it: `lsp/init.lua` (`setup`) warns on unknown names, and `checks/startup.lua` fails on that warning.
 
 ## 1.2 Find the mise spec
 
