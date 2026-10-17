@@ -282,7 +282,7 @@ function M.shadowed(mode, lhs) shadowed[mode .. lhs].callback() end
 local function dispatch(mode, lhs)
   return function()
     if M.ours(lhs, mode) then
-      return ("<Cmd>lua require('config.textobjects').run(%q)<CR>"):format(lhs)
+      return ("<Cmd>lua require('textobjects').run(%q)<CR>"):format(lhs)
     end
     local map = shadowed[mode .. lhs]
     if not map then
@@ -292,7 +292,7 @@ local function dispatch(mode, lhs)
       if map.expr == 1 then
         return map.callback()
       end
-      return ("<Cmd>lua require('config.textobjects').shadowed(%q, %q)<CR>"):format(mode, lhs)
+      return ("<Cmd>lua require('textobjects').shadowed(%q, %q)<CR>"):format(mode, lhs)
     end
     return map.expr == 1 and vim.api.nvim_eval(map.rhs) or map.rhs
   end

@@ -20,6 +20,7 @@ lua/plugins/git.lua               git keys which-key
 lua/plugins/blink.lua             completion
 lua/plugins/which-key.lua         which-key keys
 lua/keys/*                        keys which-key lsp git lint format treesitter
+lua/textobjects/*                 treesitter keys which-key
 lua/plugins/auto-pairs-tags-comments.lua editing
 lua/plugins/trouble.lua           ui lsp
 lua/plugins/tiny-inline-diagnostic.lua ui lsp
