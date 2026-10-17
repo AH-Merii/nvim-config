@@ -1,4 +1,6 @@
-return {
+-- Git: gitsigns' hunks, signs and blame, and diffview
+
+local specs = {
   {
     "lewis6991/gitsigns.nvim",
     lazy = false,
@@ -100,3 +102,5 @@ return {
     cmd = { "DiffviewOpen", "DiffviewClose", "DiffviewToggleFiles", "DiffviewFocusFiles" },
   },
 }
+
+return { plugins = specs }
