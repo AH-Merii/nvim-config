@@ -1,6 +1,31 @@
 -- Files: writing, quitting, scratch buffers, renaming the file, and checking a Ghostty config when it is written
 local M = {}
 
+-- Not mapped: call with :lua require("features.files").toggle_go_test()
+M.toggle_go_test = function()
+  -- Get the current buffer's file name
+  local current_file = vim.fn.expand("%:p")
+  if string.match(current_file, "_test.go$") then
+    -- If the current file ends with '_test.go', try to find the corresponding non-test file
+    local non_test_file = string.gsub(current_file, "_test.go$", ".go")
+    if vim.fn.filereadable(non_test_file) == 1 then
+      -- Open the corresponding non-test file if it exists
+      vim.cmd.edit(non_test_file)
+    else
+      print("No corresponding non-test file found")
+    end
+  else
+    -- If the current file is a non-test file, try to find the corresponding test file
+    local test_file = string.gsub(current_file, ".go$", "_test.go")
+    if vim.fn.filereadable(test_file) == 1 then
+      -- Open the corresponding test file if it exists
+      vim.cmd.edit(test_file)
+    else
+      print("No corresponding test file found")
+    end
+  end
+end
+
 function M.setup()
   local function icon(glyph, color) return { icon = glyph, color = color } end
   require("keys").feature("files")({
