@@ -27,8 +27,9 @@ local M = {}
 ---@field method? string|string[] the buffer gets the map while an attached client supports any of these
 ---@field when? fun(buf: integer, clients: vim.lsp.Client[]): boolean the buffer also gets the map while this holds
 
--- Loaded here, at startup, so its plans are dropped on FileType and ToolsChanged before any other handler reads them
-local formatting = require("format")
+-- Loaded here, at startup, so their plans are dropped on attach, detach and ToolsChanged before any other handler
+-- reads them (the statusline's)
+local formatting, linting = require("format"), require("linting")
 
 -- The "formatter" need: a formatter the filetype's language names, installed or not, or an attached client that
 -- formats (a range, in visual mode)
@@ -42,13 +43,7 @@ local function format() formatting.buffer() end
 -- Diagnostics come from attached clients, and from the linters the filetype's language names
 ---@param buf integer
 ---@param clients vim.lsp.Client[]
-local function has_diagnostics(buf, clients)
-  if #clients > 0 then
-    return true
-  end
-  local found = require("lang").of(vim.bo[buf].filetype)
-  return found ~= nil and #found.linters > 0
-end
+local function has_diagnostics(buf, clients) return #clients > 0 or linting.has(buf) end
 
 ---@param clients vim.lsp.Client[]
 local function has_pyrefly(_, clients)
