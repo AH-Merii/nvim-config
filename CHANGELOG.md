@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/AH-Merii/nvim-config/compare/v0.1.0...v0.2.0) (2026-10-17)
+
+
+### Restructuring
+
+* **ui:** the statusline draws each buffer's facts from ui/facts ([#32](https://github.com/AH-Merii/nvim-config/issues/32)) ([98bd4c0](https://github.com/AH-Merii/nvim-config/commit/98bd4c0e9681645f937dc1f0dd4b6915985076d8))
+
 ## 0.1.0 (2026-10-17)
 
 
