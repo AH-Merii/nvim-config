@@ -22,8 +22,8 @@ for _, args in ipairs(steps) do
 end
 check("set up: the linked worktree's .git is a file", vim.fn.filereadable(FIX .. "/linked/.git") == 1)
 
+-- No rebuild is forced: the line follows the buffer by itself
 local function statusline()
-  require("lualine").refresh({ place = { "statusline" }, force = true })
   return vim.api.nvim_eval_statusline(vim.o.statusline, { winid = vim.api.nvim_get_current_win(), maxwidth = 400 }).str
 end
 local function shows(branch) return statusline():find(branch, 1, true) ~= nil end
@@ -35,6 +35,6 @@ for _, case in ipairs({
   check(("a file in %s shows its branch %s"):format(case.where, case.branch), wait_until(function() return shows(case.branch) end, 2000), statusline())
 end
 vim.cmd.edit("t.sh")
--- lualine finds the branch on BufEnter; give a stale one the same time to go
+-- the statusline looks the branch up again on BufEnter; give a stale one the same time to go
 wait_until(function() return not shows("-check") end, 500)
 check("a file outside any repo shows no branch", not shows("-check"), statusline())

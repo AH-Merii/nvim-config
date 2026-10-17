@@ -45,18 +45,17 @@ vim.cmd("new | setlocal buftype=nofile")
 wait_until(function() return statusline():find("No Active LSP", 1, true) ~= nil end, 300)
 check("a non-file buffer shows the last file buffer's facts", shows(f), vim.inspect({ want = drawn(f), line = statusline() }))
 vim.cmd.close()
+-- The rebuild the close asked for has drawn the file again, so none is pending when the facts change below
+wait_until(function() return statusline():find("a.py", 1, true) ~= nil end, 1000)
 
 -- A change: ruff detaches, so its server goes and ruff's linting, which it covered, comes back. Only FactsChanged may
--- redraw the line: lualine's 1 s timer is stopped, and the detach's DiagnosticChanged and the servers' progress
--- messages are ignored
-local timers = 0
+-- redraw the line: a timer that redraws it every second (lualine had one) is stopped, and the detach's
+-- DiagnosticChanged and the servers' progress messages are ignored
 vim.uv.walk(function(handle)
   if handle:get_type() == "timer" and handle:get_repeat() == 1000 then
     handle:stop()
-    timers = timers + 1
   end
 end)
-check("set up: lualine's 1 s timer is stopped", timers == 1, timers)
 vim.o.eventignore = "DiagnosticChanged,Progress"
 vim.lsp.buf_detach_client(buf, vim.lsp.get_clients({ bufnr = buf, name = "ruff" })[1].id)
 wait_until(function() return not vim.list_contains(facts.get(buf).servers, "ruff") end, 5000)

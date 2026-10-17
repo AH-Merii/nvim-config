@@ -9,8 +9,8 @@ vim.g.install_tools = "off"
 vim.api.nvim_list_uis = function() return { { width = 120, height = 40 } } end
 local wrench = "󰖷"
 
+-- No rebuild is forced: the line follows the facts by itself
 local function statusline()
-  require("lualine").refresh({ place = { "statusline" }, force = true })
   return vim.api.nvim_eval_statusline(vim.o.statusline, { winid = vim.api.nvim_get_current_win(), maxwidth = 400 }).str
 end
 --- Opens path and returns the statusline once its tools have resolved, or the last one seen after ms.

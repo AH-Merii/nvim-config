@@ -5,7 +5,6 @@ vim.fn.mkdir("100%", "p")
 vim.fn.writefile({ "return 1" }, "100%/a%b.lua")
 vim.cmd.edit(vim.fn.fnameescape("100%/a%b.lua"))
 local function statusline()
-  require("lualine").refresh({ place = { "statusline" }, force = true })
   return vim.api.nvim_eval_statusline(vim.o.statusline, { winid = vim.api.nvim_get_current_win(), maxwidth = 400 }).str
 end
 for _, case in ipairs({
@@ -13,6 +12,8 @@ for _, case in ipairs({
   { width = 20, want = "a%b.lua", what = "the file name alone" },
 }) do
   vim.o.columns = case.width
+  -- the line is rebuilt for the new width on its own (VimResized)
+  wait_until(function() return statusline():find(case.want, 1, true) ~= nil end, 1000)
   local drawn = statusline()
   check(("%d columns: %s draw as typed"):format(case.width, case.what), drawn:find(case.want, 1, true) ~= nil, drawn)
 end
