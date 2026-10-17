@@ -104,6 +104,26 @@ function M.setup()
   ready = true
 end
 
+--- which-key's own labels for Vim's keys (its presets plugin's data), by lhs: the first desc found for each
+---@return table<string, string>
+function M.presets()
+  local labels = {}
+  local function scan(t)
+    if type(t) ~= "table" then
+      return
+    end
+    if type(t[1]) == "string" and type(t.desc) == "string" then
+      labels[t[1]] = labels[t[1]] or t.desc
+    end
+    for _, v in pairs(t) do
+      scan(v)
+    end
+  end
+  local ok, mod = pcall(require, "which-key.plugins.presets")
+  scan(ok and mod or nil)
+  return labels
+end
+
 -- which-key, set up from the rows above when it loads
 M.plugins = {
   {

@@ -503,27 +503,13 @@ local function help_desc(lhs, mode)
   return find({ "objects", mode == "x" and "visual-index" or "operator-pending-index" }) or find(NORMAL, mode == "o")
 end
 
---- What the key's own meaning is called: the shadowed map's desc, else which-key's preset label, else Neovim's index;
+--- What the key's own meaning is called: the shadowed map's desc, else which-key's preset label (keys.which_key), else
+--- Neovim's index;
 --- nil where the key has no meaning of its own in mode
 local function native_label(lhs, mode)
   local key = mode .. lhs
   if native_labels[key] == nil then
-    if not presets then
-      presets = {}
-      local function scan(t)
-        if type(t) ~= "table" then
-          return
-        end
-        if type(t[1]) == "string" and type(t.desc) == "string" then
-          presets[t[1]] = presets[t[1]] or t.desc
-        end
-        for _, v in pairs(t) do
-          scan(v)
-        end
-      end
-      local ok, mod = pcall(require, "which-key.plugins.presets")
-      scan(ok and mod or nil)
-    end
+    presets = presets or require("keys.which_key").presets()
     local map, preset = shadowed[key], presets[lhs]
     if map and map.desc then
       native_labels[key] = map.desc
