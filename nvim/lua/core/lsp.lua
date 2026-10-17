@@ -93,6 +93,7 @@ M.keys = {
     },
   },
   { "<leader>Th", method = "textDocument/inlayHint" },
+  { "<leader>Tc", method = "textDocument/codeLens" },
   { "<leader>Te", when = has_pyrefly },
   { "<leader>lf", format, desc = "Format buffer", method = "textDocument/formatting", when = has_formatter },
   { "<leader>lf", format, mode = "x", desc = "Format selection", method = "textDocument/rangeFormatting", when = has_formatter },

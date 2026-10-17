@@ -219,6 +219,10 @@ function M.setup()
       drawn[ev.buf] = nil
     end,
   })
+
+  -- Code lenses from every server that has them, drawn as lines above their line (vim.lsp.codelens, off per buffer
+  -- by default); <leader>Tc turns them off in a buffer
+  vim.lsp.codelens.enable(true)
 end
 
 return M
