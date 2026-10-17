@@ -20,6 +20,7 @@ The full proposal, with its measurements and sources, was written outside the re
 - Built: the unit tier and the tool backend seam ("Unit tier and tool backend seam" below).
 - Done ahead of step 3: the key checks observe behaviour, not buffer maps ("D48 prep: key checks"
   below).
+- Built: step 1, `lang/` ("Step 1: lang/" below).
 
 ## Target layout
 
@@ -289,4 +290,105 @@ buffer. Deriving the key lists from the config's tables: they move in step 3.
 - Answer LSP requests from a fake server with empty lists, not `vim.NIL`: Snacks' LSP pickers fail on it.
 - Prove the check bites with a sibling wrong implementation per gate (`CFG=<copy with one bug> suite.sh
   <check>`).
+
+## Step 1: lang/ (2026-10-17)
+
+Built on `rearch/lang` from `origin/main` 54ec593 (#23's code lenses, #25's unit tier and #27's key checks
+included). What D46 asked for, the choices it left open, and what review changed.
+
+**Built.** `nvim/lua/lang/init.lua` (the registry) and 18 language files: the prototype's 17 with HTML and CSS split
+(`rearch/proto/lua/lang/`). Every value was checked against main, not the prototype, which was written against
+cf220c8 (gopls' settings and pyrefly's lens commands had changed since). Generated now: the server list and each
+server's `vim.lsp.config` fields (`core/lsp_servers.lua`), conform's `formatters_by_ft`, nvim-lint's `linters_by_ft`,
+the covering servers (`tools/lint.lua`), the variant filetype rules and the parsers. Gone: `after/lsp/` (9 files),
+`tools/filetypes.lua`, `tools.for_filetype`, and the buffer options of `after/ftplugin/lua.lua`. The readers ask
+`lang.of`: `tools/ux.lua` (prompts, `:Tools`), `core/lsp.lua` (`has_formatter`, `has_diagnostics`), the lualine
+lists, `tools/lint.lua` `to_run`, `:Status`, and nvim-lint's runs, `<leader>ll` and `<leader>li`
+(`plugins/nvim-lint.lua`, which passes the names to `try_lint`).
+
+**Checked.** A dump of what the plugins hold and what the readers answer, on main and on the branch
+(`~/.cache/nvim-config/rearch/lang/tmp/compare/`: `dump.lua`, `compare.py`, `compare-output.txt`): all 20 servers'
+resolved `vim.lsp.config` (filetypes, settings, root markers, capabilities, handlers, commands), both plugin
+tables, the plugins' own plans and the readers' answers for 63 filetypes, the detection of 39 paths, the parsers and
+lua's options. 1222 values are equal; 12 lists differ only in order (the sorted filetype lists, and
+`yaml.github-actions`' linters, which main's readers took in nvim-lint's `vim.tbl_keys` order, `lint.lua:239`); the
+rest are the new variant keys and the case under "Answers that changed".
+
+**Decisions.**
+
+- *A server entry is its `vim.lsp.Config` fields.* `servers = { tinymist = { root_markers = …, settings = … } }`
+  replaces `after/lsp/tinymist.lua` one for one, applied with `vim.lsp.config(name, …)`, which ranks above
+  nvim-lspconfig's `lsp/<name>.lua` as `after/lsp/` did (runtime `lua/vim/lsp.lua`, `lsp.config.__index`). The
+  prototype's `tool` field is dropped: the catalog gives the binary (`catalog.binary`).
+  Rejected: a separate `config` table inside each entry (the prototype's), one level more for nothing.
+- *An item may name its own `filetypes`.* A server, the formatter list or a linter that applies to other filetypes
+  than its language's lists them: tsc serves the scripts and not JSON, Go formats only `go`, tflint and trivy run
+  only on `terraform`. Main has all of these differences.
+  Rejected: one language per set of filetypes that share tools (gomod, tf and objc would each be a file).
+- *nvim-lspconfig's extra filetypes are declared, not merged at run time.* clangd lists objc, objcpp and cuda, cssls
+  lists less, and `yaml.gitlab`, `yaml.helm-values`, `markdown.mdx`, `c.doxygen` and `cpp.doxygen` are variants with
+  only an `about`. Every server attaches where it did, and `lang.of("objc")` still offers clangd as main's
+  `for_filetype` did. Nothing in Neovim's runtime or this config sets the five dotted names (runtime
+  `lua/vim/filetype.lua` has none of them).
+  Rejected: merging nvim-lspconfig's lists into `vim.lsp.config` at setup (the proposal's other option), because
+  `lang.of` would then not know those filetypes and the install offer for them would go.
+- *A variant names its servers; it cannot configure them.* A server is configured once, in a language's `servers`;
+  a variant lists names (`docker.lua`). A second language configuring the same server is skipped and reported.
+- *One rule for a dotted filetype no language declares*, the one the plugins applied on main: no servers (a server
+  attaches only to the filetypes it lists), the formatters of its last part that has any (conform,
+  `conform/init.lua:227-241`), every part's linters (nvim-lint, `lint.lua:224-239`) and every part's options, later
+  parts last (Neovim sources each part's ftplugin). Since nvim-lint's runs and keys take their names from `lang.of`,
+  the statusline, the key gates and what runs give one answer for `ansible.yaml` as for `yaml`.
+  Rejected: the first part's formatters and linters only (the first build). Review found nvim-lint still ran
+  yamllint on `ansible.yaml` through its own union while `lang.of` said none, so the statusline said "Linters: none".
+- *A mistake in a language file is skipped and reported, not raised.* Two languages declaring one filetype or
+  configuring one server, two variants claiming one file name or pattern, a variant without a dot, an unknown server
+  in a variant, and a file that does not load: the first declaration in file name order stays, the other is skipped,
+  and `lang.setup()` reports them in one error notification (`lang.problems()` lists them). `lang.setup()` runs
+  first in `init.lua`, so an error raised there would leave Neovim without lazy, its options and its mapleader; on
+  main, a bad `after/lsp` file broke only its server.
+  Rejected: raising at load (the first build), and `pcall` around the whole build, which would drop every language
+  for one mistake.
+- *Linter order*: the base's linters, then the variant's own, each in name order, which is the order nvim-lint's
+  union of parts gave (`yamllint, jactionlint, zizmor`). The prototype sorted all of them together.
+- *Parsers as main has them.* The prototype added toml, css, dockerfile and others, which would install at startup
+  instead of when a buffer needs them. Parsers no language names (query, regex, vim, vimdoc, proto) stay a literal
+  `ensure_installed` list in `plugins/nvim-treesitter.lua`, which `tests/regress/refresh.lua` reads along with
+  `lang.views().parsers`.
+- *Buffer options on FileType.* `lang.setup()` makes a FileType autocmd that sets a language's `options`. It runs
+  after the runtime's ftplugins and `after/ftplugin/`, because Neovim makes the `filetypeplugin` autocmd before
+  `init.lua` runs (a probe with `-u` printed one autocmd in that group from inside the init file).
+- *The `tf` filetype stays a Terraform filetype with only `terraform_fmt`,* as conform had it. It is Neovim's name
+  for a TinyFugue file (`vim.filetype.detect.tf`); dropping it is a behaviour change left for later.
+
+**Answers that changed.** nvim-lint no longer has a bare `github-actions` key (only `yaml.github-actions` used it,
+through nvim-lint's union of parts; nothing sets the bare filetype).
+
+**Left for later steps.** Keys stay where they are (step 3): `after/ftplugin/*` keymaps and labels, pyrefly's
+`<leader>Te`. Formatter and linter definitions and args stay in the plugin specs (step 2): shfmt's and fish_indent's
+args, jactionlint's definition, `keep_cwd`, golangcilint's args. `roots.tsc` stays in `core/lsp_servers.lua` (the lsp
+module). Per-filetype options in `config/autocmds.lua` (Terraform's commentstring, wrap and spell for prose) and the
+tsconfig and dotenv rules in `config/options.lua` stay until step 5. `indent_disabled` stays in the treesitter spec.
+
+**Cost.** Measured headless with `vim.loader` on (`~/.cache/nvim-config/rearch/lang/tmp/bench2.lua`): requiring the
+18 files takes 0.9–1.2 ms and building every answer and view 1.1–1.6 ms; `lang.of` on a declared filetype is a table
+lookup. `--startuptime` in the suite's sandbox: `init.lua`'s own time goes from 0.75 ms to 1.8–1.9 ms and
+`require('lang')` adds 0.7–0.8 ms, while `vim.filetype` loads once as before (1.7 ms, now under `lang.setup`). Total
+startup is within noise: two rounds of six runs each gave medians of 115.3 and 115.6 ms on main, 116.4 and 114.4 ms on
+the branch.
+
+**Tests.** `tests/unit/lang_test.lua` (no plugins) tests the rules on two fixture languages through `lang._from(specs)`,
+with literal expected values: what each filetype gets, items with their own filetypes, the variant rule, the
+undeclared fallback, the views, the options `setup` sets, and each kind of mistake (the first declaration stays and the
+problem is reported, once, by `setup`). Over the real files it checks only validity and completeness: no problems,
+each variant's `about` and example path, and the catalog against the languages. 32 sibling wrong implementations of
+`lang/init.lua` each fail it (`~/.cache/nvim-config/rearch/lang/tmp/mutants/run.sh`), the eight review found passing
+the first version included. In the suite, `checks/lang_views.lua` replaces `checks/lsp_configs.lua`: what conform,
+nvim-lint and `vim.lsp.config` hold is what the languages say, functions compared by identity.
+`checks/lang_options.lua` puts an ftplugin on the runtimepath that sets each option a language sets to something else,
+and checks the language's value wins. `checks/tools_subfiletypes.lua` reads the variants from `lang`. Checks that
+need a language of their own (`lint_compound_ft`, `lint_manual_installed`, `keys_format_gate`, `keys_diag_gate`)
+declare it with the test-only `lang._declare(name, spec)`, and set the plugin's own entry as the views would at
+startup. `keys_format_gate` loses its "formatter function that finds nothing yet" case: a language's formatters are a
+list of names (`lang.Formatters`), so conform's function form has no counterpart.
 

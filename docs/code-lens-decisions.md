@@ -36,7 +36,8 @@ Neovim nightly (`$VIMRUNTIME/lua/vim/lsp/`, v0.13.0-dev-1868):
 - Its lenses name client commands, `pyrefly.runMain` and `pyrefly.runTest` (`lsp/non_wasm/code_lens.rs:44-77`),
   which pyrefly's VS Code extension implements (`lsp/src/code-lens.ts`); without them `grx` only warns that the
   server does not support the command (`runtime/lua/vim/lsp/client.lua:1147-1155`).
-- Decision: `after/lsp/pyrefly.lua` turns the setting on and implements both commands the way the extension does:
+- Decision: `after/lsp/pyrefly.lua` (since D46, `lua/lang/python.lua`) turns the setting on and implements both
+  commands the way the extension does:
   the file with the project's Python, `python -m unittest <module>.<Class>.<test>` for unittest tests and
   `python -m pytest <file>::<Class>::<test>` otherwise, in a terminal split. The Python is the nearest `.venv`,
   then `$VIRTUAL_ENV`, then `python3`.

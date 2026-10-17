@@ -76,6 +76,10 @@ Facts this rests on:
 
 ## Where config lives (2026-10-12): option (b)
 
+**Reopened (2026-10-17)**: D46 in `docs/rearchitecture-decisions.md` chose option (a), one file per language, and
+"Step 1: lang/" there built it. Server settings, formatters, linters, covering servers and sub-filetypes now live in
+`nvim/lua/lang/`; the catalog keeps the install specs. The record below is the 2026-10-12 decision.
+
 - Each role stays where it lives today: server settings in `after/lsp/`, formatters in conform's
   `formatters_by_ft`, linters in nvim-lint's `linters_by_ft`.
 - One new tool catalog, keyed by binary: mise install spec, project paths (`.venv/bin`, `node_modules/.bin`),
@@ -122,6 +126,8 @@ Why this works with the existing tools:
 - Treesitter uses the first part (`vim/treesitter/language.lua`, `get_lang`), so highlighting is unchanged.
 - Cost: servers match filetypes exactly (runtime `lua/vim/lsp.lua:497-498`), so servers that should still
   attach need the new name added in `after/lsp/` (yamlls for `yaml.github-actions`, tombi for `toml.pyproject`).
+  Since D46 (2026-10-17) the sub-filetypes are variants in `nvim/lua/lang/`, which give the base's servers to every
+  variant and give conform and nvim-lint an explicit list for it, so neither the cost nor the plugins' rules above apply.
   yamlls already lists compound names such as `yaml.docker-compose` (`nvim-lspconfig/lsp/yamlls.lua:74`).
 - Rejected: per-tool path patterns, which every adapter (nvim-lint, conform, LSP, install prompt) would have to
   honour separately.
