@@ -11,6 +11,7 @@ lua/tools/*                       tools lsp format lint
 lua/tools/ux.lua                  ui
 lua/ui/*                          ui tools lint
 lua/plugins/lspconfig.lua         lsp
+lua/format/*                      format keys
 lua/plugins/conform.lua           format
 lua/plugins/nvim-lint.lua         lint
 lua/plugins/nvim-treesitter.lua   treesitter

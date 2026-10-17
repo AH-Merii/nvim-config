@@ -357,41 +357,14 @@ return {
         _G.dd = function(...) Snacks.debug.inspect(...) end
         _G.bt = function() Snacks.debug.backtrace() end
 
+        -- Formatting on save (lua/format/)
         local function setup_format_on_save_toggle()
-          -- Global flag: on by default
-          if vim.g.snacks_format_on_save == nil then
-            vim.g.snacks_format_on_save = true
-          end
-
-          -- Try to load conform and its helper once
-          local ok, conform = pcall(require, "conform")
-          if not ok or type(conform.format_buffer) ~= "function" then
-            vim.notify(
-              "conform.nvim or conform.format_buffer() not available. Skipping format-on-save toggle.",
-              vim.log.levels.WARN,
-              { title = "Format on Save" }
-            )
-            return
-          end
-
-          -- Autoformat on save, using *synchronous* formatting
-          autocmd("BufWritePre", {
-            group = user_group,
-            pattern = "*",
-            callback = function()
-              if not vim.g.snacks_format_on_save then
-                return
-              end
-              conform.format_buffer({ async = false, quiet = false, bufnr = 0 })
-            end,
-          })
-
-          -- Snacks toggle to control the flag
+          local on_save = require("format").on_save
           Snacks.toggle
             .new({
               name = "Format on Save",
-              get = function() return vim.g.snacks_format_on_save end,
-              set = function(state) vim.g.snacks_format_on_save = state end,
+              get = on_save.get,
+              set = on_save.set,
               map = require("core.lsp").map,
             })
             :map("<leader>Tf")
