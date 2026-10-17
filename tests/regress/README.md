@@ -15,6 +15,7 @@ suite.sh --work <feature>       # iteration: the checks in work/<feature>/
 suite.sh --list [...]           # print what would run, run nothing
 suite.sh --selftest             # the runner's own tests: leak, over budget, fsmonitor, missing server
 suite.sh --refresh              # sync lazy, the suite's tools and parsers in data/ for the current CFG, then run
+suite.sh --refresh-only         # the same sync, then exit without running checks (the test image's build)
 suite.sh --refresh-dry-run      # print the tools every check needs and which do not resolve, change nothing, run nothing
 CFG=/path/to/nvim suite.sh      # test another config dir (default: ../../nvim, this repo's config)
 ```

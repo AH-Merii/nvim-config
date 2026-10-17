@@ -2,11 +2,12 @@
 # usage: tests/unit/run.sh [-v] [name-regex]
 # Runs every tests/unit/*_test.lua, each in its own `nvim --clean --headless -l` from the repo root, with throwaway
 # XDG and temp dirs. Prints PASS/FAIL per file with its time, and a failing file's output; exits non-zero on any
-# failure. -v prints every file's output. $NVIM picks the binary (default: the regress suite's nightly, else nvim).
+# failure. -v prints every file's output. $NVIM picks the binary (default: the regress suite's nightly, $NVR_NVIM or
+# the user's mise one, else nvim).
 set -u
 U=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd "$U/../.." && pwd)
-NIGHTLY=$HOME/.local/share/mise/installs/neovim/nightly/bin/nvim
+NIGHTLY=${NVR_NVIM:-$HOME/.local/share/mise/installs/neovim/nightly/bin/nvim}
 if [ -z "${NVIM:-}" ]; then [ -x "$NIGHTLY" ] && NVIM=$NIGHTLY || NVIM=nvim; fi
 # nothing reaches the user's clipboard: wl-copy/xclip need a display, the tmux provider the user's tmux
 unset WAYLAND_DISPLAY DISPLAY TMUX
@@ -15,7 +16,7 @@ VERBOSE=0 FILTER=
 while [ $# -gt 0 ]; do
   case "$1" in
     -v|--verbose) VERBOSE=1 ;;
-    -h|--help) sed -n '2,5p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,6p' "$0"; exit 0 ;;
     -*) echo "unknown option $1" >&2; exit 2 ;;
     *) FILTER=$1 ;;
   esac
