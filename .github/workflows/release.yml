@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+# One release run at a time, so two quick merges can't race on the release PR.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+# release-please reads the Conventional Commit titles merged to main and keeps one release PR open that bumps the
+# version (version.txt) and CHANGELOG.md. feat, fix, perf and refactor commits each make a release, and every release
+# bumps the minor version (release-please-config.json). The release PR is set to merge itself once it can; merging it
+# tags vX.Y.Z and publishes the GitHub release.
+
+jobs:
+  release-please:
+    name: Release PR and tags
+    # Everything goes through the App's token below, so GITHUB_TOKEN gets nothing.
+    permissions: {}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      # The release PR is opened as the neoblocks-docs App: GitHub holds CI on a PR opened with GITHUB_TOKEN until
+      # someone approves it (github.blog/changelog/2026-06-11-bot-created-pull-requests-can-run-workflows-if-approved).
+      - id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.DOCS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DOCS_APP_PRIVATE_KEY }}
+          permission-contents: write # push the release branch, tags and GitHub releases
+          permission-issues: write # label the release PR (labels go through the issues API)
+          permission-pull-requests: write # open, update and merge the release PR
+      - id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ steps.token.outputs.token }}
+      # Auto-merge waits for the checks main requires; with none required it merges right away.
+      - name: Merge the release PR when its checks pass
+        if: steps.release.outputs.pr
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          PR: ${{ fromJSON(steps.release.outputs.pr).number }}
+        run: gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --squash --auto
