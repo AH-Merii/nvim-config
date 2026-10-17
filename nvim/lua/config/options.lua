@@ -68,12 +68,6 @@ require("vim._core.ui2").enable({
 })
 require("config.ui2").setup()
 
--- make the hidden chars foreground color more subtle
-vim.cmd([[
-highlight NonText guifg=#cccccc ctermfg=lightgray
-highlight SpecialKey guifg=#cccccc ctermfg=lightgray
-]])
-
 -- 󰞷 Editing & Indentation
 vim.opt.expandtab = true
 vim.opt.shiftwidth = 2

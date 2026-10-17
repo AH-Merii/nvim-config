@@ -33,6 +33,9 @@ return {
           CursorLineNr = { fg = "$bright_orange", fmt = "bold" },
           CursorLineSign = { fg = "$bright_orange", fmt = "bold" },
           CursorLine = { bg = "$cursorline" },
+          -- hidden chars ('list'): set here, since the colorscheme's hi clear wipes highlights set before it loads
+          NonText = { fg = "#cccccc" },
+          SpecialKey = { fg = "#cccccc" },
           -- Make statusline/lualine background transparent
           StatusLine = { bg = "none" },
 
