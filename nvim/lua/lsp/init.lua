@@ -298,4 +298,14 @@ function M.setup()
   })
 end
 
+-- nvim-lspconfig, for its server configs (lsp/*.lua) only: setup() enables them and runs each from the binary mise
+-- resolves
+M.plugins = {
+  {
+    "neovim/nvim-lspconfig",
+    lazy = false,
+    config = function() M.setup() end,
+  },
+}
+
 return M

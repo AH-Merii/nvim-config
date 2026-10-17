@@ -104,4 +104,20 @@ function M.setup()
   ready = true
 end
 
+-- which-key, set up from the rows above when it loads
+M.plugins = {
+  {
+    "folke/which-key.nvim",
+    event = "VeryLazy",
+    init = function()
+      require("keys").feature("which-key")({
+        "<leader>?",
+        function() require("which-key").show({ global = false }) end,
+        "Buffer Local Keymaps (which-key)",
+      })
+    end,
+    config = function() M.setup() end,
+  },
+}
+
 return M

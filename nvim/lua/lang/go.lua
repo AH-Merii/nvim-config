@@ -98,7 +98,7 @@ return {
       },
     },
   },
-  -- go files only; conform falls back to LSP formatting on the others (plugins/conform.lua, default_format_opts)
+  -- go files only; conform falls back to LSP formatting on the others (format/conform.lua, default_format_opts)
   formatters = { "goimports", "gofumpt", filetypes = { "go" } },
   linters = { golangcilint = { filetypes = { "go" } } },
 }

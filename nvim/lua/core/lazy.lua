@@ -22,7 +22,13 @@ end
 
 vim.opt.rtp:prepend(lazypath)
 
-require("lazy").setup({ import = "plugins" }, {
+-- Every plugin comes from the module that owns it, as a list of specs (features.plugins()), not from a directory
+-- of spec modules: lazy runs such modules again after an install or update (lazy/core/plugin.lua:184), which would
+-- split the state and autocmds they make from the ones made the first time. A table spec is parsed again instead.
+local spec = require("features").plugins()
+table.insert(spec, 1, { import = "plugins" }) -- the specs not yet moved to their owners
+
+require("lazy").setup(spec, {
   install = {
     missing = true,
     colorscheme = { "onedark" },
