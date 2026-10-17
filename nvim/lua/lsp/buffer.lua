@@ -1,24 +1,5 @@
--- Diagnostics display and the LSP keys, which act where an attached client supports their method (lua/keys/);
--- the lsp module (lsp/init.lua) starts the servers
-vim.diagnostic.config({
-  virtual_text = true,
-  underline = true,
-  update_in_insert = false,
-  severity_sort = true,
-  signs = {
-    text = {
-      [vim.diagnostic.severity.ERROR] = "󰅚 ",
-      [vim.diagnostic.severity.WARN] = "󰀪 ",
-      [vim.diagnostic.severity.INFO] = "󰋽 ",
-      [vim.diagnostic.severity.HINT] = "󰌶 ",
-    },
-    numhl = {
-      [vim.diagnostic.severity.ERROR] = "ErrorMsg",
-      [vim.diagnostic.severity.WARN] = "WarningMsg",
-    },
-  },
-})
-
+-- What servers give a buffer: the LSP keys and toggles, which act where an attached client supports their method
+-- (lua/keys/), linked editing, progress messages, colour marks and code lenses. lsp/init.lua starts the servers.
 local keys = require("keys")
 
 -- Loaded here, at startup, so their plans are dropped on attach, detach and ToolsChanged before any other handler
@@ -29,8 +10,6 @@ local formatting, linting = require("format"), require("linting")
 -- selection)
 keys.need("formatter", function(buf) return formatting.has(buf) end)
 keys.need("range formatter", function(buf) return formatting.has(buf, true) end)
--- Diagnostics come from attached clients, and from the linters the filetype's language names
-keys.need("diagnostics", function(buf) return #vim.lsp.get_clients({ bufnr = buf }) > 0 or linting.has(buf) end)
 
 local function format() formatting.buffer() end
 
@@ -42,7 +21,6 @@ local function purple(icon) return { icon = icon, color = PURPLE } end
 key({
   { "<leader>l", group = "LSP", mode = { "n", "x" }, icon = purple("󱍔") },
   { "<leader>c", group = "LSP (Trouble)", icon = purple("󰙎") },
-  { "<leader>x", group = "Diagnostics", icon = { icon = "", color = "orange" } },
   { "g", group = "Goto", mode = { "n", "x" }, icon = { icon = "", color = "cyan" } },
   { "gr", group = "LSP", mode = { "n", "x" }, icon = purple("󱍔") },
   { "gC", group = "calls", icon = { icon = "󰃻", color = "yellow" } },
@@ -68,8 +46,6 @@ key({
   { "<leader>lf", format, "Format buffer", need = "formatter", icon = purple("󱍔") },
   { "<leader>lf", format, "Format selection", mode = "x", need = "range formatter", icon = purple("󱍔") },
   { "<leader>Tf", toggle = formatting.on_save, label = "Format on Save", need = "formatter" },
-  { "<leader>xX", "<cmd>Trouble diagnostics toggle filter.buf=0<cr>", "Buffer Diagnostics (Trouble)", need = "diagnostics" },
-  { "<leader>sd", function() Snacks.picker.diagnostics_buffer() end, "Diagnostics (Buffer)", need = "diagnostics", icon = { icon = "", color = "orange" } },
   { "<leader>sS", function() Snacks.picker.lsp_workspace_symbols() end, "Workspace symbols", need = "workspace/symbol", icon = purple("󱔁") },
   -- Neovim's gr* default is vim.lsp.buf.references; the picker instead (D49: no gr{char} where no server can act)
   { "grr", function() Snacks.picker.lsp_references() end, "References", need = "references", echo = true, icon = purple("") },

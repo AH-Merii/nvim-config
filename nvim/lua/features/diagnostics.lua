@@ -1,4 +1,4 @@
--- Diagnostics display: tiny-inline-diagnostic draws them, trouble lists them
+-- Diagnostics display: how Neovim shows them, tiny-inline-diagnostic draws them at the cursor, trouble lists them
 
 local specs = {
   {
@@ -195,6 +195,40 @@ table.insert(specs, trouble)
 local M = { plugins = specs }
 
 function M.setup()
+  vim.diagnostic.config({
+    virtual_text = true,
+    underline = true,
+    update_in_insert = false,
+    severity_sort = true,
+    signs = {
+      text = {
+        [vim.diagnostic.severity.ERROR] = "󰅚 ",
+        [vim.diagnostic.severity.WARN] = "󰀪 ",
+        [vim.diagnostic.severity.INFO] = "󰋽 ",
+        [vim.diagnostic.severity.HINT] = "󰌶 ",
+      },
+      numhl = {
+        [vim.diagnostic.severity.ERROR] = "ErrorMsg",
+        [vim.diagnostic.severity.WARN] = "WarningMsg",
+      },
+    },
+  })
+
+  -- Diagnostics come from attached clients, and from the linters the filetype's language names
+  local linting = require("linting")
+  require("keys").need("diagnostics", function(buf) return #vim.lsp.get_clients({ bufnr = buf }) > 0 or linting.has(buf) end)
+  require("keys").feature("diagnostics")({
+    { "<leader>x", group = "Diagnostics", icon = { icon = "", color = "orange" } },
+    { "<leader>xX", "<cmd>Trouble diagnostics toggle filter.buf=0<cr>", "Buffer Diagnostics (Trouble)", need = "diagnostics" },
+    {
+      "<leader>sd",
+      function() Snacks.picker.diagnostics_buffer() end,
+      "Diagnostics (Buffer)",
+      need = "diagnostics",
+      icon = { icon = "", color = "orange" },
+    },
+  })
+
   -- Its toggles, once snacks is loaded: a press flips one, says so, and its label in the popup follows it
   require("features").at_very_lazy(function()
     local hide_show = { enabled = "Hide ", disabled = "Show " }
