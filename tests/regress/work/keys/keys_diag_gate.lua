@@ -1,9 +1,10 @@
--- @desc     the buffer-diagnostics keys in core.lsp's table exist in a buffer iff an LSP client is attached or nvim-lint has linters for its filetype (or a dot-part), with controlled entries, fake servers and the fixture files
--- @areas    keys lint lsp
+-- @desc     the buffer-diagnostics keys (<leader>xX, <leader>sd) are listed by which-key and open their list in a buffer iff an LSP client is attached or nvim-lint has linters for its filetype (or a dot-part), with controlled entries, fake servers and the fixture files
+-- @areas    keys lint lsp which-key
 -- @budget   40
 -- @args     main.lua
 -- @needs    lua-language-server
--- Ported from nvim-sbx-keys/checks2/diag.lua. lua_ls makes main.lua a buffer with a real client.
+-- Judged by pressing the keys and reading which-key's popup, never by which maps exist. lua_ls makes main.lua a
+-- buffer with a real client.
 
 local cur, n, bad
 local function done()
@@ -72,20 +73,6 @@ local function stop(id)
   wait_until(function() return vim.lsp.get_client_by_id(id) == nil end, 3000)
   flush()
 end
-local function buf_map(buf, mode, lhs)
-  local raw = vim.keycode(lhs)
-  for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, mode)) do
-    if m.lhsraw == raw or m.lhsrawalt == raw then return m end
-  end
-end
-local function modes(key)
-  local m = key.mode or "n"
-  return type(m) == "table" and m or { m }
-end
-local function methods_of(key)
-  if key.method == nil then return {} end
-  return type(key.method) == "table" and key.method or { key.method }
-end
 local DIR = FIX .. "/.nvr-diag"
 vim.fn.mkdir(DIR, "p")
 local nbuf = 0
@@ -98,22 +85,52 @@ local function buf_of(ft)
   return buf
 end
 
-local ok_lsp, core_lsp = pcall(require, "core.lsp")
-local keys = ok_lsp and type(core_lsp) == "table" and core_lsp.keys or nil
-if not check("core.lsp exposes its gated key table", type(keys) == "table", "require('core.lsp').keys is " .. type(keys)) then return end
 local lint = require("lint")
+-- the buffer-diagnostics keys, from the config's key list
+local KEYS = { "<leader>xX", "<leader>sd" }
 
--- entries gated only by a non-LSP condition
-local diag_keys = vim.tbl_filter(function(k) return k.when ~= nil and #methods_of(k) == 0 end, keys)
-info("condition-only entries: " .. table.concat(vim.tbl_map(function(k) return k[1] end, diag_keys), " "))
-if not check("the table has condition-only entries", #diag_keys > 0) then return end
+-- windows open, so a press that opens a list or a picker shows
+local function windows() return #vim.api.nvim_list_wins() end
+local function close_all(buf)
+  -- a picker closed while its finder still runs fails in the finder's next step
+  for _, p in ipairs(Snacks.picker.get()) do
+    wait_until(function() return not p:is_active() end, 2000)
+    pcall(function() p:close() end)
+  end
+  pcall(function() require("trouble").close() end)
+  for _, w in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_get_config(w).relative ~= "" then pcall(vim.api.nvim_win_close, w, true) end
+  end
+  flush()
+  vim.cmd("silent! only")
+  if vim.fn.mode() ~= "n" then vim.cmd("normal! \27") end
+  vim.cmd("stopinsert")
+  if vim.api.nvim_get_current_buf() ~= buf then vim.cmd.buffer(buf) end
+end
+-- press lhs in buf: whether it opened a window (the diagnostics list or picker)
+local function opens(buf, lhs, acts)
+  close_all(buf)
+  local lines, wins = vim.api.nvim_buf_get_lines(buf, 0, -1, false), windows()
+  feed(lhs)
+  local opened = wait_until(function() return windows() > wins end, acts and 3000 or 0)
+  if not acts then
+    flush()
+    opened = windows() > wins
+  end
+  close_all(buf)
+  -- a press that falls back to Vim's own keys may have edited the text
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].modified = false
+  return opened
+end
 
+-- each key is listed by which-key, and opens its list when pressed, iff want
 local function judge(label, buf, want)
-  for _, key in ipairs(diag_keys) do
-    for _, mode in ipairs(modes(key)) do
-      local has = buf_map(buf, mode, key[1]) ~= nil
-      expect(has == want, "[%s] %s %s: %s, want %s", label, mode, key[1], has and "present" or "absent", want and "present" or "absent")
-    end
+  for _, lhs in ipairs(KEYS) do
+    local listed = wk_lists(buf, "n", lhs) ~= nil
+    expect(listed == want, "[%s] %s %s, want %s", label, lhs, listed and "listed" or "not listed", want and "listed" or "not listed")
+    local opened = opens(buf, lhs, want)
+    expect(opened == want, "[%s] %s %s, want %s", label, lhs, opened and "opens a window" or "opens nothing", want and "a window" or "nothing")
   end
 end
 

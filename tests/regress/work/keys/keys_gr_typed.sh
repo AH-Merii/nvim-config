@@ -1,73 +1,93 @@
-# @desc     typed one key at a time, fast and slow, once which-key's triggers are attached, every gr* key the runtime or the config maps runs exactly once the action the config declares for it (normal mode, and visual for x maps), in a buffer with an LSP client: no shorter gr map swallows them
+# @desc     typed one key at a time, fast and slow, once which-key's triggers are attached, every gr* key the runtime or the config maps sends its LSP request exactly once (normal mode, and visual for x maps), in a buffer with a server that serves them all: no shorter gr map swallows them
 # @areas    keys lsp which-key
 # @budget   90
-# @needs    lua-language-server
 # Ported from nvim-sbx-keys/checks2/interactive_gr.sh and spy_gr.lua. Keys go through --remote-send one at a
-# time: feeding "grn" at once resolves the longest match and hides a shorter nowait map.
+# time: feeding "grn" at once resolves the longest match and hides a shorter nowait map. An in-process fake server
+# records the requests, so what a key runs is judged by what reaches the server, not by the maps.
 set -u
 out() { printf '%s\n' "$*" >>"$CHECK_OUT"; }
 sock=/tmp/nvr-gr-$V-$$.sock
 spy=$FIX/.nvr-spy-gr.lua
 cat >"$spy" <<'EOF'
--- headless never gets UIEnter, so fire VeryLazy; wait for a client that serves rename, code action and references
+-- headless never gets UIEnter, so fire VeryLazy; then a buffer with an in-process server that serves every gr* key
 vim.g.did_very_lazy = true
 vim.api.nvim_exec_autocmds("User", { pattern = "VeryLazy", modeline = false })
-local buf = vim.api.nvim_get_current_buf()
-local function ready()
-  for _, c in ipairs(vim.lsp.get_clients({ bufnr = buf })) do
-    if c.initialized and c:supports_method("textDocument/rename", buf) and c:supports_method("textDocument/codeAction", buf)
-      and c:supports_method("textDocument/references", buf) then return true end
+local function flush()
+  for _ = 1, 2 do
+    local ran = false
+    vim.schedule(function() ran = true end)
+    vim.wait(1000, function() return ran end, 10)
   end
-  return false
 end
-local t0 = vim.uv.now()
-vim.wait(15000, function() return ready() or (#vim.lsp.get_clients({ bufnr = buf }) == 0 and vim.uv.now() - t0 > 3000) end, 50)
-if not ready() then
-  vim.g.spy_ready = "no client serving rename, codeAction and references attached to " .. vim.api.nvim_buf_get_name(buf)
+
+-- The request each gr* key makes, the runtime's and the config's: the LSP action the key runs, as the server sees
+-- it. Written out here so the check does not read the config's tables. Rename asks prepareRename first, which the
+-- server answers with nothing to rename, so no prompt opens.
+local SENDS = {
+  ["n grn"] = "textDocument/prepareRename",
+  ["n gra"] = "textDocument/codeAction",
+  ["x gra"] = "textDocument/codeAction",
+  ["n grr"] = "textDocument/references",
+  ["n gri"] = "textDocument/implementation",
+  ["n grt"] = "textDocument/typeDefinition",
+  ["n grx"] = "textDocument/codeLens",
+}
+local caps = { renameProvider = { prepareProvider = true } }
+for _, method in pairs(SENDS) do
+  local path = vim.lsp.protocol._request_name_to_server_capability[method]
+  if path[1] ~= "renameProvider" then caps[path[1]] = true end
+end
+-- every request after initialize, as "<method>:<mode when it was sent>"
+_G.HITS = {}
+local function cmd(dispatchers)
+  local closing, id = false, 0
+  return {
+    request = function(method, _, callback)
+      id = id + 1
+      local result = {}
+      if method == "initialize" then
+        result = { capabilities = caps }
+      else
+        if method ~= "shutdown" then table.insert(HITS, method .. ":" .. vim.fn.mode()) end
+        if method == "shutdown" or method == "textDocument/prepareRename" then result = nil end
+      end
+      vim.schedule(function() callback(nil, result) end)
+      return true, id
+    end,
+    notify = function(method)
+      if method == "exit" and not closing then
+        closing = true
+        vim.schedule(function() dispatchers.on_exit(0, 15) end)
+      end
+      return true
+    end,
+    is_closing = function() return closing end,
+    terminate = function() closing = true end,
+  }
+end
+vim.cmd.edit(vim.fn.getcwd() .. "/.nvr-gr.sbxfake")
+local buf = vim.api.nvim_get_current_buf()
+vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "local x = 1", "print(x)" })
+vim.bo[buf].filetype = "sbxfake"
+local id = vim.lsp.start({ name = "fake-gr", cmd = cmd, root_dir = vim.fn.getcwd() }, { bufnr = buf })
+vim.wait(3000, function()
+  local c = id and vim.lsp.get_client_by_id(id)
+  return c ~= nil and c.initialized and vim.lsp.buf_is_attached(buf, id)
+end, 10)
+if not (id and vim.lsp.buf_is_attached(buf, id)) then
+  vim.g.spy_ready = "the fake server did not attach to " .. vim.api.nvim_buf_get_name(buf)
   return
 end
--- let the LspAttach work the config scheduled (buffer-local maps) run
-for _ = 1, 2 do
-  local ran = false
-  vim.schedule(function() ran = true end)
-  vim.wait(1000, function() return ran end, 10)
-end
+-- let what the attach scheduled run
+flush()
+_G.HITS = {}
 
--- the tables a gr* action is looked up in at call time
-local NS = {
-  { "Snacks.picker", function() return Snacks.picker end, function(t) Snacks.picker = t end },
-  { "vim.lsp.buf", function() return vim.lsp.buf end, function(t) vim.lsp.buf = t end },
-  { "vim.lsp.codelens", function() return vim.lsp.codelens end, function(t) vim.lsp.codelens = t end },
-}
--- the first NS function fn calls, as "<table>.<function>", without running it
-local function target(fn)
-  local hit
-  local saved = {}
-  for i, ns in ipairs(NS) do
-    local real = ns[2]()
-    saved[i] = real
-    ns[3](setmetatable({}, { __index = function(_, k)
-      if ns[1] ~= "Snacks.picker" and type(real[k]) ~= "function" then return real[k] end
-      return function() hit = hit or (ns[1] .. "." .. k) end
-    end }))
-  end
-  local ok, err = pcall(fn)
-  for i, ns in ipairs(NS) do ns[3](saved[i]) end
-  return hit, not ok and tostring(err) or "it calls nothing in " .. table.concat(vim.tbl_map(function(ns) return ns[1] end, NS), ", ")
-end
-local function action(rhs, map)
-  if type(rhs) == "function" then return rhs end
-  local body = type(rhs) == "string" and rhs:match("^<[Cc][Mm][Dd]>(.*)<[Cc][Rr]>$")
-  if body then return function() vim.cmd(body) end end
-  return map and map.callback
-end
-
--- every gr* key: the runtime's own (from a --clean nvim of the same binary), the config's gated ones, the buffer's
+-- every gr* key: the runtime's own (from a --clean nvim of the same binary) and the ones written out above
 local order, seen = {}, {}
-local function want(mode, lhs)
-  if not seen[mode .. " " .. lhs] then
-    seen[mode .. " " .. lhs] = true
-    order[#order + 1] = { mode, lhs }
+local function want(key)
+  if not seen[key] then
+    seen[key] = true
+    order[#order + 1] = key
   end
 end
 local tmp = vim.fn.tempname()
@@ -76,69 +96,22 @@ vim.system({ vim.v.progpath, "--clean", "--headless", "-c",
   "-c", "qa!" }, { stdin = false }):wait()
 local builtins = vim.fn.filereadable(tmp) == 1 and vim.fn.readfile(tmp) or {}
 os.remove(tmp)
-for _, line in ipairs(builtins) do
-  local mode, lhs = line:match("^(%S+) (%S+)$")
-  if mode then want(mode, lhs) end
-end
-local declared = {}
-local ok_core, core = pcall(require, "core.lsp")
-for _, k in ipairs(ok_core and type(core) == "table" and type(core.keys) == "table" and core.keys or {}) do
-  if type(k[1]) == "string" and k[1]:match("^gr.") then
-    for _, mode in ipairs(type(k.mode) == "table" and k.mode or { k.mode or "n" }) do
-      declared[mode .. " " .. k[1]] = k
-      want(mode, k[1])
-    end
-  end
-end
-for _, mode in ipairs({ "n", "x" }) do
-  for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, mode)) do
-    if m.lhs:match("^gr.") and not (m.desc or ""):find("which-key-trigger", 1, true) then want(mode, m.lhs) end
-  end
-end
+for _, line in ipairs(builtins) do want(line) end
+for key in pairs(SENDS) do want(key) end
+table.sort(order)
 
-local clients = vim.lsp.get_clients({ bufnr = buf })
-local function serves(entry)
-  local methods = type(entry.method) == "table" and entry.method or { entry.method }
-  for _, c in ipairs(clients) do
-    for _, m in ipairs(methods) do
-      if c:supports_method(m, buf) then return true end
-    end
-  end
-  return type(entry.when) == "function" and entry.when(buf, clients) == true
-end
-local plan, notes, targets = {}, {}, {}
-for _, w in ipairs(order) do
-  local mode, lhs = w[1], w[2]
-  local decl = declared[mode .. " " .. lhs]
-  local map = vim.api.nvim_buf_call(buf, function() return vim.fn.maparg(lhs, mode, false, true) end)
-  if decl and not serves(decl) then
-    notes[#notes + 1] = ("INFO %s %s not typed: no attached client serves %s, so the config leaves it out"):format(mode, lhs, vim.inspect(decl.method))
-  elseif not next(map) then
-    notes[#notes + 1] = ("FAIL %s %s is mapped in a buffer with an LSP client  -- no map"):format(mode, lhs)
+local plan, notes = {}, {}
+for _, key in ipairs(order) do
+  local mode, lhs = key:match("^(%S+) (%S+)$")
+  if not SENDS[key] then
+    notes[#notes + 1] = ("FAIL %s %s has a request to wait for  -- the runtime maps it; add it to SENDS"):format(mode, lhs)
   elseif not lhs:match("^%w+$") then
     notes[#notes + 1] = ("INFO %s %s not typed: the lhs has special keys"):format(mode, lhs)
   else
-    -- what the config declares for the key, else what the map that resolves runs
-    local fn = action(decl and decl[2], map)
-    local t, why = target(fn or function() end)
-    if t then
-      plan[#plan + 1] = ("%s %s %s"):format(mode, lhs, t)
-      targets[t] = true
-    else
-      notes[#notes + 1] = ("FAIL %s %s runs an action the spies can see  -- %s"):format(mode, lhs, why)
-    end
+    plan[#plan + 1] = ("%s %s %s"):format(mode, lhs, SENDS[key])
   end
 end
 vim.g.gr_plan, vim.g.gr_notes = table.concat(plan, "\n"), table.concat(notes, "\n")
-
-_G.HITS = {}
-for t in pairs(targets) do
-  for _, ns in ipairs(NS) do
-    if t:sub(1, #ns[1] + 1) == ns[1] .. "." then
-      ns[2]()[t:sub(#ns[1] + 2)] = function() table.insert(HITS, t .. ":" .. vim.fn.mode()) end
-    end
-  end
-end
 
 -- typing is safe once which-key has loaded its spec, is not mid-sequence, and has attached every trigger it
 -- computed for the buffer in normal mode
@@ -166,7 +139,7 @@ EOF
 
 # a key left pending (r after a gr that ran on its own) blocks --remote-expr until the next key
 R() { timeout 5 "$NV" "$V" --clean --headless --server "$sock" "$@" </dev/null 2>/dev/null; }
-"$NV" "$V" --headless --listen "$sock" main.lua \
+"$NV" "$V" --headless --listen "$sock" \
   -c "autocmd VimEnter * ++once lua vim.schedule(function() dofile('$spy') end)" </dev/null >/dev/null 2>&1 &
 pid=$!
 finish() {
@@ -187,7 +160,7 @@ for _ in $(seq 250); do
   sleep 0.1
 done
 if [ "$ready" != 1 ]; then
-  out "FAIL spies and which-key ready on main.lua  -- ${ready:-nvim exited}"
+  out "FAIL fake server and which-key ready  -- ${ready:-nvim exited}"
   finish
   exit 0
 fi

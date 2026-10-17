@@ -1,4 +1,4 @@
--- @desc     pressed in each fixture buffer, ]f reaches the file's first function where a language in the buffer has textobjects and is the built-in where none has, a ]/[ key's which-key label differs from its built-in label exactly where the key acts unlike the built-in, a filetype change re-derives both, a markdown code block brings its language's selects and moves until it goes, and the treesitter toggle exists iff a parser is active and flips highlighting
+-- @desc     pressed in each fixture buffer, ]f reaches the file's first function where a language in the buffer has textobjects and is the built-in where none has, a ]/[ key's which-key label differs from its built-in label exactly where the key acts unlike the built-in, a filetype change re-derives both, a markdown code block brings its language's selects and moves until it goes, and the treesitter toggle is listed and flips highlighting iff a parser is active
 -- @areas    keys treesitter which-key
 -- @budget   40
 -- Replaces work/keys/keys_textobjects.lua: judged by pressing the keys, not by which maps exist.
@@ -27,13 +27,6 @@ local function flush()
     wait_until(function() return ran end, 1000)
   end
 end
-local function buf_map(buf, mode, lhs)
-  local raw = vim.keycode(lhs)
-  for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, mode)) do
-    if m.lhsraw == raw or m.lhsrawalt == raw then return m end
-  end
-end
-
 -- which-key schedules loading its spec when set up after VimEnter
 local loaded = wait_until(function()
   local c = package.loaded["which-key.config"]
@@ -42,21 +35,27 @@ end, 5000)
 if not check("which-key loaded its spec", loaded, "which-key.config never reached loaded") then return end
 local Buf, Util = require("which-key.buf"), require("which-key.util")
 local MOVES = { "]f", "[f", "]F", "[F", "]c", "[c", "]p", "[p", "]b", "[b", "]B", "[B", "]i", "[i", "]l", "[l", "]a", "[a", "]r", "[r" }
--- Snacks registers the treesitter toggle when a buffer with a parser first maps it, so look it up when needed
-local function ts_desc()
-  local t = Snacks.toggle.toggles.treesitter
-  return t and ("Toggle " .. t.opts.name)
-end
--- the treesitter toggle map that would run in buf, buffer-local or global
-local function toggle_map(buf)
-  local desc = ts_desc()
-  if not desc then return nil end
-  for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, "n")) do
-    if m.desc == desc then return m end
+-- the treesitter highlight toggle, from the config's key list
+local TOGGLE = "<leader>TT"
+local function highlighted(buf) return vim.treesitter.highlighter.active[buf] ~= nil end
+-- the toggle in buf: whether the popup lists it, and whether a press flips highlighting (then a second press flips
+-- it back)
+local function toggle(buf)
+  vim.cmd.buffer(buf)
+  local listed, before = wk_lists(buf, "n", TOGGLE) ~= nil, highlighted(buf)
+  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  -- typed under :silent!, so where it is Vim's own keys their errors do not count
+  local function press() vim.cmd(("silent! call nvim_feedkeys(%s, 'mx', v:false)"):format(vim.fn.string(vim.keycode(TOGGLE)))) end
+  press()
+  local flipped = highlighted(buf) ~= before
+  if flipped then press() end
+  local back = highlighted(buf) == before
+  -- Vim's own keys may have edited the text
+  if table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n") ~= table.concat(lines, "\n") then
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    vim.bo[buf].modified = false
   end
-  for _, m in ipairs(vim.api.nvim_get_keymap("n")) do
-    if m.desc == desc and not buf_map(buf, "n", m.lhs) then return m end
-  end
+  return listed, flipped, back
 end
 
 -- what keys do in normal mode from the cursor, then undone: buffer switch, cursor, text change, error.
@@ -176,17 +175,9 @@ end
 
 section("treesitter toggle only where a parser is active")
 for _, s in ipairs(seen) do
-  local tt = toggle_map(s.buf)
-  expect((tt ~= nil) == s.parser, "%s: toggle %s, parser %s", s.name, tt and "present" or "absent", tostring(s.parser))
-  if tt and tt.callback and s.parser then
-    vim.cmd.buffer(s.buf)
-    local before = vim.treesitter.highlighter.active[s.buf] ~= nil
-    tt.callback()
-    local mid = vim.treesitter.highlighter.active[s.buf] ~= nil
-    tt.callback()
-    local after = vim.treesitter.highlighter.active[s.buf] ~= nil
-    expect(mid ~= before and after == before, "%s: the toggle flips highlighting and back", s.name)
-  end
+  local listed, flipped, back = toggle(s.buf)
+  expect(listed == s.parser, "%s: toggle %s, parser %s", s.name, listed and "listed" or "not listed", tostring(s.parser))
+  expect(flipped == s.parser and back, "%s: a press %s highlighting%s, parser %s", s.name, flipped and "flips" or "leaves", back and "" or " and a second does not flip it back", tostring(s.parser))
 end
 
 section("a filetype change re-derives what the keys do")
@@ -201,7 +192,8 @@ for _, lhs in ipairs(MOVES) do
   if kind(lhs) == "ts" then stray[#stray + 1] = lhs end
 end
 expect(#stray == 0, "lua buffer set to ft=text: every move is the built-in (treesitter: %s)", table.concat(stray, " "))
-expect(toggle_map(buf) == nil, "lua buffer set to ft=text drops the treesitter toggle")
+local listed, flipped = toggle(buf)
+expect(not listed and not flipped, "lua buffer set to ft=text drops the treesitter toggle (listed %s, a press flips highlighting %s)", tostring(listed), tostring(flipped))
 vim.bo[buf].filetype = "lua"
 flush()
 vim.api.nvim_win_set_cursor(0, { 1, 0 })

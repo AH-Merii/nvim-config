@@ -1,4 +1,4 @@
--- @desc     the buffer-local <leader>TT and <leader>TG toggles add no which-key spec per buffer, and their which-key label follows the toggle state
+-- @desc     the <leader>TT and <leader>TG toggles, listed in each buffer treesitter and gitsigns attach to, add no which-key spec per buffer, and their which-key label follows the toggle state
 -- @areas    which-key keys git treesitter
 -- @budget   25
 -- @args     main.lua
@@ -17,19 +17,16 @@ local function specs(lhs)
   end
   return out
 end
--- both toggles are mapped when treesitter and gitsigns attach to the buffer
-local function attached(buf)
-  local function has(lhs) return vim.api.nvim_buf_call(buf, function() return vim.fn.maparg(lhs, "n", false, true).buffer == 1 end) end
-  return has("<leader>TT") and has("<leader>TG")
-end
+-- which-key lists both toggles once treesitter and gitsigns attach to the buffer
+local function attached(buf) return wk_wait(buf, "n", "<leader>TT", true) and wk_wait(buf, "n", "<leader>TG", true) end
 local function open(file)
   vim.cmd.edit(file)
   local buf = vim.api.nvim_get_current_buf()
-  return buf, wait_until(function() return attached(buf) end, 5000)
+  return buf, attached(buf)
 end
 
 local first = vim.api.nvim_get_current_buf()
-check("main.lua gets both toggles", wait_until(function() return attached(first) end, 5000))
+check("main.lua gets both toggles", attached(first))
 local before = { TT = #specs(keys.TT), TG = #specs(keys.TG) }
 for _, f in ipairs({ "app.py", "notes.md", "main.go", "index.ts" }) do
   local _, ok = open(f)

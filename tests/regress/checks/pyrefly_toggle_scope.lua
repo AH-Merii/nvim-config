@@ -1,4 +1,4 @@
--- @desc     <leader>Te exists only in buffers pyrefly is attached to, goes when pyrefly detaches, and opening buffers adds no which-key spec for it
+-- @desc     which-key lists <leader>Te only in buffers pyrefly is attached to, drops it when pyrefly detaches, and opening buffers adds no which-key spec for it
 -- @areas    lsp keys which-key
 -- @budget   60
 -- @fixture  projects
@@ -18,11 +18,9 @@ local function specs()
   end
   return n
 end
-local function mapped(buf, lhs, mode)
-  return vim.api.nvim_buf_call(buf, function() return vim.fn.maparg(lhs, mode or "n", false, true) end)
-end
--- gra comes from the same LSP key sync as <leader>Te, so once it is there the sync has run
-local function synced(buf) return wait_until(function() return mapped(buf, "gra").buffer == 1 end, 10000) end
+local function listed(buf, lhs) return wk_lists(buf, "n", lhs) ~= nil end
+-- gra needs a code-action server, as pyrefly and ruff are; once it is listed the buffer's LSP keys are in place
+local function synced(buf) return (wk_wait(buf, "n", "gra", true, 10000)) end
 local function open(file, server)
   vim.cmd.edit(file)
   local buf = vim.api.nvim_get_current_buf()
@@ -35,14 +33,14 @@ local before = specs()
 check("which-key has a <leader>Te spec", before > 0, before)
 
 local pbuf = open("withproj/app.py", "pyrefly")
-check("python with pyrefly: <leader>Te mapped", wait_until(function() return mapped(pbuf, "<leader>Te").buffer == 1 end, 5000))
+check("python with pyrefly: <leader>Te listed", (wk_wait(pbuf, "n", "<leader>Te", true)))
 local lbuf = open("scratch.lua", "lua_ls")
-check("lua: no <leader>Te", vim.tbl_isempty(mapped(lbuf, "<leader>Te")), vim.inspect(mapped(lbuf, "<leader>Te").desc))
+check("lua: <leader>Te not listed", not listed(lbuf, "<leader>Te"), wk_lists(lbuf, "n", "<leader>Te"))
 check("which-key: opening buffers adds no <leader>Te spec", specs() == before, before .. " -> " .. specs())
 
 -- pyrefly off: the toggle goes from its buffer, and a new python buffer never gets it
 vim.lsp.enable("pyrefly", false)
-check("python after pyrefly detached: <leader>Te gone", wait_until(function() return vim.tbl_isempty(mapped(pbuf, "<leader>Te")) end, 10000))
+check("python after pyrefly detached: <leader>Te not listed", (wk_wait(pbuf, "n", "<leader>Te", false, 10000)))
 local rbuf = open("noproj/app.py", "ruff")
 check("python without pyrefly: pyrefly not attached", #vim.lsp.get_clients({ bufnr = rbuf, name = "pyrefly" }) == 0)
-check("python without pyrefly: no <leader>Te", vim.tbl_isempty(mapped(rbuf, "<leader>Te")))
+check("python without pyrefly: <leader>Te not listed", not listed(rbuf, "<leader>Te"))

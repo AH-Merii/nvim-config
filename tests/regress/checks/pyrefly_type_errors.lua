@@ -38,7 +38,7 @@ local function open(dir)
   local missing, why = wait_attach(buf, { "pyrefly" }, 20000)
   if not check(dir .. ": pyrefly attaches", #missing == 0, vim.inspect(why)) then return nil end
   local client = vim.lsp.get_clients({ bufnr = buf, name = "pyrefly" })[1]
-  check(dir .. ": <leader>Te is mapped", wait_until(function() return vim.fn.maparg("<leader>Te", "n", false, true).buffer == 1 end, 5000))
+  check(dir .. ": which-key lists <leader>Te", (wk_wait(buf, "n", "<leader>Te", true)))
   return buf, client
 end
 local function flip(buf, client, want, label)

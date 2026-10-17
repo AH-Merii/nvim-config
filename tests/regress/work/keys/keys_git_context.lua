@@ -1,8 +1,8 @@
--- @desc     git keys follow their context: gitsigns hunk maps only in buffers gitsigns is attached to (gone on detach and on :saveas out of the repo), Snacks git pickers only while the cwd is in a repo, log maps only in repo files, gitbrowse only with a remote (also after a fast rename), PR review only with a GitHub remote
+-- @desc     git keys are listed by which-key, and act when pressed, only in their context: the gitsigns hunk keys in buffers gitsigns is attached to (not after a detach or a :saveas out of the repo), the Snacks git pickers while the cwd is in a repo, the log keys in repo files, gitbrowse with a remote (also after a fast rename), PR review with a GitHub remote
 -- @areas    keys git which-key
 -- @budget   40
--- Ported from nvim-sbx-keys/checks2/git.lua. Repos with remotes are made inside the fixture copy; the
--- outside-git dir is under Neovim's own tempdir, which Neovim removes on exit.
+-- Judged by pressing the keys and reading which-key's popup, never by which maps exist. Repos with remotes are
+-- made inside the fixture copy; the outside-git dir is under Neovim's own tempdir, which Neovim removes on exit.
 
 local cur, n, bad
 local function done()
@@ -54,20 +54,7 @@ local function settle()
     if inflight == 0 then return end
   end
 end
-local function buf_map(buf, mode, lhs)
-  local raw = vim.keycode(lhs)
-  for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, mode)) do
-    if m.lhsraw == raw or m.lhsrawalt == raw then return m end
-  end
-end
-local function global_map(mode, lhs)
-  local raw = vim.keycode(lhs)
-  for _, m in ipairs(vim.api.nvim_get_keymap(mode)) do
-    if m.lhsraw == raw or m.lhsrawalt == raw then return m end
-  end
-end
-local function any_map(buf, mode, lhs) return buf_map(buf, mode, lhs) or global_map(mode, lhs) end
-local function git(...) return vim.system({ "git", ... }):wait() end
+local function git(...) return real_system({ "git", ... }, { text = true }):wait() end
 
 local NOGIT = vim.fn.fnamemodify(vim.fn.tempname(), ":h") .. "/nogit"
 vim.fn.mkdir(NOGIT .. "/out", "p")
@@ -93,136 +80,196 @@ local function open(file, lcd)
   return buf
 end
 
-section("gitsigns maps where gitsigns attached")
--- the maps on_attach creates, found by running it on a scratch buffer
-local on_attach = require("gitsigns.config").config.on_attach
-local attach_maps = {}
-if expect(type(on_attach) == "function", "gitsigns has an on_attach") then
-  local probe = vim.api.nvim_create_buf(false, true)
-  local function all_maps()
-    local t = {}
-    for _, m in ipairs(vim.api.nvim_buf_get_keymap(probe, "n")) do t[m.lhsraw] = m.lhs end
-    for _, m in ipairs(vim.api.nvim_get_keymap("n")) do t[m.lhsraw] = t[m.lhsraw] or m.lhs end
-    return t
+-- The git keys, from the config's key list, written out here so the check does not read the config's tables
+local HUNK_KEYS = { "]g", "[g", "<leader>gb", "<leader>gd", "<leader>Gr", "<leader>GR", "<leader>Gs", "<leader>Gu", "<leader>Gd", "<leader>TG" }
+local PICKERS = { ["<leader>gB"] = "git_branches", ["<leader>gl"] = "git_log", ["<leader>gs"] = "git_status", ["<leader>gS"] = "git_stash", ["<leader>gD"] = "git_diff" }
+local FILE_LOGS = { ["<leader>gL"] = "git_log_line", ["<leader>gf"] = "git_log_file" }
+local BROWSE = "<leader>GB"
+local PR = "<leader>p"
+
+local function listed(buf, lhs, mode) return wk_lists(buf, mode or "n", lhs) ~= nil end
+-- which of keys which-key lists in buf, as "lhs lhs ..."
+local function listing(buf, keys)
+  local out = {}
+  for _, lhs in ipairs(keys) do
+    if listed(buf, lhs) then out[#out + 1] = lhs end
   end
-  local before = all_maps()
-  vim.api.nvim_buf_call(probe, function() on_attach(probe) end)
-  for raw, lhs in pairs(all_maps()) do
-    if not before[raw] then attach_maps[#attach_maps + 1] = lhs end
-  end
-  table.sort(attach_maps)
-  pcall(vim.api.nvim_buf_delete, probe, { force = true })
+  return table.concat(out, " ")
 end
-info("on_attach maps: " .. table.concat(vim.tbl_map(vim.fn.keytrans, attach_maps), " "))
-expect(#attach_maps > 0, "on_attach creates maps")
-local function count(buf)
-  local c = 0
-  for _, lhs in ipairs(attach_maps) do
-    if buf_map(buf, "n", lhs) then c = c + 1 end
-  end
-  return c
+local function keys_of(t)
+  local out = vim.tbl_keys(t)
+  table.sort(out)
+  return out
 end
+
+-- what pressing lhs in the current buffer opens: the Snacks picker or gitbrowse it calls, nil for none. Snacks'
+-- picker and gitbrowse are stood in for, so nothing opens. Typed under :silent!, so where the key is Vim's own (gf)
+-- its error does not count.
+local function opens(lhs, mode)
+  local hit
+  local picker, gitbrowse = Snacks.picker, Snacks.gitbrowse
+  Snacks.picker = setmetatable({}, { __index = function(_, k) return function() hit = "picker:" .. k end end })
+  Snacks.gitbrowse = function() hit = "gitbrowse" end
+  local buf, lines = vim.api.nvim_get_current_buf(), vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  pcall(vim.cmd, ("silent! call nvim_feedkeys(%s, 'mx', v:false)"):format(vim.fn.string(vim.keycode((mode == "x" and "V" or "") .. lhs))))
+  if vim.fn.mode() ~= "n" then vim.cmd("normal! \27") end
+  flush()
+  Snacks.picker, Snacks.gitbrowse = picker, gitbrowse
+  -- Vim's own keys may have edited the text
+  if vim.api.nvim_buf_is_valid(buf) and table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n") ~= table.concat(lines, "\n") then
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    vim.bo[buf].modified = false
+  end
+  return hit
+end
+
+section("gitsigns keys act where gitsigns is attached")
+-- a tracked file with one unstaged hunk on line 3
+local HR = W .. "/hunks"
+local BASE = { "a", "b", "c", "d", "e", "f", "g" }
+local EDITED = { "a", "b", "C", "d", "e", "f", "g" }
+repo(HR, "f.txt", BASE)
+vim.fn.writefile(EDITED, HR .. "/f.txt")
+local hbuf = open(HR .. "/f.txt")
+local function hunks() return #(require("gitsigns").get_hunks(hbuf) or {}) end
+local function staged() return vim.trim(git("-C", HR, "diff", "--cached", "--name-only").stdout) end
+expect(wait_until(function() return attach_done(hbuf) and hunks() == 1 end, 5000), "gitsigns attached to the edited file and sees its hunk")
+local function windows() return #vim.api.nvim_list_wins() end
+local function close_others()
+  for _, w in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_get_config(w).relative ~= "" then pcall(vim.api.nvim_win_close, w, true) end
+  end
+  vim.cmd("silent! only")
+  if vim.api.nvim_get_current_buf() ~= hbuf then vim.cmd.buffer(hbuf) end
+end
+-- back to EDITED with its hunk, nothing staged, one window
+local function restore()
+  close_others()
+  if staged() ~= "" then git("-C", HR, "reset", "-q") end
+  if table.concat(vim.api.nvim_buf_get_lines(hbuf, 0, -1, false), "\n") ~= table.concat(EDITED, "\n") then
+    vim.api.nvim_buf_set_lines(hbuf, 0, -1, false, EDITED)
+  end
+  vim.cmd("silent write")
+  vim.cmd("Gitsigns refresh")
+  wait_until(function() return hunks() == 1 and staged() == "" end, 3000)
+end
+-- each key's effect, from a cursor on the line that is not in the hunk unless the key acts on the hunk
+local said = function() return #Snacks.notifier.get_history() end
+local ACTS = {
+  ["]g"] = { from = { 1, 0 }, done = function() return vim.fn.line(".") == 3 end, what = "cursor to the hunk on line 3" },
+  ["[g"] = { from = { 7, 0 }, done = function() return vim.fn.line(".") == 3 end, what = "cursor to the hunk on line 3" },
+  ["<leader>gb"] = { from = { 3, 0 }, window = true, what = "a blame window" },
+  ["<leader>gd"] = { from = { 3, 0 }, window = true, what = "a hunk preview window" },
+  ["<leader>Gd"] = { from = { 3, 0 }, window = true, what = "a diff window" },
+  ["<leader>Gs"] = { from = { 3, 0 }, done = function() return staged() == "f.txt" end, what = "the hunk staged" },
+  ["<leader>Gu"] = { from = { 3, 0 }, notice = true, what = "a notice that the hunk is not staged" },
+  ["<leader>Gr"] = { from = { 3, 0 }, done = function() return vim.api.nvim_buf_get_lines(hbuf, 2, 3, false)[1] == "c" end, what = "the hunk reset" },
+  ["<leader>GR"] = { from = { 1, 0 }, done = function() return vim.api.nvim_buf_get_lines(hbuf, 2, 3, false)[1] == "c" end, what = "the buffer reset" },
+  ["<leader>TG"] = { from = { 1, 0 }, label = true, what = "its which-key label flips" },
+}
+for _, lhs in ipairs(HUNK_KEYS) do
+  local a = ACTS[lhs]
+  restore()
+  vim.api.nvim_win_set_cursor(0, a.from)
+  local wins, notes, label = windows(), said(), wk_lists(hbuf, "n", lhs)
+  feed(lhs)
+  local ok = wait_until(function()
+    if a.window then return windows() > wins end
+    if a.notice then return said() > notes end
+    if a.label then return true end
+    return a.done()
+  end, 3000)
+  if a.label then
+    ok = wk_lists(hbuf, "n", lhs) ~= label
+    feed(lhs)
+  end
+  expect(ok, "%s: %s", vim.fn.keytrans(vim.keycode(lhs)), a.what)
+end
+restore()
+vim.cmd.cd(FIX)
+
+section("gitsigns keys are listed where gitsigns is attached")
 -- the file outside git first: by the time gitsigns has finished attaching to the tracked file opened after it,
 -- an attach to the outside file would have landed too
 local plain = open(NOGIT .. "/plain.txt", NOGIT)
 local gbuf = open(FIX .. "/main.lua")
 expect(wait_until(function() return attach_done(gbuf) end, 5000), "gitsigns finished attaching to the fixture's main.lua")
--- gitsigns sets its status dict a few ms before it calls on_attach
-wait_until(function() return count(gbuf) == #attach_maps end, 2000)
 flush()
 local okc, gcache = pcall(function() return require("gitsigns.cache").cache end)
 local cached = okc and type(gcache) == "table" and gcache[plain] ~= nil
 expect(not attached(plain) and vim.b[plain].gitsigns_head == nil and not cached,
   "gitsigns has no state for a file outside git (status dict %s, head %s, cache %s)",
   tostring(attached(plain)), tostring(vim.b[plain].gitsigns_head), tostring(cached))
-for _, lhs in ipairs(attach_maps) do
-  expect(buf_map(gbuf, "n", lhs) ~= nil, "git buffer has %s", vim.fn.keytrans(lhs))
-  expect(any_map(plain, "n", lhs) == nil, "file outside git has no %s (neither local nor global)", vim.fn.keytrans(lhs))
-end
+local all = table.concat(HUNK_KEYS, " ")
+wk_wait(gbuf, "n", HUNK_KEYS[#HUNK_KEYS], true)
+expect(listing(gbuf, HUNK_KEYS) == all, "a git buffer lists %s (lists: %s)", all, listing(gbuf, HUNK_KEYS))
+expect(listing(plain, HUNK_KEYS) == "", "a file outside git lists none (lists: %s)", listing(plain, HUNK_KEYS))
 vim.cmd.cd(FIX)
 
-section("gitsigns maps go when gitsigns detaches")
+section("gitsigns keys go when gitsigns detaches")
 repo(W .. "/detach", "f.txt", { "a", "b" })
 local dbuf = open(W .. "/detach/f.txt")
 wait_until(function() return attach_done(dbuf) end, 5000)
-expect(count(dbuf) == #attach_maps, "repo buffer has all %d on_attach maps (has %d)", #attach_maps, count(dbuf))
+wk_wait(dbuf, "n", HUNK_KEYS[#HUNK_KEYS], true)
+expect(listing(dbuf, HUNK_KEYS) == all, "repo buffer lists them all (lists: %s)", listing(dbuf, HUNK_KEYS))
 vim.cmd("Gitsigns detach")
-wait_until(function() return not attached(dbuf) and count(dbuf) == 0 end, 3000)
-expect(not attached(dbuf) and count(dbuf) == 0, "after :Gitsigns detach: %d on_attach maps left", count(dbuf))
+wait_until(function() return not attached(dbuf) end, 3000)
+wk_wait(dbuf, "n", HUNK_KEYS[1], false, 3000)
+expect(not attached(dbuf) and listing(dbuf, HUNK_KEYS) == "", "after :Gitsigns detach: lists %s", listing(dbuf, HUNK_KEYS))
 vim.cmd("Gitsigns attach")
 expect(wait_until(function() return attach_done(dbuf) end, 5000), "gitsigns re-attached on :Gitsigns attach")
-expect(count(dbuf) == #attach_maps, "after :Gitsigns attach: %d of %d maps back", count(dbuf), #attach_maps)
+wk_wait(dbuf, "n", HUNK_KEYS[#HUNK_KEYS], true)
+expect(listing(dbuf, HUNK_KEYS) == all, "after :Gitsigns attach: lists %s", listing(dbuf, HUNK_KEYS))
 vim.cmd("silent saveas! " .. vim.fn.fnameescape(NOGIT .. "/out/f.txt"))
-wait_until(function() return not attached(dbuf) and count(dbuf) == 0 end, 3000)
-expect(not attached(dbuf) and count(dbuf) == 0, "after :saveas out of the repo: %d on_attach maps left", count(dbuf))
+wait_until(function() return not attached(dbuf) end, 3000)
+wk_wait(dbuf, "n", HUNK_KEYS[1], false, 3000)
+expect(not attached(dbuf) and listing(dbuf, HUNK_KEYS) == "", "after :saveas out of the repo: lists %s", listing(dbuf, HUNK_KEYS))
 vim.cmd.cd(FIX)
-
--- what a map opens: the Snacks picker or gitbrowse its callback calls
-local function opens(map)
-  if not map.callback or map.expr == 1 then return nil end
-  local hit
-  local picker, gitbrowse = Snacks.picker, Snacks.gitbrowse
-  Snacks.picker = setmetatable({}, { __index = function(_, k) return function() hit = "picker:" .. k end end })
-  Snacks.gitbrowse = function() hit = "gitbrowse" end
-  pcall(map.callback)
-  Snacks.picker, Snacks.gitbrowse = picker, gitbrowse
-  return hit
-end
-local leader = vim.g.mapleader or "\\"
-local function under_git_prefix(m) return m.lhs:sub(1, #leader + 1) == leader .. "g" or m.lhs:sub(1, #leader + 1) == leader .. "G" end
--- lhs of maps under <leader>g/<leader>G whose callback satisfies pred
-local function maps_opening(list, pred)
-  local out = {}
-  for _, m in ipairs(list) do
-    if under_git_prefix(m) then
-      local what = opens(m)
-      if what and pred(what) then out[#out + 1] = m.lhs end
-    end
-  end
-  table.sort(out)
-  return out
-end
-local function git_picker(what) return what:match("^picker:git_") ~= nil end
-local function global_pickers() return maps_opening(vim.api.nvim_get_keymap("n"), git_picker) end
 
 section("git pickers follow the cwd")
-open(FIX .. "/main.lua")
-vim.cmd.cd(FIX)
-settle()
-local in_repo = global_pickers()
-info("global git pickers, cwd in repo: " .. table.concat(in_repo, " "))
-expect(#in_repo > 0, "global git picker maps exist while the cwd is a repo")
-vim.cmd.cd(NOGIT)
-settle()
-local outside = global_pickers()
-expect(#outside == 0, "no global git picker map once :cd leaves the repo (left: %s)", table.concat(outside, " "))
-vim.cmd.cd(FIX)
-settle()
-expect(vim.deep_equal(global_pickers(), in_repo), "the same picker maps return after :cd back")
-vim.cmd.cd(NOGIT .. "/..")
-vim.cmd.cd(FIX .. "/rs")
-settle()
-expect(vim.deep_equal(global_pickers(), in_repo), "pickers stay in a subdirectory of the repo")
+local scratch = vim.api.nvim_create_buf(true, false)
+-- in the scratch buffer, where Vim's own keys can edit nothing that matters
+local function pickers_here()
+  vim.api.nvim_set_current_buf(scratch)
+  local out = {}
+  for _, lhs in ipairs(keys_of(PICKERS)) do
+    local hit = opens(lhs)
+    out[#out + 1] = ("%s %s %s"):format(lhs, listed(scratch, lhs) and "listed" or "unlisted", hit or "nothing")
+  end
+  return out
+end
+local function want_pickers(on)
+  local out = {}
+  for _, lhs in ipairs(keys_of(PICKERS)) do
+    out[#out + 1] = ("%s %s %s"):format(lhs, on and "listed" or "unlisted", on and ("picker:" .. PICKERS[lhs]) or "nothing")
+  end
+  return out
+end
+for _, case in ipairs({ { FIX, true }, { NOGIT, false }, { FIX, true }, { FIX .. "/rs", true } }) do
+  vim.cmd.cd(case[1])
+  settle()
+  local got = pickers_here()
+  expect(vim.deep_equal(got, want_pickers(case[2])), "cwd %s: %s", vim.fn.fnamemodify(case[1], ":t"), table.concat(got, ", "))
+end
 vim.cmd.cd(FIX)
 
-section("log maps follow the buffer's file")
+section("log keys follow the buffer's file")
 for _, cwd in ipairs({ FIX, NOGIT }) do
   vim.cmd.cd(cwd)
   settle()
   local pbuf = open(NOGIT .. "/plain.txt")
   local mbuf = open(FIX .. "/main.lua")
-  local here = maps_opening(vim.api.nvim_buf_get_keymap(mbuf, "n"), git_picker)
-  local there = maps_opening(vim.api.nvim_buf_get_keymap(pbuf, "n"), git_picker)
-  expect(#here > 0, "[cwd %s] a repo file has buffer-local git log maps", cwd)
-  expect(#there == 0, "[cwd %s] a file outside git has no buffer-local git picker map (has: %s)", cwd, table.concat(there, " "))
-  local scratch = vim.api.nvim_create_buf(true, false)
-  flush()
-  expect(#maps_opening(vim.api.nvim_buf_get_keymap(scratch, "n"), git_picker) == 0, "[cwd %s] an unnamed buffer has none", cwd)
-  for _, lhs in ipairs(here) do
-    vim.api.nvim_buf_call(pbuf, function()
-      local m = any_map(pbuf, "n", lhs)
-      expect(m == nil or not (opens(m) or ""):match("^picker:git_log"), "[cwd %s] %s outside git does not open a git log", cwd, vim.fn.keytrans(lhs))
-    end)
+  for _, lhs in ipairs(keys_of(FILE_LOGS)) do
+    expect(listed(mbuf, lhs), "[cwd %s] a repo file lists %s", cwd, lhs)
+    local hit = opens(lhs)
+    expect(hit == "picker:" .. FILE_LOGS[lhs], "[cwd %s] %s in a repo file opens %s (got %s)", cwd, lhs, FILE_LOGS[lhs], tostring(hit))
+    vim.api.nvim_set_current_buf(pbuf)
+    expect(not listed(pbuf, lhs), "[cwd %s] a file outside git does not list %s", cwd, lhs)
+    hit = opens(lhs)
+    expect(hit == nil or not hit:match("^picker:git_log"), "[cwd %s] %s outside git does not open a git log (got %s)", cwd, lhs, tostring(hit))
+    vim.api.nvim_set_current_buf(scratch)
+    expect(not listed(scratch, lhs), "[cwd %s] an unnamed buffer does not list %s", cwd, lhs)
+    vim.api.nvim_set_current_buf(mbuf)
   end
 end
 vim.cmd.cd(FIX)
@@ -234,72 +281,96 @@ for name, url in pairs(repos) do
   repo(R .. "/" .. name, "file.txt", { "x" })
   if url ~= "" then git("-C", R .. "/" .. name, "remote", "add", "origin", url) end
 end
-local function browse_maps(buf) return maps_opening(vim.api.nvim_buf_get_keymap(buf, "n"), function(w) return w == "gitbrowse" end) end
 
 section("gitbrowse needs a remote on the buffer's repo")
-expect(#maps_opening(vim.api.nvim_get_keymap("n"), function(w) return w == "gitbrowse" end) == 0, "no global gitbrowse map")
+local function browse(buf)
+  local l = listed(buf, BROWSE)
+  return l, opens(BROWSE) == "gitbrowse"
+end
 for name, url in pairs(repos) do
   local buf = open(R .. "/" .. name .. "/file.txt")
-  -- browse_maps runs every <leader>g/G callback, so the gitsigns ones are run only once they are mapped
-  wait_until(function() return attach_done(buf) and count(buf) == #attach_maps end, 5000)
-  expect(count(buf) == #attach_maps, "the %s repo's buffer has all %d on_attach maps (has %d)", name, #attach_maps, count(buf))
-  local has = #browse_maps(buf) > 0
-  expect(has == (url ~= ""), "gitbrowse map in the %s repo's buffer: %s", name, tostring(has))
+  local l, o = browse(buf)
+  expect(l == (url ~= "") and o == (url ~= ""), "the %s repo's buffer: gitbrowse listed %s, opens %s", name, tostring(l), tostring(o))
 end
-expect(#browse_maps(open(NOGIT .. "/plain.txt")) == 0, "no gitbrowse map outside git")
-expect(#browse_maps(open(FIX .. "/main.lua")) == 0, "no gitbrowse map in the fixture repo, which has no remote")
+local l, o = browse(open(NOGIT .. "/plain.txt"))
+expect(not l and not o, "outside git: gitbrowse listed %s, opens %s", tostring(l), tostring(o))
+l, o = browse(open(FIX .. "/main.lua"))
+expect(not l and not o, "the fixture repo, which has no remote: gitbrowse listed %s, opens %s", tostring(l), tostring(o))
 
 section("a rename out of the repo before the remote check answers")
 -- an attach begun before the rename can leave gitsigns on the old path for good, and its callbacks then fail on the untracked file
-local gitsigns_lhs = {}
-for _, lhs in ipairs(attach_maps) do gitsigns_lhs[lhs] = true end
-local function browse_maps_without_gitsigns(buf)
-  local list = vim.tbl_filter(function(m) return not gitsigns_lhs[m.lhs] end, vim.api.nvim_buf_get_keymap(buf, "n"))
-  return maps_opening(list, function(w) return w == "gitbrowse" end)
-end
 for i = 1, 3 do
   vim.fn.writefile({ "x" }, R .. "/github/race" .. i .. ".txt")
   vim.cmd.edit(R .. "/github/race" .. i .. ".txt")
   local rbuf = vim.api.nvim_get_current_buf()
   vim.cmd("silent file " .. vim.fn.fnameescape(NOGIT .. "/renamed" .. i .. ".txt"))
   settle()
-  expect(#browse_maps_without_gitsigns(rbuf) == 0, "[%d] renamed out of the repo at once: gitbrowse map present", i)
+  l, o = browse(rbuf)
+  expect(not l and not o, "[%d] renamed out of the repo at once: gitbrowse listed %s, opens %s", i, tostring(l), tostring(o))
 end
 
 section("PR review needs a GitHub remote on the cwd's repo")
-local spec = require("lazy.core.config").plugins["github-pr-reviewer.nvim"]
-if expect(spec ~= nil, "github-pr-reviewer.nvim is in the config, for the repo with a GitHub remote") then
-  local cmds = spec.cmd or {}
-  cmds = type(cmds) == "string" and { cmds } or cmds
-  if expect(#cmds > 0, "github-pr-reviewer lazy-loads on its commands, so its maps can come and go") then
-    local function pr_maps()
-      local out = {}
-      for _, mode in ipairs({ "n", "v" }) do
-        for _, m in ipairs(vim.api.nvim_get_keymap(mode)) do
-          for _, c in ipairs(cmds) do
-            if (m.rhs or ""):find(c, 1, true) then out[#out + 1] = mode .. ":" .. m.lhs end
-          end
-        end
-      end
-      table.sort(out)
-      return out
+-- the plugin's commands, stood in for so a press runs nothing of it
+local ran = {}
+for _, c in ipairs({ "PRReviewMenu", "PRSuggestChange" }) do
+  vim.api.nvim_create_user_command(c, function() ran[#ran + 1] = c end, { range = true, force = true })
+end
+local function pr_here()
+  vim.api.nvim_set_current_buf(scratch)
+  vim.api.nvim_buf_set_lines(scratch, 0, -1, false, { "some text" })
+  local out = {}
+  for _, mode in ipairs({ "n", "x" }) do
+    ran = {}
+    opens(PR, mode)
+    out[#out + 1] = ("%s %s %s"):format(mode, listed(scratch, PR, mode) and "listed" or "unlisted", ran[1] or "nothing")
+  end
+  return table.concat(out, ", ")
+end
+local ON, OFF = "n listed PRReviewMenu, x listed PRSuggestChange", "n unlisted nothing, x unlisted nothing"
+for _, case in ipairs({ { "github", ON }, { "other", OFF }, { "none", OFF }, { "github", ON } }) do
+  vim.cmd.cd(R .. "/" .. case[1])
+  settle()
+  local got = pr_here()
+  expect(got == case[2], "cwd %s repo: %s", case[1], got)
+end
+vim.cmd.cd(NOGIT)
+settle()
+local got = pr_here()
+expect(got == OFF, "cwd outside git: %s", got)
+vim.cmd.cd(FIX)
+
+section("every key git brings is judged")
+-- the keys the popup gains in a file of a repo with a GitHub remote, cwd there, over a file outside git: each is
+-- one of the git keys above
+local Util = require("which-key.util")
+local known = {}
+for _, lhs in ipairs(vim.list_extend(vim.list_extend(vim.list_extend({ BROWSE }, HUNK_KEYS), keys_of(PICKERS)), keys_of(FILE_LOGS))) do
+  known["n " .. Util.norm(lhs)] = true
+end
+known["n " .. Util.norm(PR)], known["x " .. Util.norm(PR)] = true, true
+vim.cmd.cd(NOGIT)
+settle()
+local pbuf = open(NOGIT .. "/plain.txt")
+local before = { n = wk_menu(pbuf, "n"), x = wk_menu(pbuf, "x") }
+vim.cmd.cd(R .. "/github")
+settle()
+local gh = open(R .. "/github/file.txt")
+wait_until(function() return attach_done(gh) end, 5000)
+wk_wait(gh, "n", HUNK_KEYS[#HUNK_KEYS], true)
+local gained, unknown = {}, {}
+for _, mode in ipairs({ "n", "x" }) do
+  for lhs, label in pairs(wk_menu(gh, mode)) do
+    if before[mode][lhs] == nil then
+      gained[#gained + 1] = mode .. " " .. lhs
+      if not known[mode .. " " .. lhs] then unknown[#unknown + 1] = mode .. " " .. lhs .. " (" .. tostring(label) .. ")" end
     end
-    local seen
-    for _, case in ipairs({ { "github", true }, { "other", false }, { "none", false }, { "github", true } }) do
-      vim.cmd.cd(R .. "/" .. case[1])
-      settle()
-      local got = pr_maps()
-      expect((#got > 0) == case[2], "cwd %s repo: PR maps %s", case[1], #got > 0 and table.concat(got, " ") or "none")
-      if case[2] then
-        expect(seen == nil or vim.deep_equal(seen, got), "the same PR maps each time")
-        seen = got
-      end
-    end
-    vim.cmd.cd(NOGIT)
-    settle()
-    expect(#pr_maps() == 0, "no PR maps with the cwd outside git")
   end
 end
+table.sort(gained)
+table.sort(unknown)
+info("gained in a GitHub repo: " .. table.concat(gained, ", "))
+expect(#gained > 0, "a repo file brings keys")
+expect(#unknown == 0, "every key git brings is judged here; not judged: %s", table.concat(unknown, ", "))
 vim.cmd.cd(FIX)
 vim.system = real_system
 done()
