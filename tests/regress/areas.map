@@ -27,7 +27,6 @@ lua/features/folds.lua            editing treesitter
 lua/features/lua_dev.lua          editing lsp
 lua/features/files.lua            keys editing
 lua/features/profiling.lua        keys
-lua/config/keymaps.lua            keys which-key
 lua/config/options.lua            editing ui
 lua/config/autocmds.lua           editing ui
 lua/ui/messages/*                ui

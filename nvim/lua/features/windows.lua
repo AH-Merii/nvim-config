@@ -1,5 +1,5 @@
--- Windows and tmux: moving between Neovim windows and tmux panes with the same keys, zen and zoom, and what a window
--- shows (numbers, indent guides, dimming, hidden characters)
+-- Windows and tmux: moving between Neovim windows and tmux panes with the same keys, resizing, zen and zoom, and what
+-- a window shows (numbers, indent guides, dimming, hidden characters)
 local M = {}
 
 M.plugins = {
@@ -53,6 +53,14 @@ function M.setup()
       })
     end
   )
+
+  require("keys").feature("windows")({
+    -- Panes resizing
+    { "+", ":vertical resize +5<CR>", "Increase width", silent = true },
+    { "-", ":vertical resize -5<CR>", "Decrease width", silent = true },
+    { "=", ":resize +5<CR>", "Increase height", silent = true },
+    { "_", ":resize -5<CR>", "Decrease height", silent = true },
+  })
 end
 
 return M
