@@ -22,8 +22,9 @@ The full proposal, with its measurements and sources, was written outside the re
   below).
 - Built: step 1, `lang/` ("Step 1: lang/" below).
 - Built: step 4's first half, `ui/facts` and the statusline adapter ("Step 4: ui/facts and the statusline adapter"
-  below); the swap to neoblocks follows separately.
+  below).
 - Built: step 2, `format/` and `linting/` ("Step 2: format/ and lint/" below).
+- Built: step 4b, neoblocks.nvim's statusline replaces lualine ("Step 4b: neoblocks statusline" below).
 
 ## Target layout
 
@@ -681,3 +682,126 @@ format), `save-check-results.txt` there. `checks/format_buffer.lua` changed only
 
 **Left for later steps.** The keys stay where they are (step 3): `core/lsp.lua`'s rows, the snacks toggle row and
 nvim-lint's `<leader>ll`/`<leader>li` maps call the interface above.
+
+## Step 4b: neoblocks statusline (2026-10-17)
+
+Built on `rearch/neoblocks-statusline` from `origin/main` 0c1277f. lualine.nvim goes; the statusline is the one from
+our own plugin, [neoblocks.nvim](https://github.com/AH-Merii/neoblocks.nvim) v0.2.0 (commit db1fced, `git ls-remote
+https://github.com/AH-Merii/neoblocks.nvim refs/tags/v0.2.0`). The user sees the same line.
+
+**Context.** Step 4 made lualine an adapter over `ui/facts`, and its rebuild (164.9 and 169.1 µs) was mostly lualine
+itself, so the ≤ 100 µs budget waited for neoblocks ("Cost" in step 4). neoblocks' statusline was written against
+this config's lualine spec, segment by segment (neoblocks `docs/decisions/statusline.md`, "the parity target"), and
+its own bench checks that both draw the same text (decision 14 there).
+
+**Built.** `plugins/lualine.lua` becomes `plugins/statusline.lua`, an adapter that gives neoblocks the same segments:
+`require("neoblocks").setup({ statusline = { color, left, right, events } })` (`plugins/statusline.lua:322`). The
+lock file drops lualine and pins neoblocks.nvim at db1fced, so the test image's plugins stage installs it from the
+lock with the other plugins (`tests/image/Dockerfile:116`, lazy `install`/`restore`, `tests/regress/refresh.lua:15`).
+
+**Decisions.**
+
+- *The config's own segments stay functions.* The path, the server, formatter and linter lists, the tools indicator
+  (its click runs `:Tools`) and the pending keys are the same functions as before; neoblocks puts a function's text in
+  unescaped, as lualine did (neoblocks decision 3), so the path keeps its own colour groups and `%` escaping. The
+  location and progress, which were functions returning an expression, are the expressions themselves: raw `%`
+  strings are drawn as they are (neoblocks decision 2).
+- *lualine's components become neoblocks' built-ins:* `diagnostics`, `branch`, `diff`, `searchcount`,
+  `progress_status` and `recording` (`plugins/statusline.lua:277-310`), with the same symbols, icons and colours;
+  `gui = "bold"` is `bold = true`. The mode icon's colour function is `sl.mode_color` with red as the fallback
+  (`:209`). The macro segment was a function returning `" @q"` (0c1277f `plugins/lualine.lua:207`); it is the
+  `recording` built-in with that icon, which draws the same text (neoblocks decision 11).
+- *diff* came from gitsigns already (the `source` function, 0c1277f `plugins/lualine.lua:359`); neoblocks' `diff` reads
+  the same `b:gitsigns_status_dict` and redraws on `User GitSignsUpdate`, so the source function goes.
+- *The search count* no longer needs the spec's CursorMoved refresh (0c1277f `plugins/lualine.lua:381-387`): neoblocks
+  counts on a move only while a search is highlighted, at most once per 16 ms, and updates only the count (neoblocks
+  decision 6).
+- *Rebuilt on events only; no timer.* lualine also refreshed once a second. neoblocks has no timer (neoblocks decision
+  5), so each thing the timer caught needs an event. The lists and the indicator: FactsChanged calls `sl.refresh()`
+  (`:88-91`), as it called lualine's refresh. The branch: neoblocks watches HEAD. The search count after `:nohlsearch`:
+  an expression. The path after a rename, after a `:cd` and its width after a window resize: the spec adds
+  `BufFilePost`, `DirChanged` and `WinResized` to lualine's other events (`:334-335,340`). neoblocks' `branch` built-in
+  also rebuilds on DirChanged (neoblocks `lua/neoblocks/statusline.lua:360`), but the path shouldn't depend on the
+  branch segment being there. Typed with `:`, a rename or a resize also rebuilds the line on the ModeChanged of leaving
+  the command line; from a mapping it doesn't, so `checks/statusline_events.sh` runs them from `<Cmd>` mappings
+  (below). DiagnosticChanged, Progress and the recording events come with the built-ins that need them.
+- *The path's colours after `:colorscheme`.* A colorscheme starts with `:hi clear`, which empties the path's groups.
+  The handler that defines them again on ColorScheme had been commented out since the config was imported (104932f;
+  `git log -S` on it finds only that commit and this branch's rename, and no reason is recorded). It is back (`:198`), in its own commit, since main has the same
+  bug.
+- *The path's colour groups are named `Statusline*`* (`:60-63`), not `Lualine*`: lualine is gone.
+  Rejected: keeping the old names to leave `statusline_palette` untouched; that check read the group names, which is
+  how the line is built rather than what it shows, so it now reads the drawn colours instead (below).
+- *Leftovers.* README names neoblocks' statusline. onedark's `lualine = { transparent = true }` option goes from
+  `plugins/colorschemes.lua`: only onedark's own lualine theme read it, and the config never used that theme.
+
+**Parity, measured.** A scratch check, `statusline_dump.lua` (in `~/.cache/nvim-config/rearch/statusline/bench/`, run
+from `work/`), drew the line with `nvim_eval_statusline(..., { highlights = true })` at 200 columns in seven states (a
+Python file with pyrefly and ruff attached, diagnostics and git changes; a search on a match; recording a macro; a
+progress message; Insert mode; a non-file buffer; a Lua file) and wrote each piece's text, fg and bold. main's config
+and this branch's give the same output, except a progress percentage that lua_ls's own progress made differ between
+runs (`diff before.txt after.txt`: one line, `󰔟 41%(2)` against `󰔟 40%(2)`). Screenshots in Ghostty (niri-screen-lab,
+71 columns, `tests/regress/nv.sh nightly`) of a Python file with servers in a git repo with changes, and of a non-file
+buffer, are pixel-identical between main and this branch (`magick compare -metric AE`: 0 for both); at that width
+the line is cut from the left, so they show the lists and the branch. They are in
+`~/.cache/nvim-config/rearch/statusline/`.
+
+**Gaps.** None found that the user sees. Known differences that don't show: on Neovim 0.12.6 lualine showed a
+progress message as `40%%(1)` and neoblocks as `40%(1)` (neoblocks decision 10); the suite and the screenshots run
+nightly, where both show `40%(1)`.
+
+**Cost** (principle 6). The step-4 bench (`statusline_bench.lua`, same fixture, `app.py` with pyrefly and ruff
+attached, median of 7 rounds of 300 rebuilds) run on main's `nvim/` (lualine's `refresh({ force = true })`) and on
+this branch (`require("neoblocks.statusline").refresh()`), alternating, three runs each. The machine was shared with
+other agents' suites, so the bench reads this process's CPU time (`vim.uv.getrusage`) instead of the wall clock:
+
+| µs per op                         | main 0c1277f        | this branch      |
+|-----------------------------------|--------------------:|-----------------:|
+| rebuild                           | 165.3, 169.7, 165.1 | 69.6, 64.6, 61.2 |
+| redraw (`:redrawstatus`)          | 70.6, 83.0, 58.1    | 85.7, 53.2, 60.3 |
+| spec's `config()`, median of 15 (ms, wall) | 1.42, 1.60, 1.40 | 1.44, 0.66, 0.69 |
+
+The rebuild is within the ≤ 100 µs budget. The redraw is level within the noise: both lines are plain statusline
+text that Neovim parses. The `config()` row runs the spec's config again after startup (plugin modules already
+loaded), so it is the setup's own cost; neoblocks' `meta.modules()` (a runtimepath glob) is 0.19-0.21 ms of it. The
+statusline loads on VeryLazy, after the first screen, so startup itself is unchanged: the `startup` check passes in
+0.4-0.5 s on both (three runs each).
+
+**Checks.** Four regress checks called `require("lualine").refresh(...)` before reading the line
+(`git grep -l 'require("lualine")' 0c1277f -- tests/regress/checks`): `statusline_branch`, `statusline_cursor`,
+`statusline_path_percent` and `tools_indicator`. `statusline_facts` stopped lualine's timer, and `statusline_palette`
+read the path's `Lualine*` groups. The first five read the drawn line already (`nvim_eval_statusline`); now they wait
+for it to follow its events instead of forcing a rebuild, which also checks that it does:
+- `statusline_branch`, `tools_indicator`: the forced refresh is gone; they already waited (`wait_until`) for the line.
+- `statusline_cursor`: waits for the line to show the file after `:edit`, instead of forcing it.
+- `statusline_path_percent`: waits for the line to show the wanted path after the width changes (VimResized).
+- `statusline_facts`: it stopped lualine's 1 s timer and checked that it found exactly one. It now pauses every
+  repeating timer until the line follows the detach, then starts them again (`timer:again()`): a line redrawn by any
+  timer, not only a 1 s one, would hide a missing FactsChanged listener (review found one with a 250 ms timer).
+  lualine's own refresh queue was a repeating timer, so the pause comes with the swap; the test commit before it
+  keeps stopping only the 1 s timer, and passes on main's lualine. It also waits, after closing the non-file window, until the line shows the file again, so no rebuild is still pending
+  when ruff detaches; without that wait the rebuild the close asked for ran after the detach.
+- `statusline_palette` read the `Lualine*` group names. It now draws a file two folders deep at 200 columns and
+  checks the colour drawn at the project name, the folder names and the file name (`nvim_eval_statusline` with
+  `highlights = true`), at startup and again after `:colorscheme onedark` (with the fix commit).
+
+New: `checks/statusline_events.sh` runs nvim in a TUI under tmux and reads the last row. Headless, a check's
+`vim.wait` fires no WinResized (review), and a `:`-typed command rebuilds the line through ModeChanged anyway. It
+splits and runs `:only`, `:cd`s and renames with `nvim_buf_set_name`, each from a test `<Cmd>` mapping, and waits for
+the path to follow. Typed `<C-w>v`/`<C-w>o` were tried first: with them the config without WinResized still passed,
+so another event rebuilt the line there (not identified); `:only` from a mapping fires none but WinResized.
+
+Each was run against configs with one change each from this branch's final `nvim/`
+(`~/.cache/nvim-config/rearch/statusline/mutants/`, `run.sh <worktree>`; results in `mutants.log`, and `events.log` for
+the final `statusline_events.sh`):
+- no FactsChanged listener fails `statusline_facts`; so does no listener with a 250 ms timer calling `refresh()`;
+- the current buffer's lists shown in a non-file buffer fails `statusline_facts`;
+- the fallback palette instead of onedark's style fails `statusline_palette` (all six cases);
+- no ColorScheme handler fails `statusline_palette`'s three cases after `:colorscheme onedark`;
+- a path whose `%` is not escaped fails `statusline_path_percent`;
+- no WinResized (and no VimResized with it) fails `statusline_events`' `:only` case;
+- no BufFilePost fails its rename case;
+- no DirChanged and no branch segment fails its `:cd` case (and `statusline_branch`).
+Two pass, as expected: no DirChanged alone (the branch built-in still rebuilds on it), and no VimResized and
+WinResized for `statusline_path_percent`: at 20 columns the stale full path also contains the wanted file name. That
+check is about `%`, so it stays as it was on main.
