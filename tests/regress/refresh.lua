@@ -142,7 +142,7 @@ local function tools_resolve()
 end
 
 local function parsers_sync()
-  local cfg = vim.fn.stdpath("config") .. "/lua/plugins/nvim-treesitter.lua"
+  local cfg = vim.fn.stdpath("config") .. "/lua/features/treesitter.lua"
   local src = table.concat(vim.fn.readfile(cfg), "\n")
   local block = src:match("local ensure_installed%s*=%s*(%b{})")
   if not block then return fail("parsers: no ensure_installed list in %s", cfg) end
