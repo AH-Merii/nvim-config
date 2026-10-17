@@ -30,7 +30,7 @@ for _, builtin in ipairs({
 end
 
 key({
-  -- text objects after an operator or in visual mode; the treesitter ones are config/textobjects' rows
+  -- text objects after an operator or in visual mode; the treesitter ones are textobjects/' rows
   { "a", group = "Around", mode = { "x", "o" } },
   { "i", group = "Inside", mode = { "x", "o" } },
 

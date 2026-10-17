@@ -150,7 +150,7 @@ return {
           set_jumps = true,
         },
       })
-      require("config.textobjects").setup(select_textobjects, move_textobjects)
+      require("textobjects").setup(select_textobjects, move_textobjects)
 
       local installs = {} -- language -> its one install task this session, so a failed build is not retried per buffer
       vim.api.nvim_create_autocmd("FileType", {
