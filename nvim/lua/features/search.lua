@@ -1,4 +1,6 @@
-return {
+-- Search and jump: flash
+
+local spec = {
   "folke/flash.nvim",
   event = "VeryLazy",
   opts = {
@@ -51,3 +53,5 @@ return {
     },
   },
 }
+
+return { plugins = { spec } }

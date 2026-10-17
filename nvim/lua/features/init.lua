@@ -18,7 +18,7 @@ local M = {}
 M.adapters = { "ui.theme", "ui.icons", "ui.snacks", "ui.statusline", "lsp", "format.conform", "linting.nvim_lint", "keys.which_key" }
 
 -- The features, in the order their setup() runs.
-M.features = { "treesitter" }
+M.features = { "editing", "search", "git", "completion", "diagnostics", "treesitter" }
 
 --- Every module's plugins, adapters first, as one list of lazy.nvim specs (core/lazy.lua).
 ---@return LazySpec[]

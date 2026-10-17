@@ -1,4 +1,6 @@
-return {
+-- Completion and snippets: blink.cmp, with friendly-snippets and lazydev's source
+
+local specs = {
   {
     "saghen/blink.cmp",
     dependencies = {
@@ -79,3 +81,5 @@ return {
     end,
   },
 }
+
+return { plugins = specs }

@@ -14,15 +14,14 @@ lua/ui/*                          ui tools lint
 lua/format/*                      format keys
 lua/linting/*                     lint keys ui
 lua/features/treesitter.lua       treesitter keys which-key
-lua/plugins/git.lua               git keys which-key
-lua/plugins/blink.lua             completion
+lua/features/git.lua              git keys which-key
+lua/features/completion.lua       completion
 lua/keys/*                        keys which-key lsp git lint format treesitter
 lua/textobjects/*                 treesitter keys which-key
-lua/plugins/auto-pairs-tags-comments.lua editing
-lua/plugins/trouble.lua           ui lsp
-lua/plugins/tiny-inline-diagnostic.lua ui lsp
+lua/features/editing.lua          editing keys which-key
+lua/features/diagnostics.lua      ui lsp
 lua/ui/snacks.lua                 ui keys git
-lua/plugins/flash.lua             keys editing
+lua/features/search.lua           keys editing
 lua/plugins/extras.lua            ui editing keys
 lua/plugins/dap.lua               keys
 lua/config/keymaps.lua            keys which-key

@@ -1,3 +1,5 @@
+-- Editing: pairs and their rules (nvim-autopairs)
+
 --------------------------------------------------------------------------
 -- Custom rule snippets (pure helpers + lazy requires inside builders)
 --------------------------------------------------------------------------
@@ -229,7 +231,7 @@ local function all_custom_rules()
   return rules
 end
 
-return {
+local specs = {
   {
     "windwp/nvim-autopairs",
     event = "InsertEnter",
@@ -305,3 +307,5 @@ return {
     end,
   },
 }
+
+return { plugins = specs }
