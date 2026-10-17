@@ -17,6 +17,7 @@ local function fixture()
       formatters = { "afmt1", "afmt2" },
       linters = { alint = { covered_by = "aserver" }, zlint = { filetypes = { "alphax" } } },
       options = { shiftwidth = 3 },
+      keys = { { "]]", label = "Next alpha" } },
       variants = {
         ["alpha.own"] = {
           about = "names its own server, formatter and linter",
@@ -36,6 +37,7 @@ local function fixture()
       formatters = { "bfmt", filetypes = { "beta" } },
       linters = { blint = {} },
       options = { tabstop = 5 },
+      keys = { { "]]", label = "Next beta" }, filetypes = { "beta" } },
     },
   }
 end
@@ -121,6 +123,8 @@ h.case("the views are what each plugin needs for every declared filetype", funct
   }, "lsp")
   h.eq(v.parsers, { "alpha", "beta", "shared" }, "parsers")
   h.eq(v.covered_by, { alint = "aserver" }, "covered_by")
+  local a, b = { { "]]", label = "Next alpha" } }, { { "]]", label = "Next beta" } }
+  h.eq(v.keys, { alpha = a, alphax = a, beta = b }, "keys")
   h.eq(v.filetypes, { filename = { ["own.alpha"] = "alpha.own" }, pattern = { [".*/kept/.*%.alpha"] = { "alpha.kept", { priority = 1 } } } }, "filetype rules")
   h.eq(lang._from(fixture()).filetypes(), { "alpha", "alpha.kept", "alpha.own", "alphax", "beta", "betax" }, "filetypes")
 end)

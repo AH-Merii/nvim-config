@@ -1,3 +1,5 @@
+local NXO = { "n", "x", "o" }
+
 ---@type lang.Spec
 return {
   filetypes = { "go", "gomod", "gowork", "gotmpl", "gosum" },
@@ -101,4 +103,12 @@ return {
   -- go files only; conform falls back to LSP formatting on the others (format/conform.lua, default_format_opts)
   formatters = { "goimports", "gofumpt", filetypes = { "go" } },
   linters = { golangcilint = { filetypes = { "go" } } },
+  -- Labels for the runtime ftplugin's motions, which it maps without a desc, so the popup would show their rhs
+  keys = {
+    { "]]", label = "Next top-level func/type", mode = NXO },
+    { "[[", label = "Previous top-level func/type", mode = NXO },
+    { "][", label = "Next top-level block end", mode = NXO },
+    { "[]", label = "Previous top-level block end", mode = NXO },
+    filetypes = { "go" },
+  },
 }

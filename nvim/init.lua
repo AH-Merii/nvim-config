@@ -7,6 +7,8 @@ require("tools.ux").setup()
 -- Options first: the key rows below read mapleader. Neovim's keys before lsp.buffer, whose grr replaces Neovim's
 require("config.options")
 require("keys.neovim")
+-- Each language file's key rows (lua/lang/)
+require("keys.languages")
 require("lsp.buffer")
 -- Each feature's rows, needs, autocmds and options (lua/features/)
 require("features").setup()

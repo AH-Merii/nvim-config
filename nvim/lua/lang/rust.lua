@@ -1,3 +1,5 @@
+local NXO = { "n", "x", "o" }
+
 ---@type lang.Spec
 return {
   filetypes = { "rust" },
@@ -10,4 +12,10 @@ return {
   },
   formatters = { "rustfmt" },
   linters = { clippy = { covered_by = "rust_analyzer" } },
+  -- Labels for the runtime ftplugin's motions, which it maps without a desc, so the popup would show their rhs
+  keys = {
+    { "]]", label = "Next top-level item", mode = NXO },
+    { "[[", label = "Previous top-level item", mode = NXO },
+    filetypes = { "rust" },
+  },
 }
