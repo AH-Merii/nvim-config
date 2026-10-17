@@ -30,7 +30,7 @@ lua/features/profiling.lua        keys
 lua/config/options.lua            editing ui
 lua/ui/messages/*                ui
 lua/features/lsp_status.lua      keys lsp
-lua/config/utils.lua              keys lsp
+lua/lsp/pyrefly.lua               lsp keys
 .luarc.json                       smoke
 .luacheckrc                       smoke
 stylua.toml                       smoke

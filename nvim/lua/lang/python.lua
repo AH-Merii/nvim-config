@@ -81,7 +81,7 @@ return {
       on_init = function(client)
         local root = client.root_dir
         local on = root ~= nil and vim.iter({ "pyproject.toml", "pyrefly.toml" }):any(function(f) return vim.uv.fs_stat(vim.fs.joinpath(root, f)) ~= nil end)
-        require("config.utils").pyrefly_type_errors(client, on)
+        require("lsp.pyrefly").type_errors(client, on)
       end,
       -- on_exit runs in a fast event, where vim.notify's first call (snacks loading its notifier) fails with E5560
       on_exit = function(code, _, _)

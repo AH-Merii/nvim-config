@@ -74,11 +74,11 @@ require("features").at_very_lazy(function()
         name = "Type Errors",
         get = function()
           local client = vim.lsp.get_clients({ bufnr = 0, name = "pyrefly" })[1]
-          return client ~= nil and require("config.utils").pyrefly_type_errors(client)
+          return client ~= nil and require("lsp.pyrefly").type_errors(client)
         end,
         set = function(state)
           for _, client in ipairs(vim.lsp.get_clients({ bufnr = 0, name = "pyrefly" })) do
-            require("config.utils").pyrefly_type_errors(client, state)
+            require("lsp.pyrefly").type_errors(client, state)
           end
         end,
         wk_desc = hide_show,
