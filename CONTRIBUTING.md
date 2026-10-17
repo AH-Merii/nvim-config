@@ -20,16 +20,19 @@ setup tells you if yours doesn't.
 
 ### Initialization Flow
 
-The loading sequence is strictly ordered in `init.lua`:
+The loading sequence is strictly ordered in `init.lua`, after `vim.loader.enable()` (Neovim's byte-compiled module
+cache, before the first require):
 
 1. `lang`, `tools` and `tools.ux` - The languages' variant filetypes and buffer options, the tool resolver, install prompts
    and `:Tools` (before any plugin looks a tool up)
 2. `config.options` - Set Vim options & define `mapleader`
-3. `keys.neovim` - Neovim's own keys as key rows, its LSP defaults included
-4. `core.lsp` and `config.keymaps` - diagnostic appearance and the LSP keys; the editor's keys
-5. `config.autocmds` - Setup autocommands and event hooks
-6. `core.lazy` - Bootstrap Lazy.nvim and load all plugins
-7. `config.helpers` - Loaded on `VeryLazy` event after plugins ready
+3. `keys.neovim` and `keys.languages` - Neovim's own keys as key rows, its LSP defaults included; each language file's
+   `keys` rows
+4. `lsp.buffer` - The LSP keys and toggles, and what an attached server gives a buffer
+5. `features` - Each feature's `setup()`, in the order of `M.features` in `lua/features/init.lua`: its rows, needs,
+   autocmds and options
+6. `core.lazy` - Bootstrap lazy.nvim and load every module's `plugins` (`require("features").plugins()`)
+7. `features.after_lazy()` - Make the features' `VeryLazy` callbacks, after lazy's own `VeryLazy` listener
 
 **Critical**: This order ensures dependencies are met (e.g., `mapleader` defined before any key row; `keys` raises
 for a `<leader>` row added without it).
@@ -40,34 +43,32 @@ for a `<leader>` row added without it).
 nvim/
 ├── init.lua                  # Entry point (loads modules in order)
 ├── lua/
-│   ├── core/                 # Core framework initialization
-│   │   ├── lazy.lua         # Plugin manager bootstrap
-│   │   ├── lsp.lua          # Diagnostic configuration
-│   │   └── lsp_servers.lua  # Enabled servers, each run from its resolved binary
+│   ├── core/lazy.lua        # lazy.nvim bootstrap, given every module's plugins
+│   ├── config/options.lua   # Vim options
 │   ├── lang/                # One data file per language, and the registry that reads them (init.lua)
 │   ├── tools/               # Tool resolver (mise), catalog, prompts and :Tools
-│   ├── ui/                  # facts.lua: what applies to each buffer, for the statusline, the tools indicator and :Status
-│   ├── keys/                # Key rows and needs (init.lua), the which-key adapter, Neovim's own keys as rows
-│   ├── config/              # Editor configuration
-│   │   ├── options.lua      # Vim options
-│   │   ├── keymaps.lua      # The editor's own keys, as rows
-│   │   ├── autocmds.lua     # Autocommands
-│   │   ├── helpers.lua      # LSP debugging commands (:LspInfo, :Status, ...)
-│   │   ├── textobjects.lua  # Custom text objects
-│   │   ├── utils.lua        # Custom utilities
-│   │   └── ui2/             # Messages, command line and pending keys on Neovim's ui2
-│   └── plugins/             # Plugin specifications, one file per plugin or group
-├── after/
-│   └── ftplugin/            # Filetype keymaps (lua, vim)
+│   ├── lsp/                 # Enabled servers, each run from its resolved binary (init.lua); the LSP keys and what a
+│   │                        # server gives a buffer (buffer.lua); pyrefly's type-error switch
+│   ├── format/, linting/    # Formatting and linting, each with its plugin adapter
+│   ├── keys/                # Key rows and needs (init.lua), the which-key adapter, Neovim's own keys as rows, and
+│   │                        # the language files' rows (languages.lua)
+│   ├── textobjects/         # The treesitter text objects and moves
+│   ├── ui/                  # The theme, icons, snacks (picker, notifier), the statusline, ui2's messages and
+│   │                        # command line (messages/), and facts.lua: what applies to each buffer
+│   └── features/            # One module per feature, owning its plugins, keys, autocmds and options; init.lua
+│                            # lists them and the adapters that bring plugins
 ```
 
 ### Module Dependencies
 
 - Every key row depends on `config.options` (needs `mapleader`)
-- `config.helpers` depends on LSP clients being loaded (deferred via `VeryLazy`)
+- `features/lsp_status.lua` makes its commands at `VeryLazy`, after nvim-lspconfig's plugin file defines its own
+  `:LspInfo` and `:LspLog`
 - `blink.cmp` adds its completion capabilities to every server through `vim.lsp.config('*')`
   (`blink.cmp/plugin/blink-cmp.lua:1-7`), so a server's config doesn't merge them
-- Plugin files are independent but may integrate with each other
+- A feature's `setup()` runs before any plugin loads: what needs a plugin goes in that plugin's spec (`config` or
+  `init`), or in a callback given to `require("features").at_very_lazy(fn)`, which runs after the plugins that load
+  at `VeryLazy` (the Snacks toggles)
 
 ## LSP Configuration
 
@@ -181,34 +182,68 @@ catalog's args.
 
 ### Adding a New Plugin
 
-1. Create `lua/plugins/[name].lua`
-2. Return Lazy plugin spec with appropriate loading strategy
-3. Add its keys as rows (see "Adding a key"); use lazy's `keys` table only for a key that should load the plugin
-4. Add `config` function for setup
-5. Use `dependencies` table for plugin dependencies
+1. Add its lazy.nvim spec to the `plugins` list of the feature it serves (`lua/features/<feature>.lua`), or of the
+   adapter or ui module that wraps it
+2. Use a loading strategy from above, and `dependencies` for the plugins it needs
+3. Add its keys as rows (see "Adding a key"), in the spec's `config` or `init` when they need the plugin; use lazy's
+   `keys` table only for a key that should load the plugin
+4. Add a `config` function for setup
+
+Don't add a directory of spec modules: lazy runs those again after an install or update
+(`lazy/core/plugin.lua:184`), so the state they make would split. A new module that brings plugins is listed in
+`M.adapters` or `M.features` in `lua/features/init.lua`.
+
+lazy doesn't reload a spec you edit, since the specs are a table rather than modules it imports. Restart with `ZR`
+(`:restart`), which saves and restores the session (`:h ZR`; lazy's `change_detection` only watches imported
+modules, `lazy/manage/reloader.lua:18`).
+
+### Adding a feature
+
+A feature is `lua/features/<name>.lua`, listed in `M.features` in `lua/features/init.lua`:
+
+```lua
+-- A sketch of lua/features/notes.lua
+local M = {}
+
+M.plugins = { { "author/notes.nvim", cmd = "Notes", opts = {} } } -- lazy.nvim specs
+
+function M.setup() -- runs once at startup, before any plugin loads
+  local group = vim.api.nvim_create_augroup("features.notes", { clear = true })
+  require("keys").feature("notes")({ { "<leader>on", "<cmd>Notes<CR>", "Open notes" } })
+end
+
+return M
+```
+
+It owns everything about itself: its plugins, rows, needs, autocmds (in a `features.<name>` augroup) and options.
 
 ## Filetype-Specific Configuration
 
 ### Adding Filetype Behavior
 
-**Option 1**: Buffer options go in the language's file (`options` in `lua/lang/<lang>.lua`); keymaps go in
-`after/ftplugin/[filetype].lua`, or as `keys.language(ft)` rows (see "Adding a key")
+Buffer options go in the language's file (`options` in `lua/lang/<lang>.lua`). A language's own keys, such as labels
+for its runtime ftplugin's maps, go in its file's `keys`; a feature's keys for a filetype are `keys.language(ft)`
+rows in the feature (see "Adding a key"):
 
-Example structure:
 ```lua
-local opts = { noremap = true, silent = false, buffer = true }
-vim.keymap.set("n", "<space>x", ":.lua<CR>", opts)
+-- lua/lang/markdown.lua
+keys = {
+  { "]]", label = "Next heading", mode = { "n", "x", "o" } },
+  filetypes = { "markdown" }, -- else the language's filetypes
+},
 ```
 
-**Option 2**: Add filetype autocommand in `lua/config/autocmds.lua`
+Other filetype behaviour is a FileType autocommand in the feature it belongs to (`features/editing.lua` sets up prose
+buffers):
 
 ```lua
-autocmd("FileType", {
-    pattern = { "markdown", "text" },
-    callback = function()
-        vim.opt_local.spell = true
-        vim.opt_local.wrap = true
-    end,
+vim.api.nvim_create_autocmd("FileType", {
+  group = group,
+  pattern = { "markdown", "text" },
+  callback = function()
+    vim.opt_local.spell = true
+    vim.opt_local.wrap = true
+  end,
 })
 ```
 
@@ -267,7 +302,8 @@ vim.api.nvim_create_autocmd("BufEnter", {
 ## Adding a key
 
 Every key is a row in `lua/keys/` (step 3 in `docs/rearchitecture-decisions.md`, D48 and D49). The owner declares
-its rows where it lives (a plugin spec, `core/lsp.lua`, `config/keymaps.lua`), with an adder for itself:
+its rows where it lives (a feature's `setup()`, a plugin spec, `lsp/buffer.lua`, a language file's `keys`), with an
+adder for itself:
 
 ```lua
 local keys = require("keys")
@@ -281,7 +317,7 @@ keys.language("python")({ "]]", label = "Next top-level def/class" })  -- a labe
   map), `hidden`, `echo`, `listed`, `remap`, `silent`, `nowait`. An unknown field raises.
 - `need` says where the key acts: a word defined with `keys.need(word, test)`, an LSP method (`"rename"`,
   `"workspace/symbol"`) or `"client:<name>"`. A test runs on every press and once per popup rebuild, so it must be a
-  lookup; cache anything slow in the owner, filled by the owner's own events (`ui/snacks.lua`'s git needs).
+  lookup; cache anything slow in the owner, filled by the owner's own events (`features/git.lua`'s git needs).
 - Where the need fails the key does what it did before: the global map it took over, or Vim's own key. A `<leader>`
   key, or a row with `echo = true` (Neovim's `gr*` and `gO`), echoes the need it lacks instead.
 - Rows are global maps; only `keys.language(ft)` rows are buffer-local, and a buffer's own map (an ftplugin's) wins.
@@ -320,10 +356,11 @@ their `setup()`, and each module's adapter file is the only one that knows its p
 
 ### Utilities
 
-`lua/config/utils.lua` provides:
+Not mapped to a key; run them with `:lua`:
 
-- `toggle_go_test()` - Toggle between Go test/implementation files
-- `copyFilePathAndLineNumber()` - Copy GitHub URL with line number (in git repos) or absolute path
+- `require("features.files").toggle_go_test()` - Toggle between Go test/implementation files
+- `require("features.git").copyFilePathAndLineNumber()` - Copy GitHub URL with line number (in git repos) or absolute
+  path
 
 ## Testing Changes
 

@@ -34,7 +34,7 @@ case "$id/$variant" in
   e1/custom-zig_fmt)
     sed -i 's/zig = { spec = "zig", formatters = { "zigfmt" } }/zig = { spec = "zig", formatters = { "zig_fmt" } }/' nvim/lua/tools/catalog.lua
     sed -i 's/  formatters = { "zigfmt" },/  formatters = { "zig_fmt" },/' nvim/lua/lang/zig.lua
-    perl -0pi -e 's/(    formatters = \{\n)/$1      zig_fmt = { command = "zig", args = { "fmt", "--stdin" }, stdin = true },\n/' nvim/lua/plugins/conform.lua
+    perl -0pi -e 's/(    formatters = \{\n)/$1      zig_fmt = { command = "zig", args = { "fmt", "--stdin" }, stdin = true },\n/' nvim/lua/format/conform.lua
     ;;
   e1/zls-not-enabled) sed -i '/^  servers = { zls = {} },$/d' nvim/lua/lang/zig.lua ;;
   e1/unknown-spec) sed -i 's/zls = { spec = "zls"/zls = { spec = "github:zigtools\/zlss"/' nvim/lua/tools/catalog.lua ;;
@@ -46,7 +46,7 @@ case "$id/$variant" in
   e1/unformatted-lua) sed -i 's/zls = { spec = "zls", servers = { zls = {} } },/zls = {spec="zls", servers = { zls = {} } },/' nvim/lua/tools/catalog.lua ;;
   e2/bare-spec) sed -i 's/selene = { spec = "aqua:Kampfkarren\/selene"/selene = { spec = "selene"/' nvim/lua/tools/catalog.lua ;;
   e2/custom-selene)
-    perl -0pi -e 's/(    -- Auto-lint on save and text changes\n)/    lint.linters.selene = { cmd = "selene", stdin = true, args = { "--display-style", "json", "-" }, ignore_exitcode = true, parser = require("lint.linters.selene").parser }\n\n$1/' nvim/lua/plugins/nvim-lint.lua
+    perl -0pi -e 's/(    -- Auto-lint on save and text changes\n)/    lint.linters.selene = { cmd = "selene", stdin = true, args = { "--display-style", "json", "-" }, ignore_exitcode = true, parser = require("lint.linters.selene").parser }\n\n$1/' nvim/lua/linting/nvim_lint.lua
     ;;
   e2/selene-on-yaml) sed -i 's/^  linters = { yamllint = {} },$/  linters = { yamllint = {}, selene = {} },/' nvim/lua/lang/yaml.lua ;;
   e2/covered-by-lua_ls) sed -i 's/^  linters = { selene = {} },$/  linters = { selene = { covered_by = "lua_ls" } },/' nvim/lua/lang/lua.lua ;;
