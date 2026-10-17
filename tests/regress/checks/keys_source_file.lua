@@ -1,7 +1,8 @@
--- @desc     a key that sources the current file exists only in Lua and Vim script buffers, where :source runs them, and there it sources the file once; in other buffers no key sources the file, neither a buffer-local nor a global map
--- @areas    keys editing
+-- @desc     a key that sources the current file is listed and works only in Lua and Vim script buffers, where :source runs them, and there it sources the file once; in other buffers neither that key nor any key the popup labels as sourcing sources the file
+-- @areas    keys editing which-key
 -- @budget   20
--- Ported from nvim-sbx-keys/checks2/source.lua. The key is found by what its rhs or callback runs, not by its lhs or desc.
+-- Ported from nvim-sbx-keys/checks2/source.lua. The key is found by its label in the which-key popup and judged by
+-- pressing it, not by its lhs or its map.
 
 local cur, n, bad
 local function done()
@@ -28,35 +29,11 @@ local function flush()
   end
 end
 
--- the code a map runs: its rhs, or the source lines of its callback
-local files = {}
-local function body(m)
-  if m.rhs and m.rhs ~= "" then return m.rhs end
-  if not m.callback then return "" end
-  local i = debug.getinfo(m.callback, "S")
-  if not i or i.source:sub(1, 1) ~= "@" or i.linedefined < 1 then return "" end
-  local path = i.source:sub(2)
-  if files[path] == nil then
-    local ok, lines = pcall(vim.fn.readfile, path)
-    files[path] = ok and lines or false
-  end
-  if not files[path] then return "" end
-  return table.concat(files[path], "\n", i.linedefined, math.min(i.lastlinedefined, #files[path]))
-end
-local function sources(text)
-  local t = text:lower()
-  return t:find("%f[%a]so%a*%s*%%") or t:find("%f[%a]so%a*%s*<cr>") or t:find("%f[%a]so%a*%s*|")
-    or t:find("vim%.cmd%.so") or t:find("vim%.cmd%s*%(?%s*[\"']so") or t:find("luafile") or t:find("dofile")
-end
--- normal-mode maps that would run in buf and look like they source a file: buffer-local, then unshadowed global
+-- normal-mode keys the popup lists in buf whose label says they source something, as raw keys
 local function candidates(buf)
-  local out, local_raw = {}, {}
-  for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, "n")) do
-    local_raw[m.lhsraw] = true
-    if sources(body(m)) then out[m.lhsraw] = m.lhs end
-  end
-  for _, m in ipairs(vim.api.nvim_get_keymap("n")) do
-    if not local_raw[m.lhsraw] and sources(body(m)) then out[m.lhsraw] = m.lhs end
+  local out = {}
+  for lhs, label in pairs(wk_menu(buf, "n")) do
+    if type(label) == "string" and label:lower():find("source") then out[vim.keycode(lhs)] = lhs end
   end
   return out
 end

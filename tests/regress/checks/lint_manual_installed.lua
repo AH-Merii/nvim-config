@@ -19,8 +19,7 @@ vim.cmd.edit("probe.txt")
 vim.bo.filetype = "nvrprobe"
 local missing = require("tools").wait("nvr-absent-linter", require("tools").root(0), 10000)
 check("the absent linter's binary is missing", missing ~= nil and missing.path == nil, missing and missing.source)
-local map = vim.fn.maparg("<leader>ll", "n", false, true)
-if not check("<leader>ll is mapped in the buffer", map.buffer == 1, map.buffer ~= 1 and vim.inspect(map) or nil) then return end
+if not check("which-key lists <leader>ll in the buffer", wk_lists(0, "n", "<leader>ll") ~= nil) then return end
 spawned = {}
 feed("<leader>ll")
 check("<leader>ll runs the linter that resolves", wait_until(function() return (spawned.sh or 0) > 0 end, 3000), spawned.sh or 0)

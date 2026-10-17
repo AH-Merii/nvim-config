@@ -1,5 +1,5 @@
--- @desc     in diff mode ]c and [c jump to the next and previous change even in a buffer where the config maps them (a treesitter class move), and outside diff mode such a map still moves the cursor
--- @areas    keys treesitter
+-- @desc     in diff mode ]c and [c jump to the next and previous change even in a buffer where the config gives them a meaning of its own (a treesitter class move), and outside diff mode such a key, listed by which-key, still moves the cursor
+-- @areas    keys treesitter which-key
 -- @budget   20
 -- From the keys-tidy patch to nvim-sbx-keys/checks2/textobjects.lua (section 6). Where ]c lands outside diff
 -- mode is the map's business: the file is a tracked repo file with a hunk and two classes, so a class or hunk move both move.
@@ -28,15 +28,6 @@ local function flush()
     wait_until(function() return ran end, 1000)
   end
 end
-local function any_map(buf, mode, lhs)
-  local raw = vim.keycode(lhs)
-  for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, mode)) do
-    if m.lhsraw == raw or m.lhsrawalt == raw then return m end
-  end
-  for _, m in ipairs(vim.api.nvim_get_keymap(mode)) do
-    if m.lhsraw == raw or m.lhsrawalt == raw then return m end
-  end
-end
 local function git(...) return vim.system({ "git", ... }):wait() end
 local function jump(keys, from)
   vim.api.nvim_win_set_cursor(0, { from, 0 })
@@ -62,11 +53,12 @@ local buf = vim.api.nvim_get_current_buf()
 flush()
 -- only a hunk move would need gitsigns; the config's ]c does not, so this is not asserted
 wait_until(function() return (vim.b[buf].gitsigns_status_dict or {}).added ~= nil end, 3000)
+-- a key the popup lists with a label of ours here; where it lists none, ]c is Vim's own diff jump
 local mapped = {}
 for _, lhs in ipairs({ "]c", "[c" }) do
-  local m = any_map(buf, "n", lhs)
-  if m then mapped[lhs] = true end
-  info(("%s outside diff mode: %s"):format(lhs, m and (m.desc or "mapped, no desc") or "not mapped"))
+  local label = wk_lists(buf, "n", lhs)
+  if label then mapped[lhs] = true end
+  info(("%s outside diff mode: %s"):format(lhs, label and tostring(label) or "not listed"))
 end
 
 section("]c and [c jump to the change in diff mode")
@@ -89,6 +81,6 @@ if mapped["[c"] then
   local cp = jump("[c", LAST)
   expect(cp ~= LAST, "[c from %d moved (got %d)", LAST, cp)
 end
-if not next(mapped) then info("neither ]c nor [c is mapped: Neovim's own diff jump, nothing to move outside diff mode") end
+if not next(mapped) then info("the popup lists neither ]c nor [c: Neovim's own diff jump, nothing to move outside diff mode") end
 done()
 vim.cmd("%bwipeout!")

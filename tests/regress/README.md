@@ -136,6 +136,10 @@ Rules for what goes in:
 - Wait on events, never fixed sleeps: `wait_attach`, `wait_diagnostics`, `wait_until`. A missing
   server must fail within seconds with a reason.
 - A check never writes outside its fixture copy and its own state.
+- A key check judges where a key works by pressing it (`feed`) and observing what it did, and where the
+  popup offers it with `wk_lists`/`wk_menu`, never by whether a buffer has a map (`maparg`,
+  `nvim_buf_get_keymap`): how a key is gated may change, from buffer maps to global maps that test their
+  need when pressed (`docs/rearchitecture-decisions.md`, D48).
 
 ### Lua harness API
 
@@ -153,6 +157,9 @@ Globals available to a `.lua` check (cwd is the fixture copy; lazy's VeryLazy ha
 | `wait_attach(buf, names, ms)` | returns `missing, reasons`; returns early once every missing server has failed |
 | `wait_diagnostics(buf, pred, ms)` | waits until `pred(vim.diagnostic.get(buf))`, returns the diagnostics |
 | `lsp_log_tail(pat, n)` | last `n` lsp.log lines containing `pat` |
+| `wk_lists(buf, mode, lhs)` | the label which-key's popup shows for `lhs` in `buf` and `mode` (`true` with none), `nil` where it leaves the key out; read with `buf` current, as a key press builds the popup |
+| `wk_menu(buf, mode)` | every key, groups left out, the popup lists in `buf` and `mode`, as `{ [keys] = label }` |
+| `wk_wait(buf, mode, lhs, listed, ms)` | waits up to `ms` (5s) until the popup lists `lhs` (`listed` true) or leaves it out; use it, not `wait_until`, since each popup read schedules which-key work that wakes a `wait_until` predicate forever |
 | `FIX`, `VERSION` | fixture dir, `nightly` |
 
 After the check body the harness also records as failures: errors in `:messages` (`MSG`) and

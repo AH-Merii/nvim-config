@@ -180,6 +180,65 @@ function _G.wait_diagnostics(buf, pred, ms)
   return vim.diagnostic.get(buf)
 end
 
+-- which-key's popup for buf and mode, built as a key press builds it, with buf current: which-key's filter gets no
+-- buffer, so a global map that the filter hides where it cannot act is left out as a buffer-local one would be.
+-- Each read schedules which-key work, so a wait_until predicate that reads it wakes itself forever: wait with
+-- wk_wait instead.
+local function wk_tree(buf, mode, fn)
+  buf = buf == 0 and vim.api.nvim_get_current_buf() or buf
+  local function loaded()
+    local c = package.loaded["which-key.config"]
+    return c ~= nil and rawget(c, "loaded") == true
+  end
+  assert(loaded() or wait_until(loaded, 5000), "which-key never loaded its spec")
+  return vim.api.nvim_buf_call(buf, function()
+    local m = require("which-key.buf").get({ buf = buf, mode = mode, update = true })
+    return fn(m and m.tree)
+  end)
+end
+-- the label a node shows: its desc, true for none, nil for a node the popup leaves out
+local function wk_label(node)
+  if not node or node.hidden or not (node.keymap or node.mapping or node:is_group()) then return nil end
+  local d = node.desc
+  if type(d) == "function" then d = d() end
+  return type(d) == "string" and d ~= "" and d or true
+end
+
+-- What which-key's popup lists for lhs in buf and mode: its label (true when it has none), or nil where the popup
+-- leaves it out.
+function _G.wk_lists(buf, mode, lhs)
+  return wk_tree(buf, mode, function(tree)
+    return wk_label(tree and tree.root:find(require("which-key.util").keys(lhs, { norm = true })))
+  end)
+end
+
+-- Every key the popup lists for buf and mode, groups left out, as { [keys] = label }, keys as which-key writes them
+-- ("<Space>Gu").
+function _G.wk_menu(buf, mode)
+  return wk_tree(buf, mode, function(tree)
+    local out = {}
+    if tree then
+      tree:walk(function(node)
+        local label = wk_label(node)
+        if label ~= nil and (node.keymap or not node:is_group()) then out[node.keys] = label end
+      end)
+    end
+    return out
+  end)
+end
+
+-- Wait up to ms (5000) until which-key lists lhs in buf and mode (listed true) or leaves it out (false); returns
+-- whether it got there, and the last wk_lists answer.
+function _G.wk_wait(buf, mode, lhs, listed, ms)
+  local deadline, got = vim.uv.now() + (ms or 5000), nil
+  repeat
+    got = wk_lists(buf, mode, lhs)
+    if (got ~= nil) == listed then return true, got end
+    vim.wait(50)
+  until vim.uv.now() >= deadline
+  return false, got
+end
+
 -- @needs: catalog binaries the check needs; each must resolve to a path (suite.sh --refresh installs them
 -- into the suite's own mise). A missing one fails the check before its body runs.
 function _G.needs_resolve()
