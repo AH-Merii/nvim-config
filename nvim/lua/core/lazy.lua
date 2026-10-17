@@ -26,7 +26,7 @@ vim.opt.rtp:prepend(lazypath)
 -- of spec modules: lazy runs such modules again after an install or update (lazy/core/plugin.lua:184), which would
 -- split the state and autocmds they make from the ones made the first time. A table spec is parsed again instead.
 local spec = require("features").plugins()
-table.insert(spec, 1, { import = "plugins" }) -- the specs not yet moved to their owners
+table.insert(spec, { import = "plugins" }) -- the specs not yet moved to their owners
 
 require("lazy").setup(spec, {
   install = {

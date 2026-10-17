@@ -98,7 +98,7 @@ nvim/
 - A variant (a dotted filetype such as `yaml.github-actions`) gets its base's servers and linters plus its own, and its
   own formatters if it names any, else its base's. One with `match` rules needs an `example` path
 
-**The statusline** (`plugins/statusline.lua`, steps 4 and 4b in `docs/rearchitecture-decisions.md`)
+**The statusline** (`ui/statusline.lua`, steps 4 and 4b in `docs/rearchitecture-decisions.md`)
 - `require("ui.facts").get(buf)` holds a buffer's servers running, the formatters and linters that will run, the
   missing tools (and whether the project's mise config waits for an answer), its tools root and its git checkout. What
   will run is `format.plan(buf).run` and `linting.plan(buf).run`; the rest is built from `lang.of`, the resolver's
@@ -281,7 +281,7 @@ keys.language("python")({ "]]", label = "Next top-level def/class" })  -- a labe
   map), `hidden`, `echo`, `listed`, `remap`, `silent`, `nowait`. An unknown field raises.
 - `need` says where the key acts: a word defined with `keys.need(word, test)`, an LSP method (`"rename"`,
   `"workspace/symbol"`) or `"client:<name>"`. A test runs on every press and once per popup rebuild, so it must be a
-  lookup; cache anything slow in the owner, filled by the owner's own events (`plugins/snacks.lua`'s git needs).
+  lookup; cache anything slow in the owner, filled by the owner's own events (`ui/snacks.lua`'s git needs).
 - Where the need fails the key does what it did before: the global map it took over, or Vim's own key. A `<leader>`
   key, or a row with `echo = true` (Neovim's `gr*` and `gO`), echoes the need it lacks instead.
 - Rows are global maps; only `keys.language(ft)` rows are buffer-local, and a buffer's own map (an ftplugin's) wins.

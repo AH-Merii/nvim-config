@@ -1,4 +1,4 @@
-return {
+local specs = {
   {
     "navarasu/onedark.nvim",
     priority = 1000,
@@ -73,3 +73,5 @@ return {
     end,
   },
 }
+
+return { plugins = specs }
