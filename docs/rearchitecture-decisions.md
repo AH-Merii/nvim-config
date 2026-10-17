@@ -18,6 +18,8 @@ The full proposal, with its measurements and sources, was written outside the re
 - Decided (2026-10-17): D45 to D49 below.
 - Planned: the path-B steps, in the order under "Path B".
 - Built: the unit tier and the tool backend seam ("Unit tier and tool backend seam" below).
+- Done ahead of step 3: the key checks observe behaviour, not buffer maps ("D48 prep: key checks"
+  below).
 
 ## Target layout
 
@@ -231,3 +233,59 @@ was shown to bite with a one-bug variant of the resolver.
 - Overriding `tools.can_install` to let a test install: the test stubs `nvim_list_uis` instead, as
   `tests/regress/checks/tools_indicator.lua:9` does, so the headless guard itself stays real.
 - A test framework (busted, mini.test, plenary): a dependency for what `nvim -l` and a 95-line helper do.
+
+## D48 prep: key checks (2026-10-17)
+
+**Context.** D48's "Order of work" counts 13 key checks that read gating as "the buffer has the map". The count
+holds on 8bc0551: 4 in `checks/` (`toggle_wk_specs.lua:22`, `pyrefly_toggle_scope.lua:25,38`,
+`pyrefly_type_errors.lua:41`, `lint_manual_installed.lua:23`) and 9 of the 11 in `work/keys`
+(`grep -l 'nvim_buf_get_keymap\|maparg' work/keys/*` lists all but `keys_global_regress` and `whichkey_ghosts`).
+Several also read `require("core.lsp").keys`, which step 3 removes. Two were already red on main:
+`keys_diag_gate` took `<leader>Te` (a `when` row with no method) for a diagnostics key, and `keys_git_context`
+ran every `<leader>g` callback, one of which left an undotree error in `:messages`.
+
+**Decision.** A key check observes only what a user can, so it stays green, unchanged, when step 3 swaps the
+mechanism:
+
+- "The key works here": a real press (`feed`) and its effect. LSP keys press against in-process fake servers
+  that record each request (`checks/keys_lsp_gate.lua`, `checks/keys_format_gate.lua`); other keys by the
+  cursor, a window or picker opening, the text, the git index, a notification or a toggle's label flipping.
+- "The popup offers it here": which-key's own read path, `require("which-key.buf").get({ buf, mode,
+  update = true })`, which runs `config.filter` on every map it adds (which-key `tree.lua:26`). The harness
+  wraps it as `wk_lists`, `wk_menu` and `wk_wait` (`tests/regress/harness.lua:187-240`) and reads with the
+  buffer current, since the filter gets no buffer: a global map the filter hides reads the same as a
+  missing buffer map.
+- "It falls back here": where the need fails, the key is not listed and makes no request; a non-leader key
+  does Vim's own (gd and gD to the declaration in the buffer, gt the next tab page, K `'keywordprg'`,
+  `]]`/`[[` the section motions, gO leaves text and cursor). A leader key is only checked not to act, since
+  D48 has it echo the need.
+- Today's gr* fallback is one case, "gr* with no server: Vim's gr{char}" (`checks/keys_lsp_gate.lua:396`);
+  step 3 flips that case for D49 and nothing else.
+- The key lists are written out in the checks, from the config's key list, not read from its tables. Each
+  list has a completeness case: every key the popup gains when a server with every method attaches
+  (`checks/keys_lsp_gate.lua:359`), or in a file of a repo with a GitHub remote
+  (`checks/keys_git_context.lua:342`), must be one the checks judge.
+- Promoted to `checks/`: `keys_lsp_gate`, `keys_format_gate`, `keys_diag_gate`, `keys_git_context`,
+  `keys_git_unstage`, `keys_source_file`, `keys_gr_typed.sh`. Left in `work/keys`: `keys_textobjects` and
+  `keys_diff_jump`, rewritten too, which repeat `tobj_moves` (diff-mode `]c`, `]f` per language and in
+  fences), `tobj_labels` and `tobj_select`.
+
+**Deviation.** `keys_lsp_gate` lost its "modifier-key lhs" case: it pushed a row into `core.lsp.keys` to test
+how the sync matches `<C-x>` maps, which step 3 deletes along with the sync.
+
+**Rejected.** Reading `keys.holds` and `keys.menu`: they don't exist until step 3, and the checks have to pass
+before it. Reading global maps as well as buffer ones: with D48 every gated key is a global map in every
+buffer. Deriving the key lists from the config's tables: they move in step 3.
+
+**Writing a key check from now on.**
+
+- Press the key and assert what it did; assert where the popup lists it with `wk_lists`/`wk_menu`. Never
+  `maparg` or `nvim_buf_get_keymap` to decide where a key works.
+- Where its need fails, assert that it doesn't act and isn't listed, and what Vim's own key does for a
+  non-leader key; never what a leader key says.
+- Wait on the popup with `wk_wait`, not `wait_until`: each read schedules which-key work, and a `wait_until`
+  predicate that reads it wakes itself forever (found here: gitsigns never attached while one polled).
+- Answer LSP requests from a fake server with empty lists, not `vim.NIL`: Snacks' LSP pickers fail on it.
+- Prove the check bites with a sibling wrong implementation per gate (`CFG=<copy with one bug> suite.sh
+  <check>`).
+
