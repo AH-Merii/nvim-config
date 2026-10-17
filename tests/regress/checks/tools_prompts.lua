@@ -5,6 +5,9 @@
 -- The UI is stubbed (nvim_list_uis) and every prompt is declined, so nothing installs. Which tools are offered
 -- depends on the suite's mise: jactionlint and yaml-language-server are there, zizmor, yamllint and prettierd are not.
 local tools = require("tools")
+-- The Dockerfile and COMMIT_EDITMSG buffers below would start parser installs (a download and a C build) that
+-- outlive the check when the build is slow; parsers are not what this check is about
+require("nvim-treesitter").install = function() return { await = function() end } end
 vim.api.nvim_list_uis = function() return { { width = 120, height = 40 } } end
 local prompts = {}
 vim.ui.select = function(items, opts, on_choice)
