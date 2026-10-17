@@ -15,7 +15,7 @@ local M = {}
 
 -- Modules whose `plugins` are collected, before the features'. Their specs come first, so a feature's spec for the
 -- same plugin (trouble's snacks picker actions) merges over theirs, as lazy merges later fragments.
-M.adapters = { "lsp", "format.conform", "linting.nvim_lint", "keys.which_key" }
+M.adapters = { "ui.theme", "ui.icons", "ui.snacks", "ui.statusline", "lsp", "format.conform", "linting.nvim_lint", "keys.which_key" }
 
 -- The features, in the order their setup() runs.
 M.features = {}

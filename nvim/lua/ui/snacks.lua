@@ -126,7 +126,7 @@ keys.feature("snacks git", { need = "git file" })({
 -- This needs a remote on the buffer's repo
 keys.feature("snacks git")({ "<leader>GB", function() Snacks.gitbrowse() end, "Open in Git Browser", need = "git remote", icon = icon("󰖟", "grey") })
 
-return {
+local spec = {
   "folke/snacks.nvim",
   priority = 1000,
   lazy = false,
@@ -376,3 +376,5 @@ return {
     })
   end,
 }
+
+return { plugins = { spec } }

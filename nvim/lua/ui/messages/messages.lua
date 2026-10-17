@@ -173,7 +173,7 @@ local function toast(es, level, opts)
   opts.ft = "text" -- not snacks' markdown: "[New]" or "[C]" would be concealed as links
   opts.history = false -- snacks keys its history by id (snacks/notifier.lua:404-406); the ring is the history
   -- 0 keeps it until dismissed (snacks/notifier.lua:31); `routine` also exempts it from the errors that
-  -- plugins/snacks.lua's notifier.keep holds
+  -- ui/snacks.lua's notifier.keep holds
   opts.timeout = level == "error" and not opts.routine and 0 or nil
   -- snacks calls this later from its timer, outside flush()'s pcall, and turns an error into an emsg
   -- (snacks/notifier.lua:333-345) that would come back here as another failing toast. So it catches its

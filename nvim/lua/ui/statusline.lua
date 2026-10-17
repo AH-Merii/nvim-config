@@ -36,7 +36,7 @@ end
 
 local function get_colors() return get_onedark_palette() end
 
-return {
+local spec = {
   "AH-Merii/neoblocks.nvim",
   event = "VeryLazy",
   config = function()
@@ -345,3 +345,5 @@ return {
     })
   end,
 }
+
+return { plugins = { spec } }
