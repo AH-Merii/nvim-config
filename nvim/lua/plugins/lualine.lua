@@ -167,6 +167,9 @@ return {
     ---------------------------------------------------------------------------
     -- Adaptive Path component with highlight
     ---------------------------------------------------------------------------
+    -- The path is drawn as a statusline string, where a % in a name would start an item
+    local function escape(text) return (text:gsub("%%", "%%%%")) end
+
     --- Adaptive filepath component for lualine.
     --- Shows full path when space allows, then progressively shortens:
     ---   1. Abbreviate intermediate dirs (a/b/c)
@@ -184,7 +187,7 @@ return {
       local fullpath = vim.fn.expand("%:p")
       local root = get_project_root()
       if not fullpath or not root or fullpath == "" or root == "" then
-        return vim.fn.expand("%:t")
+        return escape(vim.fn.expand("%:t"))
       end
 
       local win_width = vim.fn.winwidth(0)
@@ -223,38 +226,38 @@ return {
         return name
       end
 
+      --- The drawn path and its width on screen
       local function build_path(proj, mid, file)
-        local out = {}
-        table.insert(out, hl_project .. proj .. hl_reset)
+        local out, shown = { hl_project .. escape(proj) .. hl_reset }, { proj }
         if mid ~= "" then
-          table.insert(out, "/" .. hl_middle .. mid .. hl_reset)
+          table.insert(out, "/" .. hl_middle .. escape(mid) .. hl_reset)
+          table.insert(shown, mid)
         end
         if file ~= "" then
-          table.insert(out, "/" .. hl_file .. file .. hl_reset)
+          table.insert(out, "/" .. hl_file .. escape(file) .. hl_reset)
+          table.insert(shown, file)
         end
-        return table.concat(out, "")
+        return table.concat(out, ""), vim.fn.strdisplaywidth(table.concat(shown, "/"))
       end
 
-      local function path_width(str) return vim.fn.strdisplaywidth((str:gsub("%%#.-#", ""))) end
+      local display, width = build_path(project_name, middle_path, filename)
 
-      local display = build_path(project_name, middle_path, filename)
-
-      if path_width(display) > max_budget then
+      if width > max_budget then
         local short_parts = {}
         for _, seg in ipairs(vim.list_slice(parts, 1, #parts - 1)) do
           table.insert(short_parts, seg:sub(1, 1))
         end
         middle_path = table.concat(short_parts, "/")
-        display = build_path(project_name, middle_path, filename)
+        display, width = build_path(project_name, middle_path, filename)
       end
 
-      if path_width(display) > max_budget then
+      if width > max_budget then
         project_name = shorten_project_name(project_name)
-        display = build_path(project_name, middle_path, filename)
+        display, width = build_path(project_name, middle_path, filename)
       end
 
-      if path_width(display) > max_budget then
-        display = hl_file .. filename .. hl_reset
+      if width > max_budget then
+        display = hl_file .. escape(filename) .. hl_reset
       end
 
       return display
