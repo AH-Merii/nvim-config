@@ -420,9 +420,15 @@ return {
       color = { fg = colors.cyan, gui = "bold" },
       cond = conditions.check_git_workspace,
     })
-    -- Git Changes
+    -- Git Changes, counted by gitsigns: without a source lualine runs its own git diff on every BufEnter and write
     ins_right({
       "diff",
+      source = function()
+        local status = vim.b.gitsigns_status_dict
+        if status then
+          return { added = status.added, modified = status.changed, removed = status.removed }
+        end
+      end,
       symbols = { added = "󰐖 ", modified = "󰦓 ", removed = "󰍵 " },
       diff_color = {
         added = { fg = colors.green },
