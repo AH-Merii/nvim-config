@@ -5,6 +5,13 @@ vim.g.maplocalleader = " "
 -- Enable Lazydev for vim globals
 vim.g.lazydev_enabled = true
 
+-- Remote-plugin hosts: no installed plugin ships an rplugin/ dir, and looking for a python3 host when the first Python
+-- buffer opens ($VIMRUNTIME/ftplugin/python.vim asks has('python3')) costs about 55 ms
+vim.g.loaded_python3_provider = 0
+vim.g.loaded_ruby_provider = 0
+vim.g.loaded_node_provider = 0
+vim.g.loaded_perl_provider = 0
+
 -- ⚙️ General Settings
 vim.opt.termguicolors = true
 vim.opt.fileencoding = "utf-8"
@@ -60,12 +67,6 @@ require("vim._core.ui2").enable({
   msg = { targets = { default = "msg", typed_cmd = "cmd" } },
 })
 require("config.ui2").setup()
-
--- make the hidden chars foreground color more subtle
-vim.cmd([[
-highlight NonText guifg=#cccccc ctermfg=lightgray
-highlight SpecialKey guifg=#cccccc ctermfg=lightgray
-]])
 
 -- 󰞷 Editing & Indentation
 vim.opt.expandtab = true

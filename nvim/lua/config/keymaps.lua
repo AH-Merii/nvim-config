@@ -23,14 +23,14 @@ keymap("x", "<", function()
   local ok, snacks = pcall(require, "snacks")
   if ok and snacks and snacks.indent then
     local buf = vim.api.nvim_get_current_buf()
-    local prev_state = vim.b[buf].snacks_indent_animate
-    vim.b[buf].snacks_indent_animate = false
+    local prev_state = vim.b[buf].snacks_animate_indent
+    vim.b[buf].snacks_animate_indent = false
 
     -- Perform normal indent and stay in visual mode
     vim.cmd("normal! <gv")
 
     -- Restore animation after short delay
-    vim.defer_fn(function() vim.b[buf].snacks_indent_animate = prev_state end, 30)
+    vim.defer_fn(function() vim.b[buf].snacks_animate_indent = prev_state end, 30)
   else
     vim.cmd("normal! <gv")
   end
@@ -40,12 +40,12 @@ keymap("x", ">", function()
   local ok, snacks = pcall(require, "snacks")
   if ok and snacks and snacks.indent then
     local buf = vim.api.nvim_get_current_buf()
-    local prev_state = vim.b[buf].snacks_indent_animate
-    vim.b[buf].snacks_indent_animate = false
+    local prev_state = vim.b[buf].snacks_animate_indent
+    vim.b[buf].snacks_animate_indent = false
 
     vim.cmd("normal! >gv")
 
-    vim.defer_fn(function() vim.b[buf].snacks_indent_animate = prev_state end, 30)
+    vim.defer_fn(function() vim.b[buf].snacks_animate_indent = prev_state end, 30)
   else
     vim.cmd("normal! >gv")
   end

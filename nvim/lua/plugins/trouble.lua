@@ -6,9 +6,24 @@ return {
   specs = {
     "folke/snacks.nvim",
     opts = function(_, opts)
+      -- trouble's picker actions, required when one runs: requiring them here loaded trouble with snacks at startup
+      local actions = {}
+      for name, desc in pairs({
+        trouble_open = "smart-open-with-trouble",
+        trouble_open_selected = "open-with-trouble",
+        trouble_open_all = "open-all-with-trouble",
+        trouble_add = "smart-add-to-trouble",
+        trouble_add_selected = "add-to-trouble",
+        trouble_add_all = "add-all-to-trouble",
+      }) do
+        actions[name] = {
+          action = function(...) return require("trouble.sources.snacks").actions[name].action(...) end,
+          desc = desc,
+        }
+      end
       return vim.tbl_deep_extend("force", opts or {}, {
         picker = {
-          actions = require("trouble.sources.snacks").actions,
+          actions = actions,
           win = {
             input = {
               keys = {
