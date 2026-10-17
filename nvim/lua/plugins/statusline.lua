@@ -194,12 +194,11 @@ return {
 
     define_highlights(colors)
 
-    -- vim.api.nvim_create_autocmd("ColorScheme", {
-    --   callback = function()
-    --     colors = get_colors()
-    --     define_highlights(colors)
-    --   end,
-    -- })
+    -- A colorscheme starts with :hi clear, which empties the path's groups
+    vim.api.nvim_create_autocmd("ColorScheme", {
+      group = vim.api.nvim_create_augroup("config.statusline", { clear = true }),
+      callback = function() define_highlights(get_colors()) end,
+    })
 
     ---------------------------------------------------------------------------
     -- LEFT side
