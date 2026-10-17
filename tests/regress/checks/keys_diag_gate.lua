@@ -1,4 +1,4 @@
--- @desc     the buffer-diagnostics keys (<leader>xX, <leader>sd) are listed by which-key and open their list in a buffer iff an LSP client is attached or nvim-lint has linters for its filetype (or a dot-part), with controlled entries, fake servers and the fixture files
+-- @desc     the buffer-diagnostics keys (<leader>xX, <leader>sd) are listed by which-key and open their list in a buffer iff an LSP client is attached or its filetype's language names linters (or a dot-part's does), with controlled languages, fake servers and the fixture files
 -- @areas    keys lint lsp which-key
 -- @budget   40
 -- @args     main.lua
@@ -85,7 +85,17 @@ local function buf_of(ft)
   return buf
 end
 
-local lint = require("lint")
+local lint, lang = require("lint"), require("lang")
+-- a language for ft that names linters, as a file in lua/lang/ would, and nvim-lint's entry as lang's views give it
+-- at startup
+local function declare(ft, linters)
+  local named = {}
+  for _, name in ipairs(linters) do
+    named[name] = {}
+  end
+  lang._declare("nvr_" .. ft, { filetypes = { ft }, linters = named })
+  lint.linters_by_ft[ft] = #linters > 0 and linters or nil
+end
 -- the buffer-diagnostics keys, from the config's key list
 local KEYS = { "<leader>xX", "<leader>sd" }
 
@@ -135,13 +145,13 @@ local function judge(label, buf, want)
 end
 
 section("linters configured")
-expect(lint.linters_by_ft.sbxnone == nil, "precondition: no linter for sbxnone")
+expect(lang.of("sbxnone") == nil and lint.linters_by_ft.sbxnone == nil, "precondition: no linter for sbxnone")
 local bn = buf_of("sbxnone")
 judge("no linter, no client", bn, false)
-lint.linters_by_ft.sbxlint = { "a_linter_that_is_not_installed" }
+declare("sbxlint", { "a_linter_that_is_not_installed" })
 judge("linter configured", buf_of("sbxlint"), true)
 judge("compound ft with a linted part", buf_of("sbxother.sbxlint"), true)
-lint.linters_by_ft.sbxempty = {}
+declare("sbxempty", {})
 judge("empty linter list", buf_of("sbxempty"), false)
 
 section("attached clients")
@@ -169,7 +179,7 @@ for _, f in ipairs({ "main.lua", "app.conf", "main.go", DIR .. "/plain.txt" }) d
   local ft = vim.bo[buf].filetype
   local clients = #vim.lsp.get_clients({ bufnr = buf })
   any_client = any_client or clients > 0
-  local producer = clients > 0 or #(lint.linters_by_ft[ft] or {}) > 0
+  local producer = clients > 0 or #((lang.of(ft) or {}).linters or {}) > 0
   judge(vim.fn.fnamemodify(f, ":t") .. " (producer " .. tostring(producer) .. ")", buf, producer)
 end
 expect(any_client, "some fixture buffer has a real client, so the client branch is exercised")

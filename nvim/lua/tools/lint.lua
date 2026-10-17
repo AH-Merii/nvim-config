@@ -5,8 +5,9 @@ local tools = require("tools")
 
 local M = {}
 
--- Linters whose findings a language server also reports, by server name; each runs only where its server is not attached
-M.covering_server = { ruff = "ruff", biomejs = "biome", tflint = "tflint", clippy = "rust_analyzer", tombi = "tombi" }
+-- Linters whose findings a language server also reports, by server name (covered_by in lua/lang/); each runs only where
+-- its server is not attached
+M.covering_server = require("lang").views().covered_by
 
 --- Whether linter name's server is attached to buf, so the linter is skipped there.
 ---@param name string
@@ -44,16 +45,13 @@ function M.runs(name, buf, root, linter)
   return not M.covered(name, buf) and (not bin or (tools.resolve(bin, root) or {}).path ~= nil)
 end
 
---- The linters that run on buf now, from nvim-lint's own lookup for its filetype (dotted filetypes get each part's).
+--- The linters that run on buf now, of those its filetype's language names.
 ---@param buf integer
 ---@return string[]
 function M.to_run(buf)
-  local ok, lint = pcall(require, "lint")
-  if not ok then
-    return {}
-  end
+  local found = require("lang").of(vim.bo[buf].filetype)
   local root = tools.root(buf)
-  return vim.tbl_filter(function(name) return M.runs(name, buf, root) end, lint._resolve_linter_by_ft(vim.bo[buf].filetype))
+  return vim.tbl_filter(function(name) return M.runs(name, buf, root) end, found and found.linters or {})
 end
 
 return M

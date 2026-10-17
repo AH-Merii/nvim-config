@@ -15,7 +15,7 @@ local function open(path, lines, want)
   vim.fn.mkdir(vim.fs.dirname(path), "p")
   vim.fn.writefile(lines, path)
   vim.cmd.edit(path)
-  local names = tools.for_filetype(vim.bo.filetype, 0).tools
+  local names = require("lang").of(vim.bo.filetype).tools
   local results
   tools.resolve_all(names, tools.root(0), function(r) results = r end)
   wait_until(function() return results ~= nil end, 10000)

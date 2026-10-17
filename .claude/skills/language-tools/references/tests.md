@@ -10,8 +10,8 @@ The suite lives in `tests/regress/`; its rules are in `tests/regress/README.md`,
 
 | Change | Add | Run (by name filter) |
 |---|---|---|
-| New server | A small valid source file in `tests/regress/fixtures/default/` (one file per language: `main.lua`, `app.py`, `hello.c`, ...). Its path goes in the `files` list in `checks/lsp_attach.lua` (line 6-7), and its binary in that file's `@needs` (line 5). If the server needs a project file to find its root, add that file to the fixture as well | `lsp_attach`, `lsp_configs`, `startup` |
-| New `after/lsp/<server>.lua` | Nothing new. `checks/lsp_configs.lua` already covers every file there | `lsp_configs` |
+| New server | A small valid source file in `tests/regress/fixtures/default/` (one file per language: `main.lua`, `app.py`, `hello.c`, ...). Its path goes in the `files` list in `checks/lsp_attach.lua` (line 6-7), and its binary in that file's `@needs` (line 5). If the server needs a project file to find its root, add that file to the fixture as well | `lsp_attach`, `lang_views`, `startup` |
+| New server settings in a language file | Nothing new. `checks/lang_views.lua` checks that every server's fields reach `vim.lsp.config` | `lang_views` |
 | New formatter | A format check from the template below | it, plus `format_buffer` |
 | New linter | A lint check from the template below | it, plus `lint_compound_ft` |
 | Sub-filetype | Cases in `checks/tools_subfiletypes.lua` (see below), plus a lint or format check proving the tool reports on a matching file | `tools_subfiletypes`, `tools_prompts`, and the new check |
@@ -45,7 +45,7 @@ check("<linter> reports the <code> finding", vim.iter(diags):any(function(d) ret
 
 - For a file-scoped linter, create the sample at a matching path, with `vim.fn.mkdir(<dir>, "p")` first.
 - Add a second buffer at a near-miss path, and check that it gets the base filetype and no diagnostics in `ns`. `checks/lint_compound_ft.lua` shows this negative pattern; it waits a bounded `wait_until` before asserting none.
-- A linter in `covering_server` is skipped while its server is attached. Its check must therefore run without that server, or assert through the server instead.
+- A linter with `covered_by` is skipped while its server is attached. Its check must therefore run without that server, or assert through the server instead.
 
 ## Format check template
 

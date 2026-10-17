@@ -13,7 +13,8 @@ local function probe(cmd)
 end
 lint.linters.nvr_present = probe("sh")
 lint.linters.nvr_absent = probe("nvr-absent-linter")
-lint.linters_by_ft.nvrprobe = { "nvr_present", "nvr_absent" }
+-- a language for nvrprobe, as a file in lua/lang/ would declare it
+require("lang")._declare("nvr_probe", { filetypes = { "nvrprobe" }, linters = { nvr_present = {}, nvr_absent = {} } })
 
 vim.cmd.edit("probe.txt")
 vim.bo.filetype = "nvrprobe"

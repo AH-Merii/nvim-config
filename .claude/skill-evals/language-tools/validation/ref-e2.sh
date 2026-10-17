@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$1"
 perl -0pi -e 's/(  stylua = \{ spec = "stylua", formatters = \{ "stylua" \} \},\n)/$1  selene = { spec = "aqua:Kampfkarren\/selene", linters = { "selene" } },\n/' nvim/lua/tools/catalog.lua
-perl -0pi -e 's/(      python = \{ "ruff" \},\n)/      lua = { "selene" },\n$1/' nvim/lua/plugins/nvim-lint.lua
+perl -0pi -e 's/(  formatters = \{ "stylua" \},\n)/$1  linters = { selene = {} },\n/' nvim/lua/lang/lua.lua
 cat > tests/regress/checks/lint_selene.lua <<'LUA'
 -- @desc     selene findings appear on a lua buffer, from the binary the resolver finds
 -- @areas    lint tools

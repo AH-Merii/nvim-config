@@ -6,32 +6,9 @@ return {
     local tools = require("tools")
     local lint_tools = require("tools.lint")
 
-    -- A dotted filetype with no key of its own gets the linters of all its parts (yaml.github-actions -> yaml + github-actions)
-    lint.linters_by_ft = {
-      -- Go
-      go = { "golangcilint" },
-
-      -- JavaScript/TypeScript/JSON
-      javascript = { "biomejs" },
-      typescript = { "biomejs" },
-      javascriptreact = { "biomejs" },
-      typescriptreact = { "biomejs" },
-      json = { "biomejs" },
-      jsonc = { "biomejs" },
-
-      python = { "ruff" },
-      rust = { "clippy" },
-      toml = { "tombi" },
-
-      -- Other
-      markdown = { "markdownlint-cli2" },
-      yaml = { "yamllint" },
-      -- Workflow files are yaml.github-actions (lua/tools/filetypes.lua)
-      ["github-actions"] = { "jactionlint", "zizmor" },
-      make = { "checkmake" },
-      terraform = { "tflint", "trivy" },
-      dockerfile = { "hadolint" },
-    }
+    -- Every filetype a language declares, variants included, each with its whole list (lua/lang/). The runs below name
+    -- their linters from lang.of, so nvim-lint's union of a dotted filetype's parts decides nothing
+    lint.linters_by_ft = vim.deepcopy(require("lang").views().lint)
 
     -- jactionlint: jdx's maintained fork of actionlint, with GNU-style options and actionlint's JSON plus a rule id and
     -- a severity. Its default profile adds security rules that zizmor already reports (template-injection,
@@ -69,6 +46,15 @@ return {
     local keep_cwd = { tflint = true }
 
     local covering_server, covered, binary = lint_tools.covering_server, lint_tools.covered, lint_tools.binary
+
+    --- The linters buf's filetype's language names: the one answer, so nvim-lint's own lookup for a dotted filetype
+    --- decides nothing
+    ---@param buf integer
+    ---@return string[]
+    local function linters_of(buf)
+      local found = require("lang").of(vim.bo[buf].filetype)
+      return found and found.linters or {}
+    end
 
     -- golangcilint builds its version-specific args once, when its module loads, from the golangci-lint and go on
     -- Neovim's PATH (lint/linters/golangcilint.lua); build them again with the resolved binary and its runtime first
@@ -116,9 +102,9 @@ return {
       end
     end
 
-    --- Lints the current buffer with the binaries the resolver finds for its project. A linter whose binary is
-    --- missing is skipped; one still resolving is skipped too, and ToolsChanged lints again once it is found.
-    ---@param names? string|string[]
+    --- Lints the current buffer with names, using the binaries the resolver finds for its project. A linter whose
+    --- binary is missing is skipped; one still resolving is skipped too, and ToolsChanged lints again once it is found.
+    ---@param names string[]
     local function lint_buffer(names)
       local root = tools.root(0)
       local opts = {
@@ -164,8 +150,9 @@ return {
     autocmd({ "BufEnter", "BufWritePost", "InsertLeave" }, {
       group = user_group,
       callback = function()
-        if #lint._resolve_linter_by_ft(vim.bo.filetype) > 0 then
-          lint_buffer()
+        local names = linters_of(0)
+        if #names > 0 then
+          lint_buffer(names)
         end
       end,
     })
@@ -176,7 +163,7 @@ return {
       pattern = tools.event,
       callback = function(ev)
         for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-          local names = vim.api.nvim_buf_is_loaded(buf) and lint._resolve_linter_by_ft(vim.bo[buf].filetype) or {}
+          local names = vim.api.nvim_buf_is_loaded(buf) and linters_of(buf) or {}
           local changed = vim.tbl_filter(function(name) return vim.list_contains(ev.data.tools, binary(name)) end, names)
           if #changed > 0 and tools.root(buf) == ev.data.root then
             for _, name in ipairs(changed) do
@@ -192,8 +179,7 @@ return {
     local function map_lint_keys(buf)
       pcall(vim.keymap.del, "n", "<leader>ll", { buf = buf })
       pcall(vim.keymap.del, "n", "<leader>li", { buf = buf })
-      -- The lookup try_lint does when lint_buffer() names no linters
-      local names = lint._resolve_linter_by_ft(vim.bo[buf].filetype)
+      local names = linters_of(buf)
       if #names == 0 then
         return
       end
@@ -201,7 +187,7 @@ return {
       -- Manual linting command, while lint_buffer() would run at least one linter
       if vim.iter(names):any(function(name) return not covered(name, buf) end) then
         vim.keymap.set("n", "<leader>ll", function()
-          lint_buffer()
+          lint_buffer(linters_of(buf))
           vim.notify("Linting...", vim.log.levels.INFO, { title = "nvim-lint" })
         end, { buf = buf, desc = "Trigger linting for current file" })
       end
@@ -210,7 +196,7 @@ return {
       vim.keymap.set("n", "<leader>li", function()
         local linters = vim.tbl_map(
           function(name) return covered(name, buf) and ("%s (reported by the %s server)"):format(name, covering_server[name]) or name end,
-          lint._resolve_linter_by_ft(vim.bo[buf].filetype)
+          linters_of(buf)
         )
         if #linters == 0 then
           print("No linters configured for filetype: " .. vim.bo.filetype)

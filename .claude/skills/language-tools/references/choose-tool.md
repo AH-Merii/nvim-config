@@ -21,7 +21,7 @@ cat <the file>
 
 What to take from it:
 
-- **The name.** The file name is the name for `M.servers`, `formatters_by_ft`, `linters_by_ft` and the catalog's role lists. It is often not the tool's own name: `terraform fmt` is conform's `terraform_fmt`, biome's linter is nvim-lint's `biomejs`, Lua's language server is `lua_ls`.
+- **The name.** The file name is the name for a language file's `servers`, `formatters` and `linters`, and the catalog's role lists. It is often not the tool's own name: `terraform fmt` is conform's `terraform_fmt`, biome's linter is nvim-lint's `biomejs`, Lua's language server is `lua_ls`.
 - **The binary**, from `cmd` (servers, linters) or `command` (formatters). The catalog is keyed by it, because the resolver looks for that file name:
 
   | Plugin name | Binary (catalog key) | Where |
@@ -36,7 +36,7 @@ What to take from it:
 
 Why this is a hard step: a definition of your own for a tool the plugin ships (an `opts.formatters.<new name>` running the same binary as a conform formatter, a `lint.linters.<name>` table for a linter nvim-lint has) shadows or duplicates the maintained one, and it drifts as upstream fixes its args and parser. `check.sh` fails on both cases.
 
-You write a definition only when no file exists. For a linter, see `edit-files.md`, "Linter" (jactionlint is the example). For a formatter, see "Formatter". For a server, nvim-lspconfig must have it: `lsp_servers.lua:216-217` warns on unknown names, and `checks/startup.lua` fails on that warning.
+You write a definition only when no file exists. For a linter, see `edit-files.md`, "Linter" (jactionlint is the example). For a formatter, see "Formatter". For a server, nvim-lspconfig must have it: `core/lsp_servers.lua` (`setup`) warns on unknown names, and `checks/startup.lua` fails on that warning.
 
 ## 1.2 Find the mise spec
 
@@ -95,4 +95,4 @@ A new runtime kind needs an entry in `M.runtimes` (`catalog.lua:23-27`). Add one
 
 - **It must do the job on real files.** In step 3, also run it on one real file of this repo if the language exists here. A linter that floods a normal file with false positives (for example, Lua globals like `vim`) needs a config file. Report that to the user as an open point; don't add config files to their projects.
 - **Version coupling.** Some servers must match their compiler's or runtime's version, and `@latest` of each can differ. Read the tool's README for this, compare the versions `mise latest` prints, and report the pairing as an open point.
-- **Duplicate diagnostics.** If a server already runs this linter's rules, the pair needs `covering_server` (`edit-files.md`). Leave it out when the server reports different rules (yamlls and yamllint): the linter would go quiet whenever the server attaches.
+- **Duplicate diagnostics.** If a server already runs this linter's rules, the linter needs `covered_by` (`edit-files.md`, "Linter"). Leave it out when the server reports different rules (yamlls and yamllint): the linter would go quiet whenever the server attaches.

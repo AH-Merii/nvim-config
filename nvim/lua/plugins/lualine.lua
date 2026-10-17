@@ -130,11 +130,11 @@ return {
       -- ToolsChanged updates the list when the last one is
       local tools = require("tools")
       local root = tools.root(bufnr)
-      local resolving = ok_conform
-        and vim.iter(conform.list_formatters_for_buffer(bufnr)):any(function(name)
-          local bin = tools.catalog.binary("formatter", name)
-          return bin ~= nil and tools.resolve(bin, root) == nil
-        end)
+      local found = require("lang").of(vim.bo[bufnr].filetype)
+      local resolving = vim.iter(found and found.formatters or {}):any(function(name)
+        local bin = tools.catalog.binary("formatter", name)
+        return bin ~= nil and tools.resolve(bin, root) == nil
+      end)
       if ok_conform and not resolving then
         local formatters = conform.list_formatters_to_run(bufnr)
         if formatters and not vim.tbl_isempty(formatters) then

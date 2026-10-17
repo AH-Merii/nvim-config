@@ -22,7 +22,8 @@ setup tells you if yours doesn't.
 
 The loading sequence is strictly ordered in `init.lua`:
 
-1. `tools` and `tools.ux` - Tool resolver, dotted sub-filetypes, install prompts and `:Tools` (before any plugin looks a tool up)
+1. `lang`, `tools` and `tools.ux` - The languages' variant filetypes and buffer options, the tool resolver, install prompts
+   and `:Tools` (before any plugin looks a tool up)
 2. `core.lsp` - Configure diagnostic appearance before any LSP loads
 3. `config.options` - Set Vim options & define `mapleader`
 4. `config.keymaps` - Register global keymaps
@@ -42,7 +43,8 @@ nvim/
 │   │   ├── lazy.lua         # Plugin manager bootstrap
 │   │   ├── lsp.lua          # Diagnostic configuration
 │   │   └── lsp_servers.lua  # Enabled servers, each run from its resolved binary
-│   ├── tools/               # Tool resolver (mise), catalog, sub-filetypes, prompts and :Tools
+│   ├── lang/                # One data file per language, and the registry that reads them (init.lua)
+│   ├── tools/               # Tool resolver (mise), catalog, prompts and :Tools
 │   ├── config/              # Editor configuration
 │   │   ├── options.lua      # Vim options
 │   │   ├── keymaps.lua      # Global keymaps
@@ -53,69 +55,85 @@ nvim/
 │   │   └── ui2/             # Messages, command line and pending keys on Neovim's ui2
 │   └── plugins/             # Plugin specifications, one file per plugin or group
 ├── after/
-│   ├── ftplugin/            # Filetype-specific configs
-│   └── lsp/                 # LSP server-specific configs
+│   └── ftplugin/            # Filetype keymaps, and labels for the runtime ftplugins' maps
 ```
 
 ### Module Dependencies
 
 - `config.keymaps` depends on `config.options` (needs `mapleader`)
 - `config.helpers` depends on LSP clients being loaded (deferred via `VeryLazy`)
-- All LSP configs in `after/lsp/` depend on `blink.cmp` for completion capabilities
+- `blink.cmp` adds its completion capabilities to every server through `vim.lsp.config('*')`
+  (`blink.cmp/plugin/blink-cmp.lua:1-7`), so a server's config doesn't merge them
 - Plugin files are independent but may integrate with each other
 
 ## LSP Configuration
 
-### Two-Tier System
+### Tools and languages
 
-**Tier 1: Tools from mise** (`lua/tools/`, decisions in `docs/mise-tooling-decisions.md`)
+**Tools from mise** (`lua/tools/`, decisions in `docs/mise-tooling-decisions.md`)
 - Every server, formatter and linter binary comes from mise or the system, found per project root, first hit wins: the project env (`.venv/bin`, `node_modules/.bin`), the project's mise config if you accepted it, global mise tools, then the system `PATH` without mise shims, mise install dirs or Mason's bin dir. Each tool runs from that absolute path with cwd = the project root
 - `lua/tools/catalog.lua` lists each binary's mise spec, project dirs, runtime (node, go) and rustup component
 - A project whose mise config pins tools asks once: *Yes* (trusts the config and installs its missing pins), *Only versions already installed* or *No, use my global tools*. The answer is kept in `stdpath("state")/tools/projects.json` until the config changes. Where a `.venv`/`node_modules` copy and a pin differ in version, it asks which one to use
-- A missing tool is offered once, in one batched prompt ("python needs pyrefly and ruff" / "Install them globally with mise"), and only on files it would run on. A missing runtime (node, go) is installed in the same step; a pinned version can be installed for the project without trusting its config. Workflow YAML is `yaml.github-actions`, `pyproject.toml` is `toml.pyproject`, and Compose and Bake files are `yaml.docker-compose` and `hcl.docker-bake` (`lua/tools/filetypes.lua`), so jactionlint, zizmor, pyproject-fmt and the Docker language server run and are offered only there
+- A missing tool is offered once, in one batched prompt ("python needs pyrefly and ruff" / "Install them globally with mise"), and only on files it would run on. A missing runtime (node, go) is installed in the same step; a pinned version can be installed for the project without trusting its config. Workflow YAML is `yaml.github-actions`, `pyproject.toml` is `toml.pyproject`, and Compose and Bake files are `yaml.docker-compose` and `hcl.docker-bake` (variants in `lua/lang/`), so jactionlint, zizmor, pyproject-fmt and the Docker language server run and are offered only there
 - Never prompts for library code (site-packages, node_modules, cargo registry, Go module cache), git commit messages, special buffers, headless runs, or with `vim.g.install_tools = "off"`
 - After that: a statusline indicator (a wrench with the missing count, `?` for an unanswered project config; hidden when nothing is missing) and `:Tools` (per tool: roles, source and version; a tool's menu starts or restarts its server or installs it; a row to use or stop using the project's mise config; `Rescan tool sources`; `:Tools install|rescan|restart|project`)
-- `core/lsp_servers.lua` enables an explicit server list. A server whose binary is missing is not started and raises no error; it starts once the binary turns up, and restarts when a refresh or install moves its binary
+- `core/lsp_servers.lua` enables every server a language names, with its fields from `lang.views().lsp`. A server whose binary is missing is not started and raises no error; it starts once the binary turns up, and restarts when a refresh or install moves its binary
 
-**Tier 2: Custom Configuration** (`after/lsp/[server].lua`)
-- Each LSP server can have a custom config file that returns server-specific options
-- These files are late-loaded after Neovim understands filetypes
-- Example servers with custom configs: `gopls.lua`, `rust_analyzer.lua`, `pyrefly.lua`, `yamlls.lua`
+**Languages** (`lua/lang/`, decision D46 in `docs/rearchitecture-decisions.md`)
+- One data file per language (`python.lua`, `go.lua`, ...) holds its filetypes, treesitter parsers, servers with their
+  settings, formatters, linters, variants and buffer options. `lua/tools/catalog.lua` only says how to install each
+  binary; a language names a server, formatter or linter, and the catalog gives its binary
+- `lang.of(ft)` answers what applies to a filetype: its servers, formatters, linters (with the server that covers each),
+  their binaries and its options. The install prompts, `:Tools`, the statusline, `:Status`, the format and diagnostics
+  key gates (`<leader>lf`, `<leader>Tf`, `<leader>xX`, `<leader>sd`), nvim-lint's runs and its `<leader>ll` and
+  `<leader>li` ask it. A dotted filetype no language declares gets its parts' formatters, linters and options as
+  conform, nvim-lint and the ftplugins combine them, and no servers
+- `lang.views()` builds the tables the plugins get: conform's `formatters_by_ft`, nvim-lint's `linters_by_ft`, each
+  server's `vim.lsp.config` fields (applied above nvim-lspconfig's `lsp/<name>.lua`), the variants' filetype rules and
+  the parsers. Every variant gets explicit entries
+- A mistake in a language file, such as two languages declaring one filetype or two variants claiming one file name,
+  skips that declaration and is reported once at startup; the first declaration, in file name order, stays
+- A variant (a dotted filetype such as `yaml.github-actions`) gets its base's servers and linters plus its own, and its
+  own formatters if it names any, else its base's. One with `match` rules needs an `example` path
 
-### Adding a New LSP Server
+### Adding a language or a tool
 
-1. Add the binary to `lua/tools/catalog.lua` (mise spec, `servers = { <name> = { args } }`) and the server name to `M.servers` in `lua/core/lsp_servers.lua`
-2. Optionally create `after/lsp/[server].lua` for custom settings
-3. Add formatters to `lua/plugins/conform.lua` under `formatters_by_ft`
-4. Add linters to `lua/plugins/nvim-lint.lua` under `linters_by_ft`
+1. Add the binary to `lua/tools/catalog.lua`: its mise spec and the names it serves (`servers = { <name> = { args } }`,
+   `formatters`, `linters`)
+2. Name it in the language's file in `lua/lang/` (a new file for a new language): the server under `servers`, with any
+   settings, the formatter under `formatters`, the linter under `linters` (`covered_by` when a server reports the same
+   findings), and a variant under `variants` for a tool that runs only on some files of a filetype
+3. Run `nvim --clean --headless -l tests/unit/lang_test.lua`: it fails when a name has no catalog binary or a catalog
+   binary is used by no language
 
-### LSP Server Config Pattern
+The `language-tools` skill (`.claude/skills/language-tools/`) walks through the whole change, checks included.
 
-All custom LSP configs in `after/lsp/` must follow this structure:
+### Language File Pattern
 
 ```lua
-local blink = require("blink.cmp")
-
+-- Every field, on TOML (lua/lang/toml.lua itself needs fewer)
+---@type lang.Spec
 return {
-    cmd = { "server-name" },
-    filetypes = { "filetype1", "filetype2" },
-    root_markers = { "go.mod", ".git" },
-    settings = {
-        -- Server-specific settings
+  filetypes = { "toml" },
+  parsers = { "toml" },                         -- installed at startup; others install when a buffer needs them
+  servers = { tombi = { settings = {} } },      -- nvim-lspconfig's name -> vim.lsp.Config fields
+  formatters = { "tombi" },                     -- conform names, run in order
+  linters = { tombi = { covered_by = "tombi" } }, -- nvim-lint names
+  variants = {
+    ["toml.pyproject"] = {
+      about = "pyproject.toml: pyproject-fmt formats it instead of tombi",
+      match = { filename = { "pyproject.toml" } },
+      example = "sub/pyproject.toml",
+      formatters = { "pyproject-fmt" },
     },
-    capabilities = vim.tbl_deep_extend(
-        "force",
-        {},
-        vim.lsp.protocol.make_client_capabilities(),
-        blink.get_lsp_capabilities(),  -- Critical for completion
-        { -- Optional additional capabilities
-            fileOperations = { didRename = true, willRename = true }
-        }
-    ),
+  },
+  options = { expandtab = true },                -- buffer options, set on FileType
 }
 ```
 
-**Critical**: Always merge `blink.get_lsp_capabilities()` to enable completion.
+A server, the formatters or a linter can name their own `filetypes` where they differ from the language's (clangd also
+serves `objc`; Go formats only `go`). `cmd` has no effect: `core/lsp_servers.lua` runs the resolved binary with the
+catalog's args.
 
 ## Plugin Management
 
@@ -158,15 +176,13 @@ return {
 
 ### Adding Filetype Behavior
 
-**Option 1**: Create `after/ftplugin/[filetype].lua` for buffer-local settings and keymaps
+**Option 1**: Buffer options go in the language's file (`options` in `lua/lang/<lang>.lua`); keymaps go in
+`after/ftplugin/[filetype].lua`
 
 Example structure:
 ```lua
 local opts = { noremap = true, silent = false, buffer = true }
 vim.keymap.set("n", "<space>x", ":.lua<CR>", opts)
-
-vim.opt_local.expandtab = true
-vim.opt_local.shiftwidth = 2
 ```
 
 **Option 2**: Add filetype autocommand in `lua/config/autocmds.lua`
@@ -185,15 +201,9 @@ autocmd("FileType", {
 
 ### Blink + LSP Integration
 
-Every LSP server config must merge blink completion capabilities:
-
-```lua
-local blink = require("blink.cmp")
-capabilities = vim.tbl_deep_extend("force", {},
-    vim.lsp.protocol.make_client_capabilities(),
-    blink.get_lsp_capabilities()  -- Required
-)
-```
+blink.cmp sets its completion capabilities for every server with `vim.lsp.config('*', …)` when it loads
+(`blink.cmp/plugin/blink-cmp.lua:1-7`). A server's config in `lua/lang/` lists only the capabilities it adds, such as
+`workspace.fileOperations`.
 
 ### Conditional Plugin Setup
 
@@ -249,9 +259,9 @@ For each language, the tooling chain is:
 3. **LSP** (fallback formatter if no conform formatter)
 
 Configure in:
-- `lua/plugins/conform.lua` - Add to `formatters_by_ft`
-- `lua/plugins/nvim-lint.lua` - Add to `linters_by_ft`
+- `lua/lang/<lang>.lua` - `formatters` and `linters`; conform's and nvim-lint's tables are built from them
 - `lua/tools/catalog.lua` - The tool's binary and mise spec (`formatters = { ... }` or `linters = { ... }`)
+- `lua/plugins/conform.lua` and `lua/plugins/nvim-lint.lua` - Only a formatter's or linter's own definition or args
 
 ### Utilities
 

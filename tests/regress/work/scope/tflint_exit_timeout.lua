@@ -1,4 +1,4 @@
--- @desc     the tflint client gets exit_timeout 500 from after/lsp/tflint.lua
+-- @desc     the tflint client gets exit_timeout 500 from lua/lang/terraform.lua
 -- @areas    lsp
 -- @budget   40
 -- @needs    tflint

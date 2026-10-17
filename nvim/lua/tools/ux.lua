@@ -123,12 +123,12 @@ end
 local role_words = { server = "lsp", formatter = "formatter", linter = "linter" }
 
 --- The catalog binaries buf's filetype runs (servers, formatters, linters, and what they call), and per binary its
---- roles there in plain words, e.g. { "lsp", "formatter", "linter" }. Loads conform and nvim-lint.
+--- roles there in plain words, e.g. { "lsp", "formatter", "linter" }.
 ---@param buf integer
 ---@return string[] names, table<string, string[]> roles, string[] servers
 local function needed(buf)
-  local ok, found = pcall(tools.for_filetype, vim.bo[buf].filetype, buf)
-  if not ok then
+  local found = require("lang").of(vim.bo[buf].filetype)
+  if not found then
     return {}, {}, {}
   end
   local names, roles = {}, {}

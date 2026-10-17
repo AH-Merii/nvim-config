@@ -74,9 +74,9 @@ $SK/check.sh $R                                  # FT="<fts>" FILES="<paths>" al
 
 It compares the change with the base commit (the merge-base with the branch's upstream; `BASE=<ref>` overrides it) and prints `CHECK OK`, or one `MISSING` line per gap:
 
-- **The audit** (`scripts/tool-audit.lua`, in the suite's sandboxed Neovim with a copy of `$R/nvim`). It checks that every `M.servers` name has a catalog entry and an nvim-lspconfig config, and every catalog server is enabled. `formatters_by_ft` must hold plain lists, and every formatter and linter name must have a catalog entry and a definition. No definition of the config's own may replace or duplicate a built-in one: same name, or same command. Every sub-filetype must keep its base's servers and linters. It reads config, not binaries.
+- **The audit** (`scripts/tool-audit.lua`, in the suite's sandboxed Neovim with a copy of `$R/nvim`). It checks that every server a language names has a catalog entry and an nvim-lspconfig config, and every catalog server is named. conform's `formatters_by_ft` (built from the languages) must hold plain lists, and every formatter and linter name must have a catalog entry and a definition. No definition of the config's own may replace or duplicate a built-in one: same name, or same command. Every sub-filetype must keep its base's servers and linters. It reads config, not binaries.
 - **For each new binary:** mise knows its spec (`mise latest` in an isolated mise), the decisions doc names it (with the rows to add when it doesn't), and a check lists it in `@needs`.
-- **For each new sub-filetype:** the File-scoped tools row, the README, a "Decided since" entry, cases in `tools_subfiletypes.lua`, and another check that opens a matching file.
+- **For each new sub-filetype:** the File-scoped tools row, CONTRIBUTING.md, a "Decided since" entry, cases in `tools_subfiletypes.lua`, and another check that opens a matching file.
 - **stylua** on the Lua you changed under `nvim/`.
 
 ## 4. The regression suite
@@ -89,7 +89,7 @@ cd $R/tests/regress && mkdir -p last && systemd-run --user --scope -q -p MemoryM
 ```
 
 1. **`--refresh` with your checks.** It installs every check's `@needs` into the suite's mise, then syncs plugins and parsers. Without `tests/regress/data/mise` (a fresh clone) it installs every tool and can take 15 minutes. `tools: X is in a check's @needs but not in the catalog` means the catalog key and the `@needs` name differ. `./suite.sh --refresh-dry-run` previews the install list.
-2. **The areas your change touches:** `./suite.sh --area startup,smoke,tools,lsp,format,lint`, plus `treesitter` if you edited its list. Those are the areas `tests/regress/areas.map` gives the catalog, `lsp_servers.lua`, `after/lsp/`, conform and nvim-lint. `--changed` would miss new untracked files.
+2. **The areas your change touches:** `./suite.sh --area startup,smoke,tools,lsp,format,lint`, plus `treesitter` if you edited a language's `parsers`. Those are the areas `tests/regress/areas.map` gives the catalog, `lsp_servers.lua` and `lua/lang/`. `--changed` would miss new untracked files.
 
 Pass: `SUITE PASS`, with `PASS the user's mise config, mise installs and rustup toolchains unchanged` in the hygiene block. The hygiene block also watches the live nvim dirs, which the user's own Neovim writes to: a `FAIL live nvim dirs changed` line naming a file your run can't have touched (an editor's server log under `~/.local/share/nvim/`) comes from outside. Say so in the report, with the line, rather than counting it as your failure. On a FAIL, the reason is under the check's line and its output is in `last/nightly/<check>.out`. Fix the cause, rerun the failed checks by name, then the area run again.
 

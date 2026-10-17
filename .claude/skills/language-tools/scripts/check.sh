@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # usage: check.sh <repo root> [FT="<filetypes to show>"] [FILES="<paths to classify>"]
 # The language-tools done check, cheap (one headless Neovim, a few seconds; it does not run the suite):
-#   - tool-audit.lua: the wiring is consistent, no definition duplicates a plugin's built-in, sub-filetypes keep
-#     their base's servers and linters;
-#   - each binary and sub-filetype the change added (against the base commit) is in the decisions doc (and the README
+#   - tool-audit.lua: the wiring is consistent, no definition duplicates a plugin's built-in, sub-filetypes (the
+#     languages' variants) keep their base's servers and linters;
+#   - each binary and sub-filetype the change added (against the base commit) is in the decisions doc (and CONTRIBUTING.md
 #     for a sub-filetype) and in a regression check; a MISSING line prints the row to add;
 #   - the changed Lua under nvim/ is formatted (the suite's stylua).
 # Prints "CHECK OK", or one MISSING line per gap and "CHECK FAILED". BASE=<git ref> overrides the base commit
@@ -21,13 +21,13 @@ ok() { echo "ok      $*"; }
 
 base=${BASE:-$(git -C "$R" merge-base HEAD '@{upstream}' 2>/dev/null || git -C "$R" rev-parse HEAD)}
 git -C "$R" show "$base:nvim/lua/tools/catalog.lua" >"$W/base_catalog.lua" 2>/dev/null || : >"$W/base_catalog.lua"
-git -C "$R" show "$base:nvim/lua/tools/filetypes.lua" >"$W/base_filetypes.lua" 2>/dev/null || : >"$W/base_filetypes.lua"
+mkdir -p "$W/base"; git -C "$R" archive "$base" nvim/lua/lang 2>/dev/null | tar -x -C "$W/base" 2>/dev/null
 echo "base: $(git -C "$R" log -1 --format='%h %s' "$base" 2>/dev/null)"
 
 # One headless Neovim, capped when systemd-run is there: other sessions share this machine's memory
 cap=()
 systemd-run --user --scope -q -p MemoryMax=2G true 2>/dev/null && cap=(systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=512M --)
-audit=$(cd "$W" && env -u CFG BASE_CATALOG="$W/base_catalog.lua" BASE_FILETYPES="$W/base_filetypes.lua" FT="${FT:-}" FILES="${FILES:-}" \
+audit=$(cd "$W" && env -u CFG BASE_CATALOG="$W/base_catalog.lua" BASE_LANG="$W/base/nvim/lua/lang" FT="${FT:-}" FILES="${FILES:-}" \
   timeout 90 "${cap[@]}" "$R/tests/regress/nv.sh" nightly --headless -c "luafile $SK/tool-audit.lua" 2>&1)
 grep -E '^(file |ft )' <<<"$audit"
 if grep -q '^AUDIT OK' <<<"$audit"; then ok "tool-audit.lua: AUDIT OK"
@@ -72,8 +72,8 @@ while IFS=$'\t' read -r kind name spec roles fts; do
     echo "new sub-filetype $name ($spec; tools: $roles)"
     if section 'File-scoped tools' | grep '^|' | grep -qF -- "$name"; then ok "the File-scoped tools table names $name"
     else missing "docs/mise-tooling-decisions.md \"File-scoped tools\" table has no row for $name. Add: | \`<files>\` | \`$name\` | <its own tools> (lint/format) |"; fi
-    if grep -qF -- "$name" "$R/README.md"; then ok "README.md names $name"
-    else missing "README.md does not name $name: add it to the Tier 1 sentence that lists the sub-filetypes (grep -n 'toml.pyproject' README.md)"; fi
+    if grep -qF -- "$name" "$R/CONTRIBUTING.md"; then ok "CONTRIBUTING.md names $name"
+    else missing "CONTRIBUTING.md does not name $name: add it to the sentence that lists the sub-filetypes (grep -n 'toml.pyproject' CONTRIBUTING.md)"; fi
     if grep -qF -- "${name#*.}" <<<"$decided"; then ok "a \"Decided since\" entry names ${name#*.}"
     else missing "docs/mise-tooling-decisions.md \"Decided since:\" list does not mention ${name#*.}. Add a bullet at its top with the files, the tools and the evidence"; fi
     others=$(grep -lF -- "$name" "$R"/tests/regress/checks/*.lua 2>/dev/null | grep -v '/tools_subfiletypes.lua$' | xargs -r -n1 basename | paste -sd' ')

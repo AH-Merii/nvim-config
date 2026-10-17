@@ -19,7 +19,7 @@ local function open(path, lines, want)
   vim.fn.writefile(lines, path)
   vim.cmd.edit(path)
   local root = tools.root(0)
-  local names = tools.for_filetype(vim.bo.filetype, 0).tools
+  local names = require("lang").of(vim.bo.filetype).tools
   local results
   tools.resolve_all(names, root, function(r) results = r end)
   wait_until(function() return results ~= nil end, 10000)
