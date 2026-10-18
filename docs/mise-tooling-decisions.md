@@ -392,6 +392,14 @@ Walking through every resolver case with the user, from screenshots of `:Tools` 
     menu offers the same `Install 3.10.0, the version your global config.toml pins`, and no "latest" alternative.
     A channel pin names no version, so it reads `Install the lts version your global config.toml pins` (mise lists
     an unresolved `npm:prettier = "lts"` as version `lts`, found in review).
+  - In a project (D100) the global install gets a sibling: `python needs pyrefly and ruff` / `Install them globally
+    with mise` / `Install them for this project only` / `Not now (…)`; one tool: `Install it for this project only`.
+    The tool's `:Tools` menu: `Install globally with mise` / `Install for this project only`. A global pin that isn't
+    installed (D99) gets the same sibling after its own install. Notifications: `Added mise.local.toml to .gitignore`
+    when it changed the repo's `.gitignore`; `Not adding mise.local.toml to .gitignore: it is a link to <target>`
+    (a warning) for a linked one; `Not adding mise.local.toml to .gitignore: git's top level <dir> is not this
+    project's checkout` (a warning) when git's top level isn't the project's; `Couldn't add mise.local.toml to
+    .gitignore: <error>` (an error) when the write failed.
 - **Case 3 (project `.venv`/`node_modules` has the tool): it wins, silently.** The row reads
   `project .venv · 0.15.0` (or `project node_modules · …`). A tool the project env lacks falls through to case 1 or 2;
   Neovim never installs into a project's `.venv` or `node_modules`.
@@ -575,7 +583,7 @@ Rejected:
   would not be active in a terminal, which `-g` gave and the decision keeps.
 
 **Migration.** No code moves entries. A tool already in `config.toml` keeps working and is not installed again: the
-resolver finds it through `mise bin-paths -C /` as `global-mise` (`nvim/lua/tools/init.lua:356-361`) and offers an
+resolver finds it through `mise bin-paths -C /` as `global-mise` (`nvim/lua/tools/init.lua:391-396`) and offers an
 install only for a missing tool. Which `config.toml` lines the config wrote can't be told apart from the user's own
 for certain, so the config doesn't edit that file. `-g` left two kinds of change in the dotfiles' diff: a `+` line
 on its own (a new entry) and a `-`/`+` pair (a committed pin rewritten in place, its comment kept). Only the first
@@ -595,7 +603,7 @@ follows these steps once:
    - A `-` line and a `+` line for the same tool: `-g` rewrote a committed pin, e.g.
      `-shfmt = "3.14.1" # pinned for CI` / `+shfmt = "latest" # pinned for CI`. Don't move it; step 4 restores it.
    - A `+` line on its own: a new entry. It is the config's when its version is `"latest"`, `"lts"` or `"stable"`
-     (what installs write: `nvim/lua/tools/init.lua:378` and `catalog.runtimes`) and the tool is in the catalog: in
+     (what installs write: `nvim/lua/tools/init.lua:424` and `catalog.runtimes`) and the tool is in the catalog: in
      this repo, `grep -nF 'spec = "<tool>' nvim/lua/tools/catalog.lua` prints its line.
    - A line you added or changed yourself and haven't committed looks the same. Any other version, or a tool not in
      the catalog, is yours; so is one you remember adding. Leave those: they keep working where they are.
@@ -669,5 +677,112 @@ Tests: `tests/unit/tools_test.lua` ("a version the global config pins but isn't 
 "without a global pin that isn't installed, the offer is the global install"). Sibling wrong versions each fail one:
 global pins ignored; a "latest" alternative kept; the pinned version written with `mise use` instead; the global pin
 checked before the project's. `tests/unit/tools_mise_test.lua` ("global pins: …") runs `global_pins` against a fake
-`mise ls`; it fails when the config's own file isn't left out, when a later version overwrites the first, and
-without `-C /` (raised in review).
+`mise ls`; it fails when the config's own file isn't left out, when a later version overwrites the first, and without
+`-C /` (raised in review).
+
+### D100: an install for this project only, kept out of git (2026-10-18)
+
+**Context.** Every install offered for a tool the project doesn't pin was global. The user wanted a way to add a
+tool to one project without adding it everywhere.
+
+**Decision (the user's choice).** In a project, a missing tool the project doesn't pin is also offered "for this
+project only", in the prompt and in the tool's `:Tools` menu (case 2 above). It runs `mise install <tool>@latest`,
+then `mise config set --file <root>/mise.local.toml tools.<tool> latest` for the resolver's root, both from `/`
+(`tools.mise.use_local`; why, under Trust below).
+
+- **When it is offered.** The root holds a project marker (the ones `tools.project_root` looks for: a mise config,
+  `.venv`, `node_modules`, `pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`, `.git`), so a file's own dir
+  outside any project gets no offer. Never in HOME or `/`: a `~/.venv` or a stray `~/node_modules` makes HOME the root,
+  and a `~/mise.local.toml` would apply to every dir below it (raised in review; `project_env` already stops at HOME).
+  Both sides are compared as real paths, so a HOME that is a link to the root still counts (raised in re-review). Not
+  for a mise name with a dot (the known limit below). Not when the project pins the tool (its pinned flow stays), not
+  when the project has a mise config that isn't in use (unanswered, or answered "use my global tools": the new file
+  would join it), not under an untrusted config, and not when the tool's runtime is missing too (the project's file
+  would need it). A global pin that isn't installed (D99) doesn't stop it: the project's file outranks the global
+  config, so it is offered after the pinned install (in the isolated mise, with `shfmt = "3.8.0"` in `config.toml` not
+  installed, `mise which shfmt` in a repo found `installs/shfmt/latest/shfmt` with `shfmt@latest` in
+  `<repo>/mise.local.toml`, and still "not currently active" outside it).
+- **Used at once.** Adding the file changes the project's configs, which drops the remembered answer to the project
+  prompt (`tools/state.lua` keys it by their contents). The install carries the previous answer over to the configs
+  with the new file, or answers "installed" when there was no config, so the tool resolves as `project-mise` straight
+  away and the project prompt isn't asked about a file the config wrote.
+- **Trust: none added, and no project config read.** The first build ran `mise use --path <root>/mise.local.toml`,
+  which trusts the whole root, not just the file (`trusted-configs/` gains a link to the dir; raised in review), then
+  read `mise trust --show` and untrusted the root afterwards. A re-review found two problems with that:
+  - `use` ran in the root with `MISE_YES=1`, and there mise trusts and evaluates an untrusted `mise.toml`, exec
+    templates included. The offer comes from the cached scan, so a `mise.toml` with
+    `PWN = "{{exec(command='touch …/pwned')}}"` that a `git pull` brings in after the scan ran during the install
+    (the review's `p1_stale_scan.lua` printed `PWNED exists: true`).
+  - Reading `trust --show` broke on real mise: canonical paths, a linked root or HOME, a HOME with a trailing slash
+    (printed as `~proj`), a trusted root with no config (not listed), and a linked git worktree (its trust comes
+    from the main checkout).
+
+  The user chose a write that adds no trust, so `use_local` neither trusts nor reads trust. `mise install <specs>` (with
+  `MISE_YES`, so it doesn't prompt) puts the tools in mise's data dir, and `mise config set --file
+  <root>/mise.local.toml tools.<tool> <version>` adds each line; both run from `/`, so no project config is loaded.
+  `config set` edits an existing file only (`mise ERROR config file not found: …/nofile.toml`), so `use_local` creates
+  an empty one first. Probed in the isolated mise (2026.10.8), from `/`, with an untrusted `mise.toml` holding that exec
+  template beside an empty `mise.local.toml`: `config set … tools.jq latest` exited 0 and wrote `[tools]` / `jq =
+  "latest"`, the `trusted-configs/` listing didn't change, `mise trust --show` in the dir still read `untrusted`, and
+  the exec didn't run. `mise use --path` from `/` didn't run the exec either, but it added the root to
+  `trusted-configs/`, so it was dropped. A tools-only `mise.local.toml` needs no trust: in the live check below, `mise
+  which jq` in the untrusted root finds the installed jq. With nothing trusted there is nothing to undo, so no cleanup
+  can fail.
+
+  Rejected:
+  - Untrusting the root afterwards when `trust --show` said it wasn't trusted before (the first build), or
+    snapshotting `trusted-configs/` and removing only the links `use` added. Both read mise's trust bookkeeping back,
+    and the re-review's probes showed that bookkeeping doesn't match the paths given (the `trust --show` cases
+    above), so either could leave a root trusted or untrust one the user trusted.
+  - Keeping the trust `mise use --path` adds and warning about it after each install. Right after the install, the
+    rescan runs `mise config ls --json` in the root (`tools/mise.lua:138`), and with the root trusted that evaluates
+    an exec template (the first review's probe above), so the warning would arrive after the command could already
+    have run.
+- **Known limit: a mise name with a dot.** `config set` reads every dot in the key as a separator.
+  `tools.go:golang.org/x/tools/gopls` wrote a nested table, after which mise refused the file
+  (`mise ERROR Config files in …/mise.local.toml are not trusted.`), and the quoted
+  `tools."go:golang.org/x/tools/gopls"` gave the same error. A name with `:` and `/` but no dot works:
+  `tools.aqua:koalaman/shellcheck` wrote `"aqua:koalaman/shellcheck" = "latest"`. So gopls and goimports
+  (`tools/catalog.lua:89-90`) get only the global install in a project.
+- **Kept out of git.** In a git repo, when no ignore rule matches `mise.local.toml`
+  (`git check-ignore --no-index -n -v`: exit 1, `::` in place of a pattern) and the repo doesn't track it
+  (`git ls-files --error-unmatch`), the install appends `mise.local.toml` to the repo's top-level `.gitignore`
+  (`git rev-parse --show-toplevel`), creating it if needed and adding a newline first when the file doesn't end in
+  one, then notifies `Added mise.local.toml to .gitignore`. A bare name ignores the file in every dir, so it is one
+  edit per repo and the check skips later ones (raised in review: the first build created a `.gitignore` in each
+  subdirectory project). A `.gitignore` that is a link (a stowed one, say) is left alone with a warning, since the
+  edit would land outside the repo; a failed write gives an error instead of the toast. A rule that already ignores
+  it (its name, `*.local.toml`, the global excludes file) or un-ignores it (`!mise.local.toml`, the user's own call)
+  leaves `.gitignore` alone, with no notification; outside git (exit 128) there is no `.gitignore` and no
+  notification. `check-ignore` without `-v` exits 0 for an ignored path only, so a negated rule looked "not
+  ignored"; with `-v -n` it exits 0 for any matching rule (probed in a throwaway repo:
+  `[!mise.local.toml] code=0 out=.gitignore:1:!mise.local.toml`). Every git call drops the variables
+  `git rev-parse --local-env-vars` lists (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, …), so a Neovim started with
+  them, say from a git hook, can't point the edit at another repo (raised in re-review). The top level must be the
+  root, or a dir above it that holds `.git`. Otherwise (`core.worktree` set to a parent, say) the edit is skipped
+  with a warning: `Not adding mise.local.toml to .gitignore: git's top level <dir> is not this project's checkout`.
+
+Checked live in the isolated mise with a throwaway git repo (`pyproject.toml`, `.gitignore` holding `node_modules/`
+with no trailing newline): stylua was offered `{ kind = "local", spec = "stylua@latest" }` beside the global install;
+the install gave `[tools]` / `stylua = "latest"` in `mise.local.toml`, a fresh resolve found stylua as
+`project-mise`, `.gitignore` became `node_modules/` / `mise.local.toml` (each line ending in a newline), the one
+notification was `Added mise.local.toml to .gitignore`, and `git status --short` didn't list `mise.local.toml`.
+That run predates the trust-free writer; the live check below covers it.
+
+Tests: `tests/unit/tools_test.lua` (real git in throwaway repos, no system or user git config) and
+`tests/unit/tools_mise_test.lua` (the file is the root's `mise.local.toml`, created when missing; the tools are
+installed; the root's trust stays as it was, trusted or not; every call runs from `/`, against a fake mise that logs its
+calls and keeps a trust store); `tests/regress/checks/tools_prompts.lua` and `tools_actions.lua` check the new option in
+the fixture's git project. Sibling wrong versions each fail one: appending without the ignore check; no newline before
+the line; the toast every time; `.gitignore` written outside git; no tracked-file check; the answer not carried over
+(the tool stays missing); "installed" written over a "use" answer; the offer for a pinned tool, outside a project, in
+HOME, with the runtime missing, or under an unanswered config; no offer beside a global pin; the file written in
+Neovim's cwd; the install or the `config set` run in the root; the file not created first; no install; `use --path` from
+`/`; HOME compared without real paths; a dotted name offered; git's env vars kept; no top-level check, or one without
+the `.git` check; `.gitignore` written in the project root rather than the repo's top level; a linked `.gitignore`
+followed; a failed write silent, or reported as added.
+
+The live check: `tests/unit/tools_mise_live_test.lua` runs `use_local` against real mise when `TOOLS_LIVE_MISE=1` (off
+by default; throwaway mise dirs): an untrusted project whose `mise.toml` has an exec template, then the exec didn't run,
+`trust --show` is unchanged and the tool resolves. It passed once; against the first build it failed `the exec ran`, and
+with `mise use --path` run from `/` it failed on `mise trust --show`.

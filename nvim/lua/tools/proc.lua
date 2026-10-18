@@ -10,12 +10,13 @@ local M = {}
 
 --- Runs cmd and calls back with its result on the main loop; a missing executable is code -1.
 ---@param cmd string[]
----@param opts? { cwd?: string, env?: table<string, string>, timeout?: integer }
+---@param opts? { cwd?: string, env?: table<string, string>, clear_env?: boolean, timeout?: integer }
 ---@param on_exit fun(result: tools.Run)
 function M.run(cmd, opts, on_exit)
   opts = opts or {}
   local done = vim.schedule_wrap(function(out) on_exit({ code = out.code, stdout = out.stdout or "", stderr = out.stderr or "" }) end)
-  local ok, err = pcall(vim.system, cmd, { cwd = opts.cwd, env = opts.env, timeout = opts.timeout, text = true, stdin = false }, done)
+  local sys = { cwd = opts.cwd, env = opts.env, clear_env = opts.clear_env, timeout = opts.timeout, text = true, stdin = false }
+  local ok, err = pcall(vim.system, cmd, sys, done)
   if not ok then
     vim.schedule(function() on_exit({ code = -1, stdout = "", stderr = tostring(err) }) end)
   end

@@ -214,6 +214,42 @@ function M.use_global(specs, cb)
   proc.install({ M.bin(), "use", "--path", M.tools_file(), unpack(specs) }, { cwd = "/", env = { MISE_YES = "1" } }, cb)
 end
 
+--- Tools for root's project only: `mise install <specs>`, then `mise config set --file <root>/mise.local.toml
+--- tools.<tool> <version>` for each, creating the file when there is none (config set edits existing files only).
+--- Every call runs from /, and neither writer trusts anything: `mise use --path` would trust the whole root, and with
+--- MISE_YES in the root's dir mise trusts and reads (exec templates included) a mise.toml a `git pull` just brought.
+--- A tool-only file needs no trust. A mise name with a dot can't be written ("tools.a.b" is a nested key).
+---@param root string
+---@param specs string[]
+---@param cb fun(ok: boolean, err?: string)
+function M.use_local(root, specs, cb)
+  local file = vim.fs.joinpath(root, "mise.local.toml")
+  proc.install({ M.bin(), "install", unpack(specs) }, { cwd = "/", env = { MISE_YES = "1" } }, function(ok, err)
+    if not ok then
+      return cb(false, err)
+    end
+    local handle, open_err = io.open(file, "a")
+    if not handle then
+      return cb(false, ("couldn't create %s: %s"):format(file, open_err))
+    end
+    handle:close()
+    local function set(i)
+      local spec = specs[i]
+      if not spec then
+        return cb(true)
+      end
+      local tool, version = spec:match("^(.*)@([^@]*)$")
+      proc.install({ M.bin(), "config", "set", "--file", file, "tools." .. tool, version }, { cwd = "/" }, function(set_ok, set_err)
+        if not set_ok then
+          return cb(false, set_err)
+        end
+        set(i + 1)
+      end)
+    end
+    set(1)
+  end)
+end
+
 --- `mise install <specs>` from /, e.g. "ruff@0.15.0": a project's pinned versions land in mise's shared store without
 --- trusting the project or changing its config, and the project then finds them.
 ---@param specs string[]

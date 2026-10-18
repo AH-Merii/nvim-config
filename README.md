@@ -56,7 +56,9 @@ reads or deletes them now, so remove that directory when you no longer need it. 
   `~/.config/mise/conf.d/nvim-config.toml`, a global mise file of the config's own, so your `config.toml` is left
   alone; when your `config.toml` pins a version that isn't installed, that version is installed and no file changes.
   Update tools with `mise upgrade`; remove one with
-  `mise unuse --path ~/.config/mise/conf.d/nvim-config.toml <tool>`.
+  `mise unuse --path ~/.config/mise/conf.d/nvim-config.toml <tool>`. In a project you can install it for that
+  project only instead: it goes into the project's `mise.local.toml`, which is added to the repo's `.gitignore`
+  unless git already ignores or tracks it.
 - **Format and lint:** automatic, on save (conform.nvim) and on edits (nvim-lint).
 - **Turn off install offers:** `vim.g.install_tools = "off"`.
 
