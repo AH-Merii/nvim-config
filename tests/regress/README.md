@@ -220,7 +220,9 @@ Keymap clashes (`checks/keymap_clashes.lua`, report only). For n, x and o it lis
   GIT_CONFIG_VALUE_0=false` (env only; the user's git config sets fsmonitor on).
 - Every check runs in its own session and process group, tagged with `NVIM_REGRESS_TAG` in its
   environment. A tagged process still alive 3s after the check ends FAILs the check with its name
-  ("leaked: tflint(1234)"), then the group and every tagged process is killed. Known, expected
+  ("leaked: tflint(1234)"), followed by one line per process with its pid, parent pid, age and
+  command line (`ps -o pid=,ppid=,etimes=,args=`; a parent that is gone shows as the reaper, often
+  1), also kept as `LEAK` lines in `last/`; then the group and every tagged process is killed. Known, expected
   leaks go in the check's `@allow-leak` with a reason.
 - Before the run: no text file and no symlink anywhere under `data/` may reach a live nvim dir or an
   old sandbox (copied tool trees start binaries by absolute path; nvim-treesitter links

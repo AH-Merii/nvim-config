@@ -32,6 +32,8 @@ The full proposal, with its measurements and sources, was written outside the re
 - Built: D73, `docs/languages.md` generated from `lang/` by `mise run docs` ("D73: the per-language tool tables are
   generated" below).
 - Decided and built (2026-10-18): D72, linting skips a BufEnter that can't find anything new (below).
+- Fixed: no process a server started outlives the server or Neovim: its process group is killed when the server
+  exits and again at quit ("Server children at quit" below).
 
 ## Target layout
 
@@ -1514,3 +1516,64 @@ BufEnter caught them.
 **Rejected.** Linting on every BufEnter (before). A skip on the changedtick alone: it misses package-wide findings
 after another file's write. Linting only on read, write and InsertLeave (the proposal's option): entering a buffer
 after another file's write would show stale package findings.
+## Server children at quit (2026-10-18)
+
+**Context.** CI run 39121923853 (PR #52, docs only) failed `format_buffer` with `leaked: tflint(1652)`; main's earlier
+runs passed. #37 (a498512) and #42 (7349326) made the VimLeavePre handler in `lsp/init.lua` terminate every server it
+started and wait up to 0.5 s. The suspect was nvim-lint's tflint linter, which no quit handler kills. A sweep of 30
+probe checks, each opening a `.tf` file and quitting 0 to 290 ms later, leaked 7 times in 90 runs, every time
+`tflint --act-as-bundled-plugin` with parent 929 (the user manager reaping orphans). A tracker that recorded each
+child's parent while the probe ran showed all 7 were the plugin of `tflint --langserver`, not of the linter's
+`tflint --act-as-worker`. With the linter stubbed out it leaked 1 in 90, with the tflint server disabled 0 in 90.
+Started by hand, tflint's server mostly handles SIGTERM, exits 0 and stops its plugin, but once in 5 runs
+SIGTERMed 30 ms after initialize it died of the signal (exit -15) and its plugin ran on. So the #42 SIGTERM can land
+while tflint starts its plugin, before it handles the signal. Linters don't outlive Neovim: a stand-in yamllint that
+sleeps 10 s made the quit itself take 10.4 s, so Neovim's exit waits for a running linter.
+
+**Decision.** Any server can exit without stopping its children, so the rule covers every server, not tflint, and
+every way a server exits, not only the quit. Each server is the leader of its own process group: `vim.lsp.rpc.start`
+runs it detached unless told otherwise (runtime `lua/vim/net/_transport.lua:47-50`), and its children are born in that
+group. `lsp/init.lua` records each server's pid with the leader's start time and kills (SIGKILL) what is left of the
+group twice over:
+- when the client sees the server exit (its `on_exit` dispatcher, wrapped in `cmd`): a restart's, `:LspStop`'s or
+  the quit's. vim.system reports the exit only once the server's pipes close (runtime `lua/vim/_core/system.lua:375-416`),
+  so a child that holds them delays this until the quit;
+- at the end of the quit handler, after the terminate and wait, for every group not swept yet, including servers
+  vim.lsp's own handler already saw exit, which waits for a numeric `exit_timeout` (runtime `lua/vim/lsp.lua:1172-1196`).
+
+A group id is reserved while any process is in it; once it is empty, a new process can get the id and lead a group
+of its own. So a group is skipped when a process with the leader's pid runs with another start time
+(`/proc/<pid>/stat`, field 22). The client doesn't expose the server's pid, so `rpc_start` watches the one
+`vim.system` call `vim.lsp.rpc.start` makes and keeps the pid it returns; it warns once if that stops holding.
+
+**Rejected.**
+- *Kill nvim-lint's running linters on quit*: the leaked process was the server's child, and Neovim already waits for a
+  running linter before it exits (above).
+- *Kill only the leader*: the leader is gone already; the orphan is the problem.
+- *Only at the quit, for servers still running when it began* (this branch's first version): a server vim.lsp's
+  handler waited for is gone by then, and a restarted server's children run until the quit. Review reproduced the
+  first with `exit_timeout = 1000`.
+- *Only on the client's exit*: a child holding the server's pipes keeps that from ever firing.
+- *SIGTERM to the group*: a child may ignore it; what is left is orphaned, so there is nothing to shut down gracefully.
+
+**Known limits.** A child that leaves the group (its own `setsid`) escapes. Without procfs (not Linux) the start time
+is unknown and no group is swept. Quitting while a slow linter runs waits for it; not changed here.
+
+**Checks.** `lsp_exit_children.lua`: stand-in ruff servers each start a `sleep 600` child that ignores SIGTERM. One
+never answers initialize, one exits on shutdown, one has `exit_timeout = 1000`, one is restarted mid-check, and its
+child must be gone once its old client is. On `origin/main`'s code every child leaked; with the fix it passes.
+Sibling wrong versions each fail it, every one by a leak or the restart case: no sweep, killing only the leader's pid,
+SIGTERM to the group, `on_exit` not wrapped, no sweep at the quit, sweeping at the quit only leaders still running
+(`~/.cache/nvim-config/linter-leak/variants/run.sh`, results in `result.txt` there). The tflint probe sweep leaked 10
+of 90 runs on `origin/main`'s `lsp/init.lua` and 0 of 90 with the fix
+(`~/.cache/nvim-config/linter-leak/sweep-before-fix.out`, `sweep-after-fix.out`).
+
+The reuse guard has its own unit test, `tests/unit/lsp_test.lua`, through `M._groups` and `M._sweep`: a detached
+`sleep` stands in for a server, recorded with its start time as awk reads field 22 of `/proc/<pid>/stat`; the sweep
+kills it, and leaves it running when the recorded start time is another. The check above passes either way, since none
+of its pids is reused. Wrong versions each fail the unit test: the guard always true, the start time read from field
+21, the sweep doing nothing (`~/.cache/nvim-config/linter-leak/variants/run-guard.sh`, results in `result-guard.txt`).
+
+The suite now prints each leaked process's pid, parent pid, age and command line under the `leaked:` line and keeps
+them as `LEAK` lines in `last/`, which CI uploads, so a leak names its process without a rerun; `selftest/leak.lua`
+checks it.
