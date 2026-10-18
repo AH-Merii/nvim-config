@@ -6,6 +6,12 @@ was made.
 
 ## Status
 
+- Moved (2026-10-18): the code is neoblocks.nvim's `messages` module since v0.3.0 (bb5831c), and
+  `nvim/lua/ui/messages/` is gone. What the user sees below is unchanged; when and where it is set up changed (the
+  module hooks ui2 in the plugins phase, not the options phase, and replays early errors on the tick after UIEnter,
+  not at VeryLazy), as neoblocks' `docs/decisions/messages.md` and D78 of `docs/rearchitecture-decisions.md`
+  record. The file names below are the config's before the move (`toasts.lua` there is `messages.lua` here;
+  `history()` is `history.lua`).
 - Decided: every behaviour below (2026-10-12).
 - Built (2026-10-12) in `nvim/lua/config/ui2/` (now `nvim/lua/ui/messages/`). Full suite 40/40 PASS on nightly.
   The new tmux check `tests/regress/work/ui2-noice/ui2_noice.sh` passes, and fails when the hooks are off. One
@@ -65,7 +71,7 @@ Runtime refs: `R` = nightly runtime (NVIM v0.13.0-dev-1808+g561857c4a8), `N` = n
 
 | File | Does |
 |---|---|
-| `ui/messages/init.lua` | Called from the options phase (`lua/app/init.lua`) right after `ui2.enable()`. Returns early with no UI; runs each module's `setup(ui)` in pcall and warns if one fails or returns false |
+| `ui/messages/init.lua` | Called from the options phase (`lua/app/init.lua`) right after `ui2.enable()` (until D78; now neoblocks' `setup()` in the plugins phase). Returns early with no UI; runs each module's `setup(ui)` in pcall and warns if one fails or returns false |
 | `ui/messages/cmdline.lua` | `:` and `input()` popup; `/` `?` at the bottom |
 | `ui/messages/messages.lua` | Routes messages to toasts or the split; keeps a ring of every message |
 | `ui/messages/history.lua` | `<leader>n` picker over the ring plus `vim.notify` history |
@@ -90,7 +96,8 @@ Runtime refs: `R` = nightly runtime (NVIM v0.13.0-dev-1808+g561857c4a8), `N` = n
 - Wraps `ui.msg.msg_show` (`R/.../ui2/messages.lua:466`). Messages are batched per event-loop tick with
   `vim.schedule`.
 - Left to ui2: `confirm`, `search_cmd`, `search_count`, `empty`, `wildlist`, dialog prompts, block mode, and
-  anything before snacks is set up. Errors and warnings from before setup are replayed as toasts at VeryLazy.
+  anything before snacks is set up. Errors and warnings from before setup are replayed as toasts at VeryLazy (since
+  D78, on the tick after UIEnter, the same moment in this config).
 - Dropped (still in `:messages`), as noice dropped them (`N/config/routes.lua:79-96`): `progress` (lualine shows it),
   `undo`, `quickfix`, `completion`, `verbose`, `shell_cmd`. `shell_ret` is kept: it's how a failed `:!cmd` shows.
 - Toasts: errors and warnings get one toast each; errors use `timeout = 0`, so they stay until dismissed. Info
