@@ -3,8 +3,9 @@
 # The language-tools done check, cheap (one headless Neovim, a few seconds; it does not run the suite):
 #   - tool-audit.lua: the wiring is consistent, no definition duplicates a plugin's built-in, sub-filetypes (the
 #     languages' variants) keep their base's servers and linters;
+#   - docs/languages.md is what `mise run docs` renders from the language files (tests/unit/languages_doc_test.lua);
 #   - each binary and sub-filetype the change added (against the base commit) is in the decisions doc (and CONTRIBUTING.md
-#     for a sub-filetype) and in a regression check; a MISSING line prints the row to add;
+#     for a sub-filetype) and in a regression check; a MISSING line prints what to add;
 #   - the changed Lua under nvim/ is formatted (the suite's stylua).
 # Prints "CHECK OK", or one MISSING line per gap and "CHECK FAILED". BASE=<git ref> overrides the base commit
 # (default: the merge-base with the branch's upstream).
@@ -37,6 +38,13 @@ else
   miss=$((miss + $(grep -cE '^FAIL' <<<"$audit")))
 fi
 
+# docs/languages.md, the per-language and file-scoped tool tables, is generated: it must match the language files
+if u=$(cd "$R" && TMPDIR=$W timeout 60 tests/unit/run.sh languages_doc 2>&1); then ok "docs/languages.md matches the language files"
+else
+  grep -E '^  (FAIL|  )' <<<"$u" | head -6
+  missing "docs/languages.md is out of date: run \`mise run docs\` in $R (never edit it by hand)"
+fi
+
 D=$R/docs/mise-tooling-decisions.md
 section() { awk -v h="## $1" 'index($0, h) == 1 { on=1; next } on && /^## / { exit } on' "$D"; }
 decided=$(sed -n '/^Decided since:/,/^## /p' "$D")
@@ -50,13 +58,6 @@ while IFS=$'\t' read -r kind name spec roles fts; do
     echo "new binary $name (spec ${spec:-none}; $roles; filetypes: ${fts:-none})"
     words="$name $rnames"
     hit() { for w in $words; do grep -qiF -- "$w" <<<"$1" && return 0; done; return 1; }
-    if hit "$(section 'Per-language tools' | grep '^|')"; then ok "the Per-language tools table names $name"
-    else
-      missing "docs/mise-tooling-decisions.md \"Per-language tools\" table does not name $name. Edit the row of its language (filetypes: $fts), or add one; bold the new tool:"
-      for ft in $fts; do
-        sed -n "s/^ft $ft: servers={\(.*\)} formatters={\(.*\)} linters={\(.*\)} tools=.*/        | <language> | \1 | \2 | \3 |/p" <<<"$audit"
-      done
-    fi
     if [ -z "$spec" ]; then ok "$name has no spec (the system provides it)"
     elif v=$("$SK/iso-mise.sh" "$W/mise" mise latest "$spec" 2>&1 | grep -m1 -E "^v?[0-9]+\.[0-9]|ERROR") && [[ $v =~ ^v?[0-9]+\.[0-9] ]]; then ok "mise knows the spec $spec: mise latest printed $v"
     else missing "mise does not know the spec $spec of $name: mise latest printed: $v (references/choose-tool.md, \"Find the mise spec\")"; fi
@@ -70,8 +71,6 @@ while IFS=$'\t' read -r kind name spec roles fts; do
     ;;
   newft)
     echo "new sub-filetype $name ($spec; tools: $roles)"
-    if section 'File-scoped tools' | grep '^|' | grep -qF -- "$name"; then ok "the File-scoped tools table names $name"
-    else missing "docs/mise-tooling-decisions.md \"File-scoped tools\" table has no row for $name. Add: | \`<files>\` | \`$name\` | <its own tools> (lint/format) |"; fi
     if grep -qF -- "$name" "$R/CONTRIBUTING.md"; then ok "CONTRIBUTING.md names $name"
     else missing "CONTRIBUTING.md does not name $name: add it to the sentence that lists the sub-filetypes (grep -n 'toml.pyproject' CONTRIBUTING.md)"; fi
     if grep -qF -- "${name#*.}" <<<"$decided"; then ok "a \"Decided since\" entry names ${name#*.}"
@@ -86,7 +85,8 @@ while IFS=$'\t' read -r kind name spec roles fts; do
     echo "removed binary $name"
     n=$(needs "$name")
     if [ -z "$n" ]; then ok "no check needs $name"; else missing "$name left the catalog, but these checks still list it in @needs: $n"; fi
-    if grep -qF -- "~~$name" "$D"; then ok "the decisions doc strikes $name"; else missing "docs/mise-tooling-decisions.md does not strike $name (~~$name~~) in the Per-language tools table"; fi
+    if grep -qF -- "$name" <<<"$decided"; then ok "a \"Decided since\" entry names $name"
+    else missing "docs/mise-tooling-decisions.md \"Decided since:\" list does not name $name: add a bullet at its top saying it was dropped or replaced, and why"; fi
     ;;
   esac
 done < <(grep -E $'^(new|newft|removed)\t' <<<"$audit")

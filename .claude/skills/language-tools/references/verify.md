@@ -75,8 +75,9 @@ $SK/check.sh $R                                  # FT="<fts>" FILES="<paths>" al
 It compares the change with the base commit (the merge-base with the branch's upstream; `BASE=<ref>` overrides it) and prints `CHECK OK`, or one `MISSING` line per gap:
 
 - **The audit** (`scripts/tool-audit.lua`, in the suite's sandboxed Neovim with a copy of `$R/nvim`). It checks that every server a language names has a catalog entry and an nvim-lspconfig config, and every catalog server is named. conform's `formatters_by_ft` (built from the languages) must hold plain lists, and every formatter and linter name must have a catalog entry and a definition. No definition of the config's own may replace or duplicate a built-in one: same name, or same command. Every sub-filetype must keep its base's servers and linters. It reads config, not binaries.
-- **For each new binary:** mise knows its spec (`mise latest` in an isolated mise), the decisions doc names it (with the rows to add when it doesn't), and a check lists it in `@needs`.
-- **For each new sub-filetype:** the File-scoped tools row, CONTRIBUTING.md, a "Decided since" entry, cases in `tools_subfiletypes.lua`, and another check that opens a matching file.
+- **`docs/languages.md`** matches what `mise run docs` renders (`tests/unit/run.sh languages_doc`).
+- **For each new binary:** mise knows its spec (`mise latest` in an isolated mise), the decisions doc has its "Install specs" row and a "Decided since" entry, and a check lists it in `@needs`.
+- **For each new sub-filetype:** CONTRIBUTING.md, a "Decided since" entry, cases in `tools_subfiletypes.lua`, and another check that opens a matching file.
 - **stylua** on the Lua you changed under `nvim/`.
 
 ## 4. The regression suite

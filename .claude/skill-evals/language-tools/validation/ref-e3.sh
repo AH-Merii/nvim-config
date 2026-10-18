@@ -26,6 +26,6 @@ wait_until(function() return #vim.diagnostic.get(pbuf, { namespace = ns }) > 0 e
 check("plain YAML gets no jactionlint findings", #vim.diagnostic.get(pbuf, { namespace = ns }) == 0, vim.bo[pbuf].filetype)
 LUA
 D=docs/mise-tooling-decisions.md
-perl -0pi -e 's/(\| `pyproject.toml` \| `toml.pyproject` \| pyproject-fmt \(format\) \|\n)/$1| `.github\/dependabot.y{a,}ml` | `yaml.dependabot` | jactionlint (lint) |\n/' $D
+"${NVIM:-nvim}" --clean --headless -l docs/languages.lua >/dev/null
 perl -0pi -e 's/(Decided since:\n\n)/$1- **jactionlint on Dependabot config** (2026-10-12). `.github\/dependabot.yml` is `yaml.dependabot`; jactionlint checks\n  Dependabot files (`jactionlint --help`), and reported `dependabot-syntax` on a bad sample with the current args.\n/' $D
 sed -i 's/Workflow YAML is `yaml.github-actions`, `pyproject.toml` is `toml.pyproject`/Workflow YAML is `yaml.github-actions`, `.github\/dependabot.yml` is `yaml.dependabot`, `pyproject.toml` is `toml.pyproject`/' CONTRIBUTING.md

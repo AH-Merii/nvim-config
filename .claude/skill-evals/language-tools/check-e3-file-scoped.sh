@@ -64,16 +64,17 @@ else
     "checks naming $ft and dependabot: $(paste -sd' ' <<<"$cks"); suite '^($names)\$': $(grep -E '^SUITE (PASS|FAIL)' <<<"$S")${fails:+; failed: $fails $(suite_reasons "$S" "${fails%% *}" | paste -sd' ')}"
 fi
 
-# 6. docs: the decisions doc's File-scoped tools table and decision list, and CONTRIBUTING.md's sub-filetype sentence
+# 6. docs: docs/languages.md is regenerated with the Dependabot variant; the decision list and CONTRIBUTING.md name it
 D=$C/docs/mise-tooling-decisions.md
-row=$(section "$D" "File-scoped tools" | grep '^|' | grep -i dependabot)
+U=$(languages_doc)
+row=$([ -n "$ft" ] && grep -F "| \`$ft\` |" "$C/docs/languages.md")
 decided=$(sed -n '/^Decided since:/,/^## /p' "$D")
 contributing=$(grep -n -i 'dependabot' "$C/CONTRIBUTING.md" | head -2)
 ok=0
-[[ $ft == yaml.* ]] && grep -qF "$ft" <<<"$row" && grep -q jactionlint <<<"$row" && grep -qi dependabot <<<"$decided" &&
+[[ $ft == yaml.* ]] && grep -q '^UNIT PASS' <<<"$U" && grep -qF '`jactionlint`' <<<"$row" && grep -qi dependabot <<<"$decided" &&
   grep -qF "$ft" "$C/CONTRIBUTING.md" && ok=1
-result $ok "the decisions doc's File-scoped tools table and decision list, and CONTRIBUTING.md, name the Dependabot sub-filetype" \
-  "table row: ${row:-none}; decided-since mentions: $(grep -ci dependabot <<<"$decided"); CONTRIBUTING.md lines naming ${ft}: $(grep -cF "$ft" "$C/CONTRIBUTING.md") (${contributing:-no dependabot line})"
+result $ok "docs/languages.md is regenerated with the Dependabot sub-filetype, and the decision list and CONTRIBUTING.md name it" \
+  "languages_doc: $(grep -E '^(PASS|FAIL|UNIT)' <<<"$U" | paste -sd' '); variant row: ${row:-none}; decided-since mentions: $(grep -ci dependabot <<<"$decided"); CONTRIBUTING.md lines naming ${ft}: $(grep -cF "$ft" "$C/CONTRIBUTING.md") (${contributing:-no dependabot line})"
 
 # 7. formatting
 check_stylua

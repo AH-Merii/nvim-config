@@ -1,6 +1,6 @@
 ---
 name: language-tools
-description: Add a language to this Neovim config, or add, swap or remove a language's LSP server, formatter, linter or file-scoped tool, end to end. Covers finding the plugin's built-in definition and the tool's mise spec, the two files to edit (the tool catalog and the language's file in nvim/lua/lang/: servers, formatters, linters, variants, parsers), verifying installs in an isolated mise, the regression checks to add and run, and updating the decisions doc and CONTRIBUTING.md. Use it whenever the user asks for support for a language or file type, a different language server, formatter or linter, or wants a tool to run only on certain files, even if they don't name these files.
+description: Add a language to this Neovim config, or add, swap or remove a language's LSP server, formatter, linter or file-scoped tool, end to end. Covers finding the plugin's built-in definition and the tool's mise spec, the two files to edit (the tool catalog and the language's file in nvim/lua/lang/: servers, formatters, linters, variants, parsers), verifying installs in an isolated mise, the regression checks to add and run, regenerating docs/languages.md, and updating the decisions doc and CONTRIBUTING.md. Use it whenever the user asks for support for a language or file type, a different language server, formatter or linter, or wants a tool to run only on certain files, even if they don't name these files.
 ---
 
 # Language tools
@@ -53,7 +53,7 @@ For a variant, a linter that already runs elsewhere must still report on the new
 
 **5. Add regression checks** (`references/tests.md`): a fixture in the `lsp_attach` list for a server, a `format_<name>.lua` or `lint_<name>.lua` check for a formatter or linter, with `@needs <binary>`. For a sub-filetype, add cases to `tools_subfiletypes.lua` plus a check that opens a matching file. Take expected output from step 3; a guessed rule id fails.
 
-**6. Update the docs** (`references/docs.md`). Name each new tool in `docs/mise-tooling-decisions.md`: its row in "Per-language tools", an "Install specs" row with the spec, and a "Decided since:" bullet with the step 2-3 evidence. A sub-filetype also gets a "File-scoped tools" row and a mention in CONTRIBUTING.md's sentence that lists them. `check.sh` prints any row that is missing.
+**6. Update the docs** (`references/docs.md`). Run `mise run docs` from `R`: it regenerates `docs/languages.md`, the tables of each language's and variant's tools, from the language files. Never edit that file by hand; `tests/unit/languages_doc_test.lua` fails while it is out of date. Then record the choice in `docs/mise-tooling-decisions.md`: an "Install specs" row with the spec, and a "Decided since:" bullet with the step 2-3 evidence. A sub-filetype also gets a mention in CONTRIBUTING.md's sentence that lists them. `check.sh` prints anything missing.
 
 **7. Run the check, then the suite.**
 

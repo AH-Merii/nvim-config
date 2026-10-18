@@ -17,7 +17,7 @@
         "zig buffers format with conform's built-in zigfmt, cataloged with a spec mise knows, and no custom formatter duplicates a built-in",
         "live: zls attaches to a Zig buffer and conform reformats it through zig fmt",
         "regression checks needing zls and the zig formatter exist and pass with startup",
-        "the decisions doc has a Zig per-language row, install-spec rows with the catalog specs, and a decision entry",
+        "docs/languages.md is regenerated with a Zig row, and the decisions doc has install-spec rows with the catalog specs and a decision entry",
         "changed Lua passes stylua --check"
       ]
     },
@@ -30,7 +30,7 @@
         "lua buffers lint with nvim-lint's built-in selene (no custom or duplicate definition), keep lua_ls and stylua, and other filetypes don't get selene",
         "live: selene reports unused_variable on a Lua buffer while lua_ls is attached, and nothing on a sh buffer",
         "a regression check needing selene exists and passes with startup",
-        "the decisions doc names selene in the Lua row, has an install-spec row with its spec, and a decision entry",
+        "docs/languages.md is regenerated with selene in the Lua row, and the decisions doc has an install-spec row with its spec and a decision entry",
         "changed Lua passes stylua --check"
       ]
     },
@@ -44,7 +44,7 @@
         "yamlls still serves the Dependabot sub-filetype",
         "live: jactionlint reports dependabot-syntax on a bad .github/dependabot.yml, yamlls attaches there, and config.yml with the same text gets no jactionlint finding",
         "a regression check expects the Dependabot sub-filetype, and it passes with tools_subfiletypes, lint_jactionlint and startup",
-        "the decisions doc's File-scoped tools table and decision list, and CONTRIBUTING.md, name the Dependabot sub-filetype",
+        "docs/languages.md is regenerated with the Dependabot sub-filetype, and the decision list and CONTRIBUTING.md name it",
         "changed Lua passes stylua --check"
       ]
     }
