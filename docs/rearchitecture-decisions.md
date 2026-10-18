@@ -1568,6 +1568,12 @@ SIGTERM to the group, `on_exit` not wrapped, no sweep at the quit, sweeping at t
 of 90 runs on `origin/main`'s `lsp/init.lua` and 0 of 90 with the fix
 (`~/.cache/nvim-config/linter-leak/sweep-before-fix.out`, `sweep-after-fix.out`).
 
+The reuse guard has its own unit test, `tests/unit/lsp_test.lua`, through `M._groups` and `M._sweep`: a detached
+`sleep` stands in for a server, recorded with its start time as awk reads field 22 of `/proc/<pid>/stat`; the sweep
+kills it, and leaves it running when the recorded start time is another. The check above passes either way, since none
+of its pids is reused. Wrong versions each fail the unit test: the guard always true, the start time read from field
+21, the sweep doing nothing (`~/.cache/nvim-config/linter-leak/variants/run-guard.sh`, results in `result-guard.txt`).
+
 The suite now prints each leaked process's pid, parent pid, age and command line under the `leaked:` line and keeps
 them as `LEAK` lines in `last/`, which CI uploads, so a leak names its process without a rerun; `selftest/leak.lua`
 checks it.
