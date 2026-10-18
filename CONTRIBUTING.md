@@ -74,7 +74,7 @@ nvim/
   `:LspInfo` and `:LspLog`
 - `blink.cmp` adds its completion capabilities to every server through `vim.lsp.config('*')`
   (`blink.cmp/plugin/blink-cmp.lua:1-7`), so a server's config doesn't merge them
-- A feature's `setup()` runs before any plugin loads: what needs a plugin goes in that plugin's spec (`config` or
+- A feature's `setup()` runs before any plugin loads: what needs a plugin goes in that plugin's spec (`setup` or
   `init`), or in a callback given to `require("features").at_very_lazy(fn)`, which runs after the plugins that load
   at `VeryLazy` (the Snacks toggles)
 
@@ -264,11 +264,12 @@ blink.cmp sets its completion capabilities for every server with `vim.lsp.config
 
 ### Conditional Plugin Setup
 
-Gracefully handle missing dependencies:
+Gracefully handle missing dependencies in a spec's `setup`. A plugin that failed to install is never loaded, so
+requiring it fails:
 
 ```lua
-config = function(_, opts)
-    require("plugin").setup(opts)
+setup = function()
+    require("plugin").setup({})
 
     local ok, dep = pcall(require, "dependency")
     if ok then
@@ -276,21 +277,17 @@ config = function(_, opts)
     else
         vim.notify("dependency not found", vim.log.levels.WARN)
     end
-end
+end,
 ```
 
-### VeryLazy Deferred Loading
+### Deferred work
 
-For heavy utilities that depend on plugins being loaded:
+For work that needs the deferred plugins, run after the first screen:
 
 ```lua
-vim.api.nvim_create_autocmd("User", {
-    pattern = "VeryLazy",
-    once = true,
-    callback = function()
-        require("heavy.module")
-    end,
-})
+require("features").at_very_lazy(function()
+    require("heavy.module")
+end)
 ```
 
 ### Autocommand Groups

@@ -119,7 +119,6 @@ mise run test:image suite lsp      # suite.sh args; `unit [args]` for the unit t
 | `cache-seed/` | go-build, golangci-lint, gopls caches copied into each run so linters start warm |
 | `shared-cache/` | Go module and npm download caches, used in place by every run (not copied), so Go and npm runs start warm |
 | `gui.sh` | optional GUI check: a fresh start in ghostty in the `cachyos` QEMU VM, never on the host desktop |
-| `INVENTORY.md` | where every check came from |
 
 ## Add a check
 
@@ -166,7 +165,7 @@ Rules for what goes in:
 
 ### Lua harness API
 
-Globals available to a `.lua` check (cwd is the fixture copy; lazy's VeryLazy has fired):
+Globals available to a `.lua` check (cwd is the fixture copy; VeryLazy has fired):
 
 | name | what |
 | --- | --- |
@@ -194,8 +193,8 @@ ftplugins both `sil! nunmap <buffer> [[` on `:edit!`). Before quitting it waits 
 nvim-lint linters, which the config kills at the quit, so an error a run reports late is still seen. A check
 that must see what a quit leaves running drives its own nvim instead (`checks/lint_quit_kill.sh`).
 
-Headless gotchas the harness handles: lazy's VeryLazy never fires without a UI, so the harness
-fires it after VimEnter; which-key and other VeryLazy plugins are loaded by the time the check
+Headless gotchas the harness handles: the config fires VeryLazy once a UI enters (`lua/app/init.lua`),
+so headless the harness fires it after VimEnter; which-key and the other deferred plugins are loaded by the time the check
 runs. Nightly `:checkhealth` is async. Without a UI the config never prompts or installs
 (`tools.can_install()` is false), so tools come from `--refresh`, never from a check. A check that
 runs a tool itself asks the resolver for it (`require("tools").wait(name, FIX)`: `path`, `env`).

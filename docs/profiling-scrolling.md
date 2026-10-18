@@ -3,6 +3,10 @@
 Why scrolling in `nvimn` felt sluggish, measured on 2026-10-14, and what was changed to fix it while keeping every
 plugin's features (see "Fixes applied").
 
+Measured before the rearchitecture (`docs/rearchitecture-decisions.md`), so the file paths below are the old layout.
+The snacks settings are in `nvim/lua/ui/snacks.lua` now; neoblocks.nvim's statusline replaced lualine (step 4b) and
+likewise isn't rebuilt on a cursor move (CONTRIBUTING.md, "The statusline"); nvim-highlight-colors was removed in #18.
+
 ## Setup
 
 - Neovim nightly v0.13.0-dev-1808+g561857c4a8 through `nvimn`, on `nvim/lua/core/lsp.lua` (247 lines, lua_ls
