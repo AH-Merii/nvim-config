@@ -6,6 +6,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  # A rerun by hand, when a push to main fired no run
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -47,7 +49,7 @@ jobs:
           tags: ${{ env.NVR_IMAGE }}
           load: true
           cache-from: type=gha
-          cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max' || '' }}
+          cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,mode=max' || '' }}
           # lifts GitHub's anonymous API rate limit for mise's installs; a build secret, never in a layer
           secrets: |
             github_token=${{ github.token }}

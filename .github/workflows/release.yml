@@ -3,6 +3,8 @@ name: Release
 on:
   push:
     branches: [main]
+  # A rerun by hand, when a push to main fired no run
+  workflow_dispatch:
 
 permissions: {}
 
@@ -21,6 +23,8 @@ jobs:
     name: Release PR and tags
     # Everything goes through the App's token below, so GITHUB_TOKEN gets nothing.
     permissions: {}
+    # A manual run on another branch must not release it
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
