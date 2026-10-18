@@ -29,7 +29,7 @@ The per-language and file-scoped tables that used to be here moved to `docs/lang
 1. **"Install specs" table** (`| Tool | Spec | Verified |`): add one row per new binary.
    - The Spec column holds the exact catalog spec, plus anything you learned about it: registry or backend, and a runtime need such as "node at runtime".
    - Write `yes` in Verified only if step 3 installed it in the isolated mise and ran it. Otherwise write what is missing.
-   - Example row: `| jactionlint | \`jactionlint\` (registry: \`github:jdx/jactionlint\`; v2.1.0, static binary) | yes |`.
+   - Example row: `| jactionlint | \`jactionlint\` (registry: \`github:jdx/jactionlint\`; v2.2.0, static binary) | yes |`.
 2. **The decision itself:** add a bullet at the top of the "Decided since:" list near the end of "Deviations in the build". The doc puts the newest entries first. Copy the shape of the existing actionlint → jactionlint bullet:
 
    ```markdown
