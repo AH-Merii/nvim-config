@@ -3,7 +3,7 @@
 -- @budget   60
 -- @args     main.lua
 -- @needs    lua-language-server
--- Ported from nvim-sbx-keys/checks2/ghosts.lua. A leaf never mapped in any visited context labels a native
+-- A leaf never mapped in any visited context labels a native
 -- command (]s, za, <C-W>...); those are listed as INFO, not failed.
 
 local function flush()
@@ -44,7 +44,7 @@ local loaded = wait_until(function()
   local c = package.loaded["which-key.config"]
   return c ~= nil and rawget(c, "loaded") == true
 end, 5000)
-if not check("which-key loaded its spec", loaded, "which-key.config never reached loaded") then return end
+if not check("which-key loaded its spec", loaded, not loaded and "which-key.config never reached loaded" or nil) then return end
 local Buf = require("which-key.buf")
 local SKIP = { ["'"] = true, ["`"] = true, ['"'] = true }
 

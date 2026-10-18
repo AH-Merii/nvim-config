@@ -2,7 +2,8 @@
 -- @areas    lint lsp
 -- @budget   150
 -- @fixture  lintdup
--- @needs    biome ruff tflint rust-analyzer
+-- @needs    biome ruff tflint rust-analyzer cargo-clippy
+-- @allow-leak biome biome's daemon (biome __run_server) runs in its own session, which the server-group sweep can't reach (docs/rearchitecture-decisions.md, "Server children at quit", Known limits)
 local lint = require("lint")
 
 -- names of the namespaces reporting a diagnostic whose code or message contains `pat`

@@ -113,7 +113,7 @@ mise run test:image suite lsp      # suite.sh args; `unit [args]` for the unit t
 | `areas.map` | config file glob to areas, for `--changed` |
 | `checks/` | the kept checks |
 | `selftest/` | checks that must fail in a given way (`@expect-fail <regex>`), for changes to the runner |
-| `work/<feature>/` | checks of a feature in development, optional `fixtures/` |
+| `work/<feature>/` | checks of a feature in development, optional `fixtures/`; `work/.gitkeep` keeps the dir, which the test image copies, while no feature is |
 | `fixtures/<name>/` | fixture trees; `default` is a small git repo with one file per language |
 | `data/` | `data/nvim`: seed XDG_DATA_HOME (plugins in `site/pack/core/opt`, parsers), each version runs on a reflink copy; `data/mise`, `data/rustup`: the suite's tools, used in place |
 | `cache-seed/` | go-build, golangci-lint, gopls caches copied into each run so linters start warm |

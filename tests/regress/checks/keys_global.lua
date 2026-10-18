@@ -1,9 +1,8 @@
 -- @desc     with no git, no LSP and the cwd outside git, the global find/search maps run and open pickers, and every globally mapped Snacks toggle flips and flips back
 -- @areas    keys which-key ui git
 -- @budget   20
--- Ported from nvim-sbx-keys/checks2/regress.lua. Guards the global keys while context-gated keys come and go. Its
--- lazy.nvim parts went with lazy.nvim (step 6b): plugin keys are key rows now (keys_map_desc), and app_on_demand
--- covers the PR review commands.
+-- The keys that need no context: every one must work where no git, LSP or linter is around. Gated keys have their
+-- own checks (keys_*_gate, keys_git_context).
 
 local cur, n, bad
 local function done()
