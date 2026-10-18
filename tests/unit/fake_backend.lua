@@ -10,6 +10,8 @@
 --   })
 --   tools.setup({ backend = backend })
 --   backend.calls                                               -- { { "use_global", { "ruff@latest" } }, ... }
+--   backend.untrusted[root] = "mise.toml"                       -- mise refuses calls in root over that config
+--   backend.during_use_local = function(root) ... end           -- runs inside a project-only install
 
 local catalog = require("tools.catalog")
 local h = require("helper")
@@ -24,7 +26,7 @@ return function(opts)
   local dir = h.tmpdir()
   local global = vim.deepcopy(opts.global or {}) ---@type table<string, string>
   local global_pins = vim.deepcopy(opts.global_pins or {}) ---@type table<string, string>
-  local B = { calls = {} } ---@type tools.Backend|{ calls: { [1]: string, [2]: any }[] }
+  local B = { calls = {}, untrusted = {} } ---@type tools.Backend|{ calls: { [1]: string, [2]: any }[], untrusted: table<string, string>, during_use_local?: fun(root: string) }
 
   ---@param bin string
   ---@param version string
@@ -75,6 +77,11 @@ return function(opts)
 
   function B.scan_project(root, cb)
     local scan = { configs = {}, pins = {}, dirs = {}, all = {} } ---@type tools.ProjectScan
+    if B.untrusted[root] then
+      scan.untrusted = root .. "/" .. B.untrusted[root]
+      scan.configs = { scan.untrusted }
+      return vim.schedule(function() cb(scan) end)
+    end
     local pins = (opts.projects or {})[root]
     if pins then
       local files = {} ---@type table<string, string[]> config -> its lines
@@ -150,6 +157,9 @@ return function(opts)
   --- Pins each spec's binaries in the root's mise.local.toml, installed, at opts.latest (default "1.0.0") for "latest".
   function B.use_local(root, specs, cb)
     table.insert(B.calls, { "use_local", root, specs })
+    if B.during_use_local then
+      B.during_use_local(root)
+    end
     opts.projects = opts.projects or {}
     opts.projects[root] = opts.projects[root] or {}
     for _, spec in ipairs(specs) do

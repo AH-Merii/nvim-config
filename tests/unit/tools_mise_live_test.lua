@@ -35,11 +35,13 @@ h.case("a project-only install in a project with an untrusted exec config runs n
   local root = tmp .. "/project"
   local pwned = root .. "/pwned"
   h.write(root .. "/mise.toml", { "[tools]", "[env]", ("PWN = \"{{exec(command='touch %s')}}\""):format(pwned) })
-  local trust = run({ "trust", "--show" }, root).stdout
+  -- mise keeps one entry per trusted path in its state dir's trusted-configs/, here a throwaway one
+  local function trusted() return vim.fn.readdir(vim.env.MISE_STATE_DIR .. "/trusted-configs") end
+  vim.fn.mkdir(vim.env.MISE_STATE_DIR .. "/trusted-configs", "p")
   local ok, err = h.await(function(done) mise.use_local(root, { "jq@latest" }, done) end, 300000)
   h.ok(ok, "the install failed: " .. tostring(err))
   h.eq(vim.uv.fs_stat(pwned) ~= nil, false, "the exec ran")
-  h.eq(run({ "trust", "--show" }, root).stdout, trust, "mise trust --show")
+  h.eq(trusted(), {}, "mise's trusted configs")
   h.eq(vim.fn.readfile(root .. "/mise.local.toml"), { "[tools]", 'jq = "latest"' }, "mise.local.toml")
   -- The [env] keeps mise out of the dir until trusted; without it, the untrusted, tool-only config is used
   h.write(root .. "/mise.toml", { "[tools]" })

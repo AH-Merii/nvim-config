@@ -18,13 +18,15 @@ vim.env.HOME = tmp .. "/home"
 -- `ls ... -C /` (global configs only) prints $FAKE_MISE_LS; without `-C /` it prints a project's tools.
 -- Each call is logged to $tmp/calls as "<cwd>|<MISE_YES>|<args>". Trust lives in $tmp/trusted, one dir per line: like
 -- mise, `use --path <file>` trusts the file's dir. `config set --file <file> tools.<tool> <version>` adds the tool to
--- an existing file and, like mise, fails on a missing one; `install` installs nothing.
+-- an existing file and, like mise, fails on a missing one, or on any file with FAKE_MISE_UNTRUSTED set (mise's
+-- paranoid mode refuses an untrusted file); `install` installs nothing.
 h.write(tmp .. "/bin/mise", {
   "#!/bin/sh",
   ("trusted=%s/trusted; touch $trusted; echo \"$PWD|$MISE_YES|$*\" >> %s/calls"):format(tmp, tmp),
   'if [ "$1" = install ]; then exit 0; fi',
   'if [ "$1 $2 $3" = "config set --file" ]; then',
   '  [ -f "$4" ] || { echo "mise ERROR config file not found: $4" >&2; exit 1; }',
+  '  [ -z "$FAKE_MISE_UNTRUSTED" ] || { echo "mise ERROR Config files in $4 are not trusted." >&2; exit 1; }',
   '  case "$5" in tools.*) echo "${5#tools.} = \\"$6\\"" >> "$4"; exit 0 ;; *) exit 2 ;; esac',
   "fi",
   'if [ "$1" = ls ]; then case " $* " in *" -C / "*) cat "$FAKE_MISE_LS" ;; *) echo \'{"ruff":[{"version":"0.1.0","installed":false,"source":{"path":"/p/mise.toml"}}]}\' ;; esac; exit 0; fi',
@@ -158,6 +160,44 @@ h.case("a project-only install puts the tool in the project root's mise.local.to
     h.eq(read(root .. "/mise.local.toml"), vim.list_extend(vim.deepcopy(before or {}), { 'ruff = "latest"' }), what .. ": mise.local.toml")
     h.ok(vim.iter(calls()):any(function(c) return c.args == "install ruff@latest" end), what .. ": no install: " .. vim.inspect(calls()))
     h.eq({ read(dir .. "/mise/conf.d/nvim-config.toml"), read(dir .. "/mise/config.toml") }, { nil, user }, what .. ": the global files")
+  end
+end)
+
+h.case("a project-only install never writes through a mise.local.toml that is a link", function()
+  -- A repo can ship mise.local.toml as a link to a file outside it, existing or not
+  for _, exists in ipairs({ false, true }) do
+    local dir = fresh()
+    local root, target = dir .. "/project", dir .. "/outside/evil.toml"
+    vim.fn.mkdir(root, "p")
+    vim.fn.mkdir(dir .. "/outside", "p")
+    if exists then
+      h.write(target, { "# theirs" })
+    end
+    vim.uv.fs_symlink(target, root .. "/mise.local.toml")
+    vim.fn.writefile({}, tmp .. "/calls")
+    local ok, err = h.await(function(done) mise.use_local(root, { "ruff@latest" }, done) end)
+    local what = exists and "a link to a file" or "a dangling link"
+    h.eq(ok, false, what .. ": the install succeeded")
+    h.ok(type(err) == "string" and err:find("link", 1, true), what .. ": the error: " .. tostring(err))
+    h.eq(read(target), exists and { "# theirs" } or nil, what .. ": the link's target")
+  end
+end)
+
+h.case("when mise refuses to write mise.local.toml, a file the install created is removed and one it found is kept", function()
+  -- In paranoid mode mise refuses `config set` on an untrusted file; an empty file left behind would make the root
+  -- look like an untrusted project
+  for _, before in ipairs({ false, { "[tools]", 'stylua = "2.0.0"' } }) do
+    local dir = fresh()
+    local root = dir .. "/project"
+    vim.fn.mkdir(root, "p")
+    if before then
+      h.write(root .. "/mise.local.toml", before)
+    end
+    vim.env.FAKE_MISE_UNTRUSTED = "1"
+    local ok = h.await(function(done) mise.use_local(root, { "ruff@latest" }, done) end)
+    vim.env.FAKE_MISE_UNTRUSTED = nil
+    local what = before and "an existing file" or "no file before"
+    h.eq({ ok, read(root .. "/mise.local.toml") }, { false, before or nil }, what)
   end
 end)
 

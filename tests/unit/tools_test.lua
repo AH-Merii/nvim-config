@@ -250,6 +250,50 @@ h.case("in a project, a missing tool it doesn't pin is offered for the project o
   end
 end)
 
+h.case("a project-only install carries the prompt's answer over only to the configs it saw plus mise.local.toml", function()
+  -- A terminal `git pull` can add, change or remove a project config after the last scan, or during the install
+  local pulls = {
+    { "a new tools-only config", nil, function(pins) pins.stylua = "2.0.0" end },
+    { "a new untrusted config", nil, function(_, backend, root) backend.untrusted[root] = "mise.toml" end },
+    { "a changed config", "use", function(pins) pins.stylua = "2.1.0" end },
+    -- mise's paranoid mode refuses even the file the install wrote
+    { "an untrusted mise.local.toml", nil, function(_, backend, root) backend.untrusted[root] = "mise.local.toml" end },
+  }
+  ---@param answered? tools.Choice the answer for a mise.toml pinning stylua 2.0.0; nil for no config
+  local function offered(answered)
+    local pins = answered and { stylua = "2.0.0" } or {}
+    local root, _, backend = setup({ project = pins })
+    git(root, "init", "-q")
+    if answered then
+      require("tools.state").set(h.await(function(done) tools.project(root, done) end).configs, answered)
+      tools.refresh()
+    end
+    local offer = resolve("ruff", root).install
+    h.ok(offer and offer.project_only, "no project-only offer: " .. vim.inspect(offer))
+    return root, pins, backend, offer.project_only
+  end
+  for _, when in ipairs({ "after the offer", "during the install" }) do
+    for _, pull in ipairs(pulls) do
+      local root, pins, backend, inst = offered(pull[2])
+      local function run() pull[3](pins, backend, root) end
+      if when == "after the offer" then
+        run()
+      else
+        backend.during_use_local = run
+      end
+      local what = ("%s %s"):format(pull[1], when)
+      h.eq(apply({ { name = "ruff", install = inst } }, root).ok, true, what .. ": the install")
+      h.eq(choice(root), nil, what .. ": the answer")
+    end
+  end
+  -- A config gone by the install leaves only the file the install wrote
+  local root, pins, _, inst = offered("use")
+  pins.stylua = nil
+  vim.fn.delete(root .. "/mise.toml")
+  h.eq(apply({ { name = "ruff", install = inst } }, root).ok, true, "a removed config: the install")
+  h.eq({ choice(root), found("ruff", root).source }, { "installed", "project-mise" }, "a removed config")
+end)
+
 h.case("with a global pin that isn't installed, a project also gets the project-only offer", function()
   local root = setup({ global_pins = { shfmt = "3.10.0" } })
   git(root, "init", "-q")
@@ -268,19 +312,23 @@ end)
 h.case("no project-only offer outside a project, in HOME, where its config isn't in use, or with a missing runtime", function()
   local root = setup({})
   h.eq(resolve("ruff", root).install, { kind = "global", spec = "ruff@latest" }, "outside a project")
-  -- A ~/.venv or a stray ~/node_modules makes HOME the root; a mise.local.toml there would apply everywhere under it
+  -- A ~/.venv or a stray ~/node_modules makes HOME the root; a mise.local.toml there would apply everywhere under it,
+  -- as it would in a dir above HOME. HOME may be a link to the dir the root names (a home on another disk, say), and
+  -- an empty HOME can't be told apart from any root
   local home = vim.env.HOME
-  for _, link in ipairs({ false, true }) do
+  for _, where in ipairs({ "HOME with a .venv", "HOME a link to the root", "HOME below the root", "HOME empty" }) do
     root = setup({})
     vim.fn.mkdir(root .. "/.venv", "p")
-    -- HOME may be a link to the dir the root names (a home on another disk, say)
-    vim.env.HOME = link and (root .. "-link") or root
-    if link then
+    vim.env.HOME = ({ ["HOME with a .venv"] = root, ["HOME a link to the root"] = root .. "-link", ["HOME below the root"] = root .. "/me", ["HOME empty"] = "" })[where]
+    if where == "HOME a link to the root" then
       vim.uv.fs_symlink(root, vim.env.HOME)
+    elseif where == "HOME below the root" then
+      vim.fn.mkdir(vim.env.HOME, "p")
     end
-    local inst = resolve("ruff", root).install
+    local ok, result = pcall(resolve, "ruff", root)
     vim.env.HOME = home
-    h.eq(inst, { kind = "global", spec = "ruff@latest" }, link and "HOME a link to the root" or "HOME with a .venv")
+    assert(ok, result)
+    h.eq(result.install, { kind = "global", spec = "ruff@latest" }, where)
   end
   for _, answer_with in ipairs({ false, "global" }) do
     root = setup({ project = { stylua = "2.0.0" } })
@@ -292,10 +340,14 @@ h.case("no project-only offer outside a project, in HOME, where its config isn't
   root = setup({})
   git(root, "init", "-q")
   h.eq(resolve("yaml-language-server", root).install, { kind = "global", spec = "npm:yaml-language-server@latest", runtime = "node" }, "no node")
-  -- `mise config set` reads a dot as a key separator: tools.go:golang.org/... can't be written
+  -- `mise config set` can't write a key with a dot (tools.go:golang.org/...) or a bracket (ubi:o/r[exe=x])
   root = setup({ global = { go = "1.25.0" } })
   git(root, "init", "-q")
   h.eq(resolve("gopls", root).install, { kind = "global", spec = "go:golang.org/x/tools/gopls@latest" }, "a mise name with a dot")
+  require("tools.catalog").tools["bracketed-tool"] = { spec = "ubi:owner/repo[exe=bracketed-tool]" }
+  local bracketed = resolve("bracketed-tool", root).install
+  require("tools.catalog").tools["bracketed-tool"] = nil
+  h.eq(bracketed, { kind = "global", spec = "ubi:owner/repo[exe=bracketed-tool]@latest" }, "a mise name with a bracket")
 end)
 
 h.case("a project that pins the tool gets its pinned version offered, not a project-only install", function()
@@ -380,6 +432,18 @@ h.case("git's repo-locating environment and settings never move the .gitignore e
   git(root, "config", "core.worktree", parent)
   local after, said = install_here(root)
   h.eq({ after, contents(parent .. "/.gitignore") }, {}, "core.worktree: the .gitignore files")
+  h.ok(#said == 1 and said[1][2] == WARN and vim.startswith(said[1][1], "Not adding mise.local.toml to .gitignore: "), vim.inspect(said))
+  -- A dotfiles repo checked out in HOME holds every project below it that has no repo of its own
+  root = setup({})
+  local home, user_home = vim.fs.dirname(root), vim.env.HOME
+  git(home, "init", "-q")
+  h.write(root .. "/pyproject.toml", { "[project]" })
+  vim.env.HOME = home
+  local ok
+  ok, after, said = pcall(install_here, root)
+  vim.env.HOME = user_home
+  assert(ok, after)
+  h.eq({ after, contents(home .. "/.gitignore") }, {}, "a repo in HOME: the .gitignore files")
   h.ok(#said == 1 and said[1][2] == WARN and vim.startswith(said[1][1], "Not adding mise.local.toml to .gitignore: "), vim.inspect(said))
 end)
 
