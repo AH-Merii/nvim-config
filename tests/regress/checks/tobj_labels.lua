@@ -22,7 +22,7 @@ local MODES = { "n", "x", "o" }
 -- ---- what each key means built in: index.txt, and the --clean nvim's default maps --------------------------------
 -- section -> modes; a normal-mode motion (note 1) also counts in x and o; in x any normal command does
 local SECTIONS = { ["2"] = { "n" }, ["2.1"] = { "x", "o" }, ["2.3"] = { "n" }, ["2.4"] = { "n" }, ["2.5"] = { "n" }, ["2.6"] = { "o" }, ["3"] = { "x" } }
-local builtin = { n = {}, x = {}, o = {} }
+local builtin, per_sec = { n = {}, x = {}, o = {} }, {}
 do
   local sec, after_rule, in_table, last = nil, false, false, nil
   local rows = {}
@@ -32,7 +32,9 @@ do
     elseif after_rule then
       after_rule = false
       sec = line:match("^(%d+)%.%s") or line:match("^(%d+%.%d+)%s")
-    elseif sec and SECTIONS[sec] and line:match("^%-%-%-%-+ ~$") then
+    -- a table starts at its column headings ("Tag  Char  Note Normal-mode action ~"); help files before
+    -- neovim/neovim@d65f9daf45 put a "----- ~" rule under them, which reads as a non-row line
+    elseif sec and SECTIONS[sec] and line:match("^Tag%s.*~$") then
       in_table = true
     elseif in_table then
       local tag, rest = line:match("^|([^|]+)|%s*(.*)$")
@@ -50,6 +52,7 @@ do
   end
   for _, r in ipairs(rows) do
     if r.desc ~= "" and not r.desc:match("^not used") and not r.desc:match("^reserved") then
+      per_sec[r.sec] = (per_sec[r.sec] or 0) + 1
       local modes = vim.list_extend({}, SECTIONS[r.sec])
       if r.sec ~= "2.1" and r.sec ~= "2.6" and r.sec ~= "3" then
         modes[#modes + 1] = "x"
@@ -62,7 +65,22 @@ do
     end
   end
 end
-check("index.txt parses: ]p in n, ip in x and o, ]] in o", builtin.n["]p"] ~= nil and builtin.x.ip ~= nil and builtin.o.ip ~= nil and builtin.o["]]"] ~= nil)
+-- a parse that finds too little stops the check here: every verdict below would only repeat it, as a wrong label
+local empty = {}
+for s in vim.spairs(SECTIONS) do
+  if not per_sec[s] then empty[#empty + 1] = s end
+end
+local index_ok = check("index.txt: every section's table has commands", #empty == 0, #empty > 0 and ("none in " .. table.concat(empty, ", ")) or nil)
+-- one long-standing key from each section, in the modes the section gives it
+local KNOWN = { n = { "w", "]p", "gg", "zz" }, x = { "w", "ip", "o" }, o = { "w", "ip", "]]", "v" } }
+local absent = {}
+for m, keys in vim.spairs(KNOWN) do
+  for _, k in ipairs(keys) do
+    if not builtin[m][k] then absent[#absent + 1] = m .. " " .. k end
+  end
+end
+index_ok = check("index.txt: long-standing keys parse into their modes", #absent == 0, #absent > 0 and ("missing: " .. table.concat(absent, ", ")) or nil) and index_ok
+if not index_ok then return end
 
 local defaults = {}
 do
