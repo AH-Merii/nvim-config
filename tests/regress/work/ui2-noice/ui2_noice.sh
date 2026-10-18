@@ -55,13 +55,13 @@ reset() {
   wait_for 3000 is "mode()" n
 }
 
-# Probes, read over --remote-expr. ui2 is private (vim._core.ui2), the same internals ui/messages hooks.
+# Probes, read over --remote-expr. ui2 is private (vim._core.ui2), the same internals neoblocks.messages hooks.
 cat >"$FIX/.nvr-probe.lua" <<'EOF'
 P = {}
 local api, ui = vim.api, require("vim._core.ui2")
 function P.mode() return api.nvim_get_mode().mode end
--- ui.messages's wrappers are installed (they put ui2's handlers back when an internal they use moved)
-function P.hooked() return ui.cmd ~= nil and ui.cmd.cmdline_show == require("ui.messages.cmdline").cmdline_show end
+-- neoblocks.messages's wrappers are installed (they put ui2's handlers back when an internal they use moved)
+function P.hooked() return ui.cmd ~= nil and ui.cmd.cmdline_show == require("neoblocks.messages.cmdline").cmdline_show end
 -- ui2's cmd window: relative, title and 'cmdheight'
 function P.cmd()
   local c = api.nvim_win_get_config(ui.wins.cmd)
@@ -131,10 +131,10 @@ if ! wait_for 20000 test -e "$READY"; then
 fi
 wait_for 3000 is "mode()" n
 if ! is "hooked()" true; then
-  fail "ui.messages hooks ui2's cmdline" "ui2.cmd.cmdline_show is not ui.messages.cmdline's wrapper: a ui2 internal it needs moved (see :messages / the WARN toast)"
+  fail "neoblocks.messages hooks ui2's cmdline" "ui2.cmd.cmdline_show is not neoblocks.messages.cmdline's wrapper: a ui2 internal it needs moved (see :checkhealth neoblocks / the WARN toast)"
   finish
 fi
-pass "ui.messages hooks ui2's cmdline"
+pass "neoblocks.messages hooks ui2's cmdline"
 
 # ':' in noice's command palette: a bordered popup titled Cmdline, the last row stays the statusline, cmdheight stays 0
 reset

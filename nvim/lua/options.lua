@@ -48,7 +48,10 @@ vim.opt.listchars = {
 
 vim.opt.cmdheight = 0
 vim.o.showcmd = true
-vim.o.showcmdloc = "statusline" -- partial commands in the statusline; ui.messages.showcmd makes it "last" and draws them there itself
+-- Partial commands in the statusline. neoblocks' messages module owns it once it loads (lua/ui/statusline.lua): "last"
+-- while its hook draws them, "statusline" otherwise. This covers the time before, and a session where neoblocks
+-- isn't installed, whose default 'statusline' draws %S only with "statusline" (Neovim's default is "last")
+vim.o.showcmdloc = "statusline"
 
 -- Floats that set no border of their own (LSP hover and signature help, diagnostic floats, ui2's
 -- message window) get a rounded one. blink, gitsigns and snacks also fall back to it where this

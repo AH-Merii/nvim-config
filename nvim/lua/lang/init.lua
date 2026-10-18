@@ -370,7 +370,8 @@ function M._from(specs, problems)
     })
     if #problems > 0 then
       local msg = "lua/lang/ has problems; what they name is skipped:\n- " .. table.concat(problems, "\n- ")
-      vim.schedule(function() vim.notify(msg, vim.log.levels.ERROR, { title = "lang" }) end)
+      -- held until the startup phases are done, so it is a toast (lua/app/init.lua)
+      require("app").report(msg, "lang")
     end
   end
 

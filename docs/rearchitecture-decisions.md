@@ -34,6 +34,10 @@ The full proposal, with its measurements and sources, was written outside the re
 - Decided and built (2026-10-18): D72, linting skips a BufEnter that can't find anything new (below).
 - Fixed: no process a server started outlives the server or Neovim: its process group is killed when the server
   exits and again at quit ("Server children at quit" below).
+- Decided and built (2026-10-18): D78, messages and the command line come from neoblocks' messages module, and
+  neoblocks loads at startup (below).
+- Decided (2026-10-18): D93, an amendment to D61: a one-off cost is judged by its delta, not by whether the
+  total crosses ~100 ms ("D61 amendment" below).
 
 ## Target layout
 
@@ -50,7 +54,7 @@ nvim/
     ├── linting/        lint, what runs, nvim-lint adapter (not lint/: step 2)
     ├── keys/           rows, needs, which-key adapter, toggles, Neovim's keys as rows
     ├── textobjects/    treesitter objects and moves (kept)
-    ├── ui/             facts, statusline, theme, messages (ui2, kept), picker, notify
+    ├── ui/             facts, statusline, theme, picker, notify; messages are neoblocks' (D78)
     └── features/       git, search, editing, completion, folds, diagnostics, windows, lua-dev, profiling
 tests/
 ├── unit/               no plugins, fake tool backend
@@ -1303,8 +1307,8 @@ listed under Decisions; nothing else.
   - Buffer: nvim-lint and nvim-origami. lazy loaded origami at `BufReadPre` or `BufWinEnter`, so with no file it was
     loaded at the first screen; now a session that reads no file never loads it. Its maps (`h`, `l`, `^`, `$`) and
     fold options arrive with the first file (the dump with a file matches; with none, they are absent).
-  - Deferred, the default: mini.icons, neoblocks, conform, which-key, flash, diffview, tiny-inline-diagnostic,
-    trouble, nvim-autopairs, lazydev, vim-tmux-navigator. lazy loaded autopairs at InsertEnter, lazydev at
+  - Deferred, the default: mini.icons, neoblocks (startup since D78), conform, which-key, flash, diffview,
+    tiny-inline-diagnostic, trouble, nvim-autopairs, lazydev, vim-tmux-navigator. lazy loaded autopairs at InsertEnter, lazydev at
     `FileType lua`, and trouble, diffview and tmux-navigator at their commands or keys; now they load after the first
     screen. Loading them earlier only makes their listeners earlier: autopairs' `<CR>` map and buffer listeners,
     trouble's window and colorscheme listeners, lazydev's LspAttach listener (which acts on lua_ls only) and
@@ -1577,3 +1581,102 @@ of its pids is reused. Wrong versions each fail the unit test: the guard always 
 The suite now prints each leaked process's pid, parent pid, age and command line under the `leaked:` line and keeps
 them as `LEAK` lines in `last/`, which CI uploads, so a leak names its process without a rerun; `selftest/leak.lua`
 checks it.
+
+## D78: messages and the command line come from neoblocks' messages module (2026-10-18)
+
+**Context.** `nvim/lua/ui/messages/` gave ui2 noice's look: `:` in a popup, messages as snacks.notifier toasts, long
+output in a split, a message history and the pending keys in the statusline (`docs/ui2-noice-parity-decisions.md`).
+That code moved to neoblocks.nvim as its `messages` module, released in v0.3.0 (commit bb5831c, `git ls-remote
+https://github.com/AH-Merii/neoblocks.nvim refs/tags/v0.3.0`). neoblocks records what the move changed in its
+`docs/decisions/messages.md`; the behaviour is the one decided in the parity doc. The module hooks ui2 when
+neoblocks is set up, and neoblocks loaded at `deferred` (step 6b), after the first screen, so it has to load earlier.
+
+**Decision.** The user's call: neoblocks loads at startup, and the config's copy goes.
+
+- The neoblocks spec gets `phase = "startup"`, and its one `require("neoblocks").setup()` gets
+  `messages = { ui2 = require("app").ui2 }` (`lua/ui/statusline.lua:9,294`). snacks comes first in the same phase
+  (`M.adapters` in `lua/features/init.lua:19`), so toasts work from the moment the module hooks ui2.
+- The options phase keeps its `ui2.enable(M.ui2)` (`lua/app/init.lua:15,28`): it catches the messages before the
+  plugins phase, and the module's `setup()` sees ui2 on and doesn't enable it again (neoblocks
+  `lua/neoblocks/messages/init.lua:104`). When the options phase raises before that call (as
+  `checks/app_install_fails.lua` makes it), the module enables ui2 itself, with its `ui2` option (`:104-105`), so
+  both paths get the same targets from `M.ui2`. `require("ui.messages").setup()` and `nvim/lua/ui/messages/` are gone.
+- The statusline's pending keys are `Neoblocks.messages.showcmd()` (`lua/ui/statusline.lua:282`). `<leader>n` opens
+  `require("neoblocks").messages.history()`, and says neoblocks.nvim isn't loaded where it failed to install or load
+  (`lua/ui/snacks.lua:164-170`; `checks/history_key_without_neoblocks.lua`). The statusline needs no such guard: it is
+  neoblocks', so without neoblocks Neovim's default 'statusline' draws the pending keys through `%S`. The lock file
+  pins neoblocks at bb5831c (from db1fced).
+- 'showcmdloc' is the module's while its pending-keys part runs: "last" while the hook is in, "statusline" while it's
+  switched off or the hook failed (neoblocks `lua/neoblocks/messages/showcmd.lua`, `place()`). `options.lua:54` keeps
+  setting "statusline": it applies before neoblocks loads, and in a session where neoblocks isn't installed, whose
+  default 'statusline' draws pending keys through `%-10S` only with "statusline" (Neovim's default is "last";
+  `nvim --clean --headless` on v0.13.0-dev-1868 prints both).
+- `tests/regress/checks/showcmd_pending.lua` is gone: neoblocks' `tests/messages_spec.lua` ("pending() leaves out a
+  lone key whose command runs at once...", :677) has its 25 cases, fed through ui2's `msg_showcmd` with a UI attached,
+  plus one for the 10-character cut. `checks/pending_keys.sh` still checks the keys in the config's statusline in a
+  TUI. `work/ui2-noice/ui2_noice.sh` probes `neoblocks.messages.cmdline`.
+
+**Where it differs from the old code, on purpose.**
+
+- *Reports before the plugins phase's startup plugins.* The old hooks went in at the options phase, so an error or
+  warning shown before snacks was set up was kept and replayed as a toast at VeryLazy, and listed in the history
+  (old `ui/messages/messages.lua:321-323,388-394`). With the hooks in the plugins phase, the reports made before
+  neoblocks loads only got ui2's msg window, which clears, and `:messages` (found in review): app's failed phase,
+  vim.pack's failed install (`lua/app/plugins.lua:231`, which asks the user to restart before `:packupdate`), a
+  plugin given twice (`:194`), a failed `init` or setup (`:50`), and lang's mistakes in a language file
+  (`lua/lang/init.lua:374`). These now go through `require("app").report()` (`lua/app/init.lua:97`), which holds a
+  report made while `start()` runs its phases and sends them once the phases are done (`:139-149`), when snacks is
+  `vim.notify` and the module hooks ui2: each is a toast and in the history again. `vim.schedule`, which lang used,
+  is not enough: vim.pack's install turns the event loop inside the plugins phase, so a scheduled report ran before
+  neoblocks loaded. `checks/app_startup_reports.sh` checks all three kinds in a TUI with a failing install: it fails
+  on the code before this (every assertion), and with lang's report scheduled (its two lang assertions). If snacks
+  fails to load, a held report goes to Neovim's `vim.notify`, so to ui2 or the module as any message; if neoblocks
+  fails, snacks still toasts it and keeps it in its own history (`:lua Snacks.notifier.show_history()`).
+  `checks/app_install_fails.lua` reads the reports from snacks.notifier's history as well as `:messages`, since
+  they now reach the notifier.
+- *'showcmdloc'* is set by the module, not by the config (above); `:Neoblocks messages off` turns the whole module
+  back into plain ui2, with Neovim's own `%S` for the pending keys (neoblocks decisions 6).
+- *The pending-keys hook is guarded at run time* like the other two parts, and `:checkhealth neoblocks` says which
+  parts are on (neoblocks decisions 1). The old `showcmd.lua` had no run-time guard.
+- *The early replay* runs on the tick after UIEnter, where the old one ran at VeryLazy: the same moment here, since
+  `app.start()` fires VeryLazy on that tick (`lua/app/init.lua`, the UIEnter autocmd).
+
+**Cost.** One-off class (startup, ~100 ms budget, once per start). Measured before this change against its
+prototype (`~/.cache/nvim-config/neoblocks-messages/startup/`, `bench.sh` and `bench-tui.sh`, `cfgA` today's main
+and `cfgB` this change; 7 rounds of 3 runs per side, interleaved): headless `NVIM STARTED` 78.7 ms against 86.1 ms
+pooled, +7.4 ms, slower in 7 of 7 rounds; the plugins phase +8.4 ms (`python3 stats.py headless.txt`). Real, and
+under the budget headless.
+
+In a real terminal (a Ghostty 1.3.1 window from niri-screen-lab, nightly v0.13.0-dev-1868, `NVIM STARTED` from
+`--startuptime`, the regress sandbox's config and data, no file; 5 rounds of 3 runs per side, interleaved, load
+average about 2.5; `~/.cache/nvim-config/neoblocks-messages/startup/ghostty/`): origin/main 95.2 ms against this
+branch 103.8 ms pooled, +8.6 ms, slower in 4 of 5 rounds; 12 of this branch's 15 runs were over 100 ms, 4 of main's
+15. Taken as real: the headless rounds agree 7 of 7 on the same direction and size, though these 4 of 5 alone fall
+short of D61's round rule. Unfelt, and accepted (D93, the user, 2026-10-18): about 10 ms once per start "would be
+almost impossible to detect", even though it takes the total past the nominal ~100 ms ("D61 amendment" below). A
+first try, while another session's cargo build held the load average near 25, gave 250 to 870 ms per start on both
+sides and was dropped.
+
+**Rejected.**
+
+- Keep neoblocks deferred and call the module's `setup()` at the options phase: neoblocks isn't on the runtimepath
+  before vim.pack loads it in the plugins phase.
+- Drop the config's `ui2.enable()` and pass the targets as the module's `ui2` option: the messages of the registries
+  and tools phases would then not reach ui2 at all.
+- Drop `vim.o.showcmdloc = "statusline"`: without neoblocks the pending keys would show nowhere ('cmdheight' is 0).
+
+## D61 amendment: a one-off cost is judged by its delta (2026-10-18, D93)
+
+**Context.** D61 says what counts as a performance regression: it must be real (every interleaved round agrees on the
+direction, or 7 of 8) and felt, where felt is a keystroke crossing one 8.3 ms frame or startup going past ~100 ms
+(`~/.cache/nvim-config/rearch/agent-common.md:45-47`, the rules every rearchitecture agent follows; D61 has no section
+of its own here). D78 moved startup in a real terminal from 95.2 to 103.8 ms (its Cost above), so by the letter of
+D61 a real ~10 ms delta became "felt" only because the total crossed the line.
+
+**Decision (D93, the user).** Budgets aren't cliffs. For a one-off cost (startup, the first use of a feature), judge
+the size of the delta, not whether the total crosses ~100 ms: about 10 ms "for something that runs once ... would be
+almost impossible to detect". Scrutiny stays where a cost repeats inside one felt moment: per key, per scroll and per
+line drawn, with D61's frame budget. D78's startup cost is accepted on this rule.
+
+**Rejected.** Treating ~100 ms as a hard line for one-off costs: it would turn an undetectable delta into a regression
+because of where the total happened to sit.

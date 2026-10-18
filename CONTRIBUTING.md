@@ -24,15 +24,16 @@ setup tells you if yours doesn't.
 `init.lua` enables `vim.loader` (Neovim's byte-compiled module cache, before the first require) and calls
 `require("app").start()`. `lua/app/init.lua` runs the startup phases in the order of its `M.phases` list, each once:
 
-1. `options` - `lua/options.lua` (editor-wide options and `mapleader`), then ui2 and `ui.messages`, before any
-   message can be lost
+1. `options` - `lua/options.lua` (editor-wide options and `mapleader`), then ui2, before any message can be lost
 2. `registries` - Neovim's own keys as key rows (`keys.neovim`), each language file's `keys` rows (`keys.languages`),
    the LSP keys (`lsp.buffer`), and each feature's `setup()` in the order of `M.features` in
    `lua/features/init.lua`: its rows, needs, autocmds and options
 3. `tools` - The languages' variant filetypes and buffer options (`lang.setup()`), the tool
    resolver, install prompts and `:Tools` (before any plugin looks a tool up)
 4. `plugins` - `lua/app/plugins.lua`: vim.pack installs what every module's `plugins` names
-   (`require("features").plugins()`) and the disk lacks, then the startup plugins load
+   (`require("features").plugins()`) and the disk lacks, then the startup plugins load. neoblocks is one: its
+   messages module hooks ui2 here. Startup's own reports (`require("app").report()`) wait until the phases above are
+   done, so they become toasts and enter the message history; other messages before it skip them
 5. `servers` - `lsp.setup()`: one `vim.lsp.config` per server a language names, then `vim.lsp.enable`
 6. `buffer` - At the first `BufReadPre` or `BufNewFile`: the plugins that serve files (nvim-lint, origami)
 7. `deferred` - At `VeryLazy`, after the first screen: the deferred plugins, then the callbacks given to
@@ -60,8 +61,8 @@ nvim/
 │   ├── keys/                # Key rows and needs (init.lua), the which-key adapter, Neovim's own keys as rows, and
 │   │                        # the language files' rows (languages.lua)
 │   ├── textobjects/         # The treesitter text objects and moves
-│   ├── ui/                  # The theme, icons, snacks (picker, notifier), the statusline, ui2's messages and
-│   │                        # command line (messages/), and facts.lua: what applies to each buffer
+│   ├── ui/                  # The theme, icons, snacks (picker, notifier), the statusline (with neoblocks' messages:
+│   │                        # ui2's messages and command line), and facts.lua: what applies to each buffer
 │   └── features/            # One module per feature, owning its plugins, keys, autocmds and options; init.lua
 │                            # lists them and the adapters that bring plugins
 ```

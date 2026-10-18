@@ -38,7 +38,7 @@
       "src": "https://github.com/nvim-mini/mini.icons"
     },
     "neoblocks.nvim": {
-      "rev": "db1fcedaeae898647332b12d10128e8d88c5ce09",
+      "rev": "bb5831c3a0d37959c8303e9739de0d7c180be21d",
       "src": "https://github.com/AH-Merii/neoblocks.nvim"
     },
     "nvim-autopairs": {

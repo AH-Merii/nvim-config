@@ -4,6 +4,9 @@ local spec = {
   src = "AH-Merii/neoblocks.nvim",
   -- $NVIM_PLUGIN_DEV/neoblocks.nvim, when set, instead of the installed copy (lua/app/plugins.lua)
   dev = true,
+  -- At startup, not deferred: its messages module hooks ui2 (:h ui2), and every message before that skips the
+  -- toasts and the history (docs/rearchitecture-decisions.md, D78)
+  phase = "startup",
   setup = function()
     local sl = require("neoblocks.statusline")
     -- What the segments show of a buffer's servers, tools and checkout (lua/ui/facts.lua); this spec only draws it
@@ -273,10 +276,10 @@ local spec = {
         icon = "",
         color = { fg = colors.yellow, bold = true },
       },
-      -- Pending keys (e.g. a count), shown here since 'cmdheight' is 0: through ui.messages.showcmd, which leaves out
-      -- keys whose command runs at once, or Neovim's own %S without ui2
+      -- Pending keys (e.g. a count), shown here since 'cmdheight' is 0: through neoblocks' messages module, which
+      -- leaves out keys whose command runs at once, or Neovim's own %S without ui2
       {
-        function() return require("ui.messages.showcmd").active and "%{v:lua.require'ui.messages.showcmd'.get()}" or "%S" end,
+        function() return Neoblocks.messages.showcmd() end,
         color = { fg = colors.fg },
       },
     }
@@ -285,6 +288,10 @@ local spec = {
     -- go live
     ---------------------------------------------------------------------------
     require("neoblocks").setup({
+      -- noice's look on ui2: ':' in a popup, messages as snacks.notifier toasts, long output in a split, the message
+      -- history and the pending keys above. The options phase enabled ui2 already, unless it failed before; then the
+      -- module enables it, with the same options (lua/app/init.lua)
+      messages = { ui2 = require("app").ui2 },
       statusline = {
         color = { fg = colors.fg },
         left = left,
