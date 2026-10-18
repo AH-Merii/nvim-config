@@ -134,7 +134,7 @@ fi
 # ---- one check ---------------------------------------------------------------------------------
 # run_check <version> <file>: appends "<ver>\t<name>\t<PASS|FAIL>\t<secs>\t<budget>\t<areas>\t<reasons>" to results
 run_check() {
-  local v=$1 f=$2 name budget fixture args fdir fix st data out err tag pid t0 secs over=0 rc reasons=() pids leftover allow
+  local v=$1 f=$2 name budget fixture args fdir fix st data out err tag pid t0 secs over=0 rc reasons=() pids leftover allow details=() d lpid lppid lage largs
   name=$(basename "$f"); name=${name%.*}
   budget=$(header "$f" budget)
   local areas; areas=$(header "$f" areas)
@@ -198,9 +198,20 @@ run_check() {
       local comm; comm=$(cat "/proc/$p/comm" 2>/dev/null) || continue
       allow=
       while read -r re _; do [ -n "$re" ] && [[ $comm =~ ^($re)$ ]] && allow=1; done < <(header_all "$f" allow-leak)
-      [ -n "$allow" ] && echo "allowed leak: $comm($p)" >>"$out" || leftover="$leftover $comm($p)"
+      if [ -n "$allow" ]; then
+        echo "allowed leak: $comm($p)" >>"$out"
+      else
+        leftover="$leftover $comm($p)"
+        # who started it and when, kept in the output and in last/: the parent is often gone, its pid then names a reaper
+        read -r lpid lppid lage largs < <(ps -o pid=,ppid=,etimes=,args= -p "$p") &&
+          details+=("pid $lpid ppid $lppid age ${lage}s: $largs")
+      fi
     done
     [ -n "$leftover" ] && reasons+=("leaked:$leftover")
+    for d in "${details[@]}"; do
+      reasons+=("$d")
+      echo "LEAK $d" >>"$out"
+    done
     kill -TERM -- "-$pid" 2>/dev/null
     # shellcheck disable=SC2086
     kill_pids TERM $pids
