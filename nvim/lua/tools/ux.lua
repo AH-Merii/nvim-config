@@ -263,6 +263,8 @@ local function install_text(inst, subject, names)
     return ("Install %s for this project with mise"):format(inst.version)
   elseif inst.kind == "project" then
     return ("Install %sfor this project with mise (trusts %s)"):format(it, inst.config or "mise.toml")
+  elseif inst.kind == "local" then
+    return ("Install %sfor this project only"):format(it)
   end
   return ""
 end
@@ -526,6 +528,11 @@ local function offer_group(ft, offers, root, done)
       text = ("Install %s and %s globally with mise"):format(subject, join(runtimes))
     end
     table.insert(options, { items = items, text = text })
+  end
+  -- D100: in a project, the same tools for this project alone (mise.local.toml), which outranks a global pin too
+  if vim.iter(results):all(function(r) return r.install.project_only ~= nil end) then
+    local here = vim.tbl_map(function(r) return { name = r.name, install = r.install.project_only } end, results)
+    table.insert(options, { items = here, text = install_text(first.project_only, subject) })
   end
   table.insert(options, { text = not_now })
   local keys = vim.tbl_map(function(o) return o.key end, offers)
@@ -830,6 +837,9 @@ function M.actions(result, buf, servers, version)
     offer(inst, install_text(inst))
     if inst.kind == "pinned" and inst.global then
       offer(inst.global, "Install globally with mise (latest)")
+    end
+    if inst.project_only then
+      offer(inst.project_only, install_text(inst.project_only))
     end
   end
   for _, extra in ipairs(result.offers or {}) do

@@ -15,8 +15,8 @@ M.event = "ToolsChanged"
 ---@alias tools.Source "project-env"|"project-mise"|"global-mise"|"system"|"missing"
 
 ---@class tools.Install
----@field kind "global"|"component"|"pinned"|"project"|"none" a global `mise use` (tools.mise.tools_file), `rustup component add`, `mise install <tool>@<pinned version>` (the project's pin, or the global config's), project `mise install`, or nothing to offer
----@field spec? string global: the tool's `mise use` argument, e.g. "ruff@latest", nil when only its runtime is missing; pinned: "ruff@0.15.0"
+---@field kind "global"|"component"|"pinned"|"project"|"local"|"none" a global `mise use` (tools.mise.tools_file), `rustup component add`, `mise install <tool>@<pinned version>` (the project's pin, or the global config's), project `mise install`, `mise use` into the project's mise.local.toml, or nothing to offer
+---@field spec? string global, local: the tool's `mise use` argument, e.g. "ruff@latest", nil when only its runtime is missing; pinned: "ruff@0.15.0"
 ---@field runtime? string global: a runtime (catalog.runtimes) missing from PATH, installed in the same step, e.g. "node"
 ---@field component? string component: the rustup component; global with runtime "rust": the component added after rust
 ---@field toolchain? string component: the toolchain the project pins in rust-toolchain(.toml), e.g. "1.92"
@@ -24,6 +24,7 @@ M.event = "ToolsChanged"
 ---@field config? string pinned, project: file name of the config that pins it
 ---@field scope? "global" pinned: the user's global mise config pins the version, not the project
 ---@field global? tools.Install pinned: the global install offered instead
+---@field project_only? tools.Install global: the same tool for this project only (kind "local"), offered alongside in a project
 
 ---@class tools.Copy
 ---@field path string
@@ -63,6 +64,7 @@ M.event = "ToolsChanged"
 ---@field clean_path fun(): string[] Neovim's PATH without the backend's shims and install dirs (the system layer)
 ---@field missing fun(): string? why installs can't run, nil when they can
 ---@field use_global fun(specs: string[], cb: fun(ok: boolean, err?: string)) global install into the config's own global mise file, e.g. "ruff@latest"
+---@field use_local fun(root: string, specs: string[], cb: fun(ok: boolean, err?: string)) install for root's project only, into its mise.local.toml
 ---@field install fun(specs: string[], cb: fun(ok: boolean, err?: string)) a pinned version, e.g. "ruff@0.15.0"
 ---@field trust fun(configs: string[], root: string, cb: fun(ok: boolean, err?: string))
 ---@field install_project fun(root: string, cb: fun(ok: boolean, err?: string)) every tool the project pins
@@ -113,6 +115,39 @@ end
 
 ---@param root string
 local function norm(root) return vim.fs.normalize(vim.fs.abspath(root)) end
+
+-- What makes a dir a project root (vim.fs.root's markers: the first list wins over .git)
+local project_markers = {
+  {
+    "mise.toml",
+    ".mise.toml",
+    "mise.local.toml",
+    ".mise",
+    ".tool-versions",
+    ".venv",
+    "node_modules",
+    "pyproject.toml",
+    "package.json",
+    "Cargo.toml",
+    "go.mod",
+  },
+  ".git",
+}
+
+--- Whether root is a project's root (holds one of its markers), not just the dir of a file outside any project. HOME
+--- and / never are: a ~/.venv makes HOME a root, and a mise.local.toml there would apply to every dir below it.
+---@param root string
+local function is_project(root)
+  if root == "/" or root == vim.fs.normalize(vim.uv.os_homedir() or "") then
+    return false
+  end
+  for _, marker in ipairs(vim.iter(project_markers):flatten():totable()) do
+    if vim.uv.fs_stat(vim.fs.joinpath(root, marker)) then
+      return true
+    end
+  end
+  return false
+end
 
 ---@param cb fun(dirs: string[])
 local function global_dirs(cb)
@@ -375,7 +410,18 @@ local function compute(name, root, done)
             local runtime = entry.runtime and entry.runtime ~= "rust" and not has_runtime(entry.runtime, env) and entry.runtime or nil
             local pinned = entry.spec and project.pins[entry.spec]
             local pin_missing = pinned and not pinned.installed and not project.untrusted
-            local global = entry.spec and { kind = "global", spec = entry.spec .. "@latest", runtime = runtime } or nil
+            -- D100: in a project the tool can go to the project alone (its mise.local.toml), unless the project pins
+            -- it, its mise config isn't in use (the file would join an unanswered or declined config) or a runtime
+            -- is missing too
+            local project_only = entry.spec
+                and not pinned
+                and not runtime
+                and not project.untrusted
+                and (#project.configs == 0 or project.active)
+                and is_project(root)
+                and { kind = "local", spec = entry.spec .. "@latest" }
+              or nil
+            local global = entry.spec and { kind = "global", spec = entry.spec .. "@latest", runtime = runtime, project_only = project_only } or nil
             ---@type tools.Install?
             local for_project = pin_missing
                 and project.choice == "installed"
@@ -401,7 +447,8 @@ local function compute(name, root, done)
                     local spec = ("%s@%s"):format(entry.spec, pin.version)
                     return missing(
                       ("pinned by your global %s but not installed"):format(config),
-                      { kind = "pinned", spec = spec, version = pin.version, config = config, scope = "global" }
+                      -- A project's mise.local.toml outranks the global pin, so the project-only install works too
+                      { kind = "pinned", spec = spec, version = pin.version, config = config, scope = "global", project_only = project_only }
                     )
                   end
                   missing(runtime and ("not installed, and %s is not on PATH"):format(runtime) or "not installed", global)
@@ -512,22 +559,7 @@ end
 ---@return string?
 function M.project_root(buf)
   buf = (buf == nil or buf == 0) and vim.api.nvim_get_current_buf() or buf
-  local root = vim.fs.root(buf, {
-    {
-      "mise.toml",
-      ".mise.toml",
-      "mise.local.toml",
-      ".mise",
-      ".tool-versions",
-      ".venv",
-      "node_modules",
-      "pyproject.toml",
-      "package.json",
-      "Cargo.toml",
-      "go.mod",
-    },
-    ".git",
-  })
+  local root = vim.fs.root(buf, project_markers)
   return root and norm(root)
 end
 
@@ -799,6 +831,88 @@ function M.install_project(root, cb)
   scan(root, trust)
 end
 
+--- Puts mise.local.toml in the top-level .gitignore of the git repo root is in, when the repo's rules neither ignore
+--- it nor un-ignore it ("!mise.local.toml") and the repo doesn't track it. A bare name ignores it in every dir, so it
+--- is one line per repo. cb gets the notification to show: what changed, or why .gitignore was left alone; nil when
+--- nothing needed changing.
+---@param root string
+---@param cb fun(note?: { [1]: string, [2]: integer })
+local function ignore_local(root, cb)
+  local name = "mise.local.toml"
+  -- -n -v: exit 1 only when no pattern matches; --no-index: by the rules alone; outside a repo: 128
+  proc.run({ "git", "check-ignore", "--no-index", "-n", "-v", name }, { cwd = root }, function(check)
+    if check.code ~= 1 then
+      return cb(nil)
+    end
+    proc.run({ "git", "ls-files", "--error-unmatch", name }, { cwd = root }, function(tracked)
+      if tracked.code == 0 then
+        return cb(nil)
+      end
+      proc.run({ "git", "rev-parse", "--show-toplevel" }, { cwd = root }, function(top)
+        if top.code ~= 0 then
+          return cb(nil)
+        end
+        local path = vim.fs.joinpath(vim.trim(top.stdout), ".gitignore")
+        local link = vim.uv.fs_readlink(path)
+        if link then
+          -- A stowed .gitignore, say: the edit would land outside the repo
+          local text = ("Not adding %s to .gitignore: it is a link to %s"):format(name, vim.fn.fnamemodify(link, ":~"))
+          return cb({ text, vim.log.levels.WARN })
+        end
+        local file = io.open(path, "rb")
+        local text = file and file:read("*a") or ""
+        if file then
+          file:close()
+        end
+        local written, err = false, nil
+        file, err = io.open(path, "ab")
+        if file then
+          written, err = file:write((text ~= "" and not text:find("\n$")) and "\n" or "", name, "\n")
+          file:close()
+        end
+        if not written then
+          return cb({ ("Couldn't add %s to .gitignore: %s"):format(name, err or "write failed"), vim.log.levels.ERROR })
+        end
+        cb({ ("Added %s to .gitignore"):format(name), vim.log.levels.INFO })
+      end)
+    end)
+  end)
+end
+
+--- `mise use --path <root>/mise.local.toml <specs>` (D100): tools for root's project only, then refresh. The answer
+--- to the project prompt carries over to the project's configs with the new file ("installed" when there was none),
+--- so the tools are used at once; in a git repo the file goes into root's .gitignore (ignore_local), with a toast.
+---@param specs string[]
+---@param root string
+---@param cb? fun(ok: boolean, err?: string)
+function M.install_local(specs, root, cb)
+  root = norm(root)
+  local report = reporter(cb, "Tools")
+  local missing = backend.missing()
+  if missing then
+    return report(false, missing)
+  end
+  scan(root, function(before)
+    install_run(function(done) backend.use_local(root, specs, done) end, function(ok, err)
+      if not ok then
+        return report(false, err)
+      end
+      projects[root] = nil
+      scan(root, function(project)
+        if #project.configs > 0 then
+          state.set(project.configs, before.active and before.choice or "installed")
+        end
+        ignore_local(root, function(note)
+          if note then
+            vim.notify(note[1], note[2], { title = "Tools" })
+          end
+          report(true)
+        end)
+      end)
+    end)
+  end)
+end
+
 ---@class tools.InstallItem
 ---@field name string catalog binary
 ---@field install tools.Install
@@ -815,6 +929,7 @@ function M.apply(items, root, cb)
   local pinned = { specs = {}, names = {} }
   local component = { components = {}, names = {} }
   local project = {} ---@type string[]
+  local here = { specs = {}, names = {} }
   for _, item in ipairs(items) do
     local inst = item.install
     if inst.kind == "global" then
@@ -836,6 +951,9 @@ function M.apply(items, root, cb)
       add(component.names, item.name)
     elseif inst.kind == "project" then
       add(project, item.name)
+    elseif inst.kind == "local" then
+      add(here.specs, inst.spec)
+      add(here.names, item.name)
     end
   end
 
@@ -873,6 +991,10 @@ function M.apply(items, root, cb)
   if #project > 0 then
     left = left + 1
     M.install_project(root, step(project))
+  end
+  if #here.specs > 0 then
+    left = left + 1
+    M.install_local(here.specs, root, step(here.names))
   end
   step({})(true)
 end

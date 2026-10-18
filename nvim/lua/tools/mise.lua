@@ -214,6 +214,41 @@ function M.use_global(specs, cb)
   proc.install({ M.bin(), "use", "--path", M.tools_file(), unpack(specs) }, { cwd = "/", env = { MISE_YES = "1" } }, cb)
 end
 
+--- Whether mise trusts root itself, from `mise trust --show` in root ("~/src/app: trusted"; a trusted parent dir
+--- doesn't count).
+---@param root string
+---@param cb fun(trusted: boolean)
+local function trusts(root, cb)
+  M.mise({ "trust", "--show" }, { cwd = root }, function(out)
+    for line in vim.gsplit(out.stdout, "\n", { plain = true }) do
+      local path, state = line:match("^(.-): (%a+)$")
+      if path and state == "trusted" and vim.fs.normalize(path) == root then
+        return cb(true)
+      end
+    end
+    cb(false)
+  end)
+end
+
+--- `mise use --path <root>/mise.local.toml <specs>` in root: tools for that project only. mise trusts the dir of the
+--- file it writes, and with it any [env] the project's mise.toml gains later (an exec template that a `git pull` adds
+--- would then run on the config's next mise call), so a root that wasn't trusted is untrusted again; a file that only
+--- pins tools needs no trust.
+---@param root string
+---@param specs string[]
+---@param cb fun(ok: boolean, err?: string)
+function M.use_local(root, specs, cb)
+  local file = vim.fs.joinpath(root, "mise.local.toml")
+  trusts(root, function(trusted)
+    proc.install({ M.bin(), "use", "--path", file, unpack(specs) }, { cwd = root, env = { MISE_YES = "1" } }, function(ok, err)
+      if not ok or trusted then
+        return cb(ok, err)
+      end
+      proc.install({ M.bin(), "trust", "--untrust", file }, { cwd = root }, cb)
+    end)
+  end)
+end
+
 --- `mise install <specs>` from /, e.g. "ruff@0.15.0": a project's pinned versions land in mise's shared store without
 --- trusting the project or changing its config, and the project then finds them.
 ---@param specs string[]
