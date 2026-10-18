@@ -1,7 +1,7 @@
 -- A fake tool backend (tools.Backend) for unit tests: mise's answers come from a table, and each tool it holds is a
 -- real executable in a throwaway install dir whose `--version` prints its version. It supports only what the unit
--- tests use: global tools, a project's pins, the global config's pins, global installs and installs of a pinned
--- version; the other installs raise.
+-- tests use: global tools, a project's pins, the global config's pins, global installs, installs of a pinned
+-- version and project-only installs (into the root's mise.local.toml); the other installs raise.
 --
 --   local backend = fake({
 --     global = { ruff = "0.17.0", node = "22.0.0" },            -- catalog binary (or runtime binary) -> version
@@ -17,6 +17,7 @@ local h = require("helper")
 ---@class fake.Pin
 ---@field version string
 ---@field installed? boolean default true
+---@field config? string the project config's file name, default "mise.toml"
 
 ---@param opts { global?: table<string, string>, projects?: table<string, table<string, string|fake.Pin>>, global_pins?: table<string, string>, latest?: string }
 return function(opts)
@@ -76,20 +77,23 @@ return function(opts)
     local scan = { configs = {}, pins = {}, dirs = {}, all = {} } ---@type tools.ProjectScan
     local pins = (opts.projects or {})[root]
     if pins then
-      local config = root .. "/mise.toml"
-      local lines = { "[tools]" }
+      local files = {} ---@type table<string, string[]> config -> its lines
       for bin, pin in vim.spairs(pins) do
         pin = type(pin) == "string" and { version = pin } or pin
+        local config = root .. "/" .. (pin.config or "mise.toml")
         local installed = pin.installed ~= false
         local bindir = ("%s/installs/%s/%s/bin"):format(dir, bin, pin.version)
         scan.pins[tool_of(bin)] = { version = pin.version, installed = installed, source = config, dir = vim.fs.dirname(bindir) }
         if installed then
           table.insert(scan.dirs, install(bin, pin.version))
         end
-        table.insert(lines, ('"%s" = "%s"'):format(tool_of(bin), pin.version))
+        files[config] = files[config] or { "[tools]" }
+        table.insert(files[config], ('"%s" = "%s"'):format(tool_of(bin), pin.version))
       end
-      h.write(config, lines)
-      scan.configs = { config }
+      for config, lines in vim.spairs(files) do
+        h.write(config, lines)
+        table.insert(scan.configs, config)
+      end
       scan.all = vim.list_extend(vim.list_slice(scan.dirs), global_dirs())
     end
     vim.schedule(function() cb(scan) end)
@@ -138,6 +142,20 @@ return function(opts)
       local tool, version = spec:match("^(.*)@([^@]*)$")
       for _, bin in ipairs(bins_of(tool)) do
         global[bin] = version
+      end
+    end
+    vim.schedule(function() cb(true) end)
+  end
+
+  --- Pins each spec's binaries in the root's mise.local.toml, installed, at opts.latest (default "1.0.0") for "latest".
+  function B.use_local(root, specs, cb)
+    table.insert(B.calls, { "use_local", root, specs })
+    opts.projects = opts.projects or {}
+    opts.projects[root] = opts.projects[root] or {}
+    for _, spec in ipairs(specs) do
+      local tool, version = spec:match("^(.*)@([^@]*)$")
+      for _, bin in ipairs(bins_of(tool)) do
+        opts.projects[root][bin] = { version = version == "latest" and (opts.latest or "1.0.0") or version, config = "mise.local.toml" }
       end
     end
     vim.schedule(function() cb(true) end)

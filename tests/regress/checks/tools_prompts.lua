@@ -1,4 +1,4 @@
--- @desc     with a UI: a project mise config that pins tools asks once with three choices (two when it is untrusted), one that pins none never asks, a missing tool is offered once and only on files it runs on, no prompt shows a command, and library code, git files and install_tools = "off" never ask; nothing installs
+-- @desc     with a UI: a project mise config that pins tools asks once with three choices (two when it is untrusted), one that pins none never asks, a missing tool is offered once and only on files it runs on (in a project also for the project only), no prompt shows a command, and library code, git files and install_tools = "off" never ask; nothing installs
 -- @areas    tools ui
 -- @budget   40
 -- @needs    jactionlint yaml-language-server
@@ -13,7 +13,8 @@ local prompts = {}
 vim.ui.select = function(items, opts, on_choice)
   local texts = vim.tbl_map(function(i) return opts.format_item and opts.format_item(i) or i end, items)
   table.insert(prompts, { kind = opts.kind, prompt = opts.prompt, items = texts })
-  local decline = opts.kind == "tools.install" and 2 or nil -- "Not now"; the project prompt is dismissed
+  -- "Not now"; the project prompt is dismissed
+  local decline = opts.kind == "tools.install" and vim.iter(ipairs(texts)):find(function(_, t) return vim.startswith(t, "Not now") end) or nil
   vim.schedule(function() on_choice(decline and items[decline], decline) end)
 end
 local ran = {}
@@ -97,6 +98,11 @@ check('no prompt with vim.g.install_tools = "off"', #got == 0, show(got))
 vim.g.install_tools = nil
 got = open("on/Dockerfile", { "FROM scratch" })
 check("control: a Dockerfile elsewhere does prompt", #got > 0 and got[1].prompt:find("hadolint") ~= nil, show(got))
+check(
+  "in a project (the fixture is a git repo), a missing tool is also offered for the project only",
+  got[1] ~= nil and vim.list_contains(got[1].items, "Install it globally with mise") and vim.list_contains(got[1].items, "Install it for this project only"),
+  got[1] and vim.inspect(got[1].items)
+)
 
 -- The prompts say what happens in words; the commands behind them are not the user's concern
 local commands = {}

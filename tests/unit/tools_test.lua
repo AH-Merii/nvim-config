@@ -11,8 +11,11 @@ local tmp = h.tmpdir()
 -- The answers to the project prompt are real local state; keep them out of the live state dir
 require("tools.state").file = tmp .. "/state/projects.json"
 
+-- git stays reachable on the system PATH each case sets: project-only installs use it (D100)
+local git_bin = vim.fn.exepath("git")
+
 local n = 0
---- A fresh project root and system PATH dir, and the resolver on a fake backend built from spec.
+--- A fresh project root and system PATH dir holding git, and the resolver on a fake backend built from spec.
 ---@param spec table fake_backend's opts; spec.projects is keyed "root", replaced by the new root
 ---@return string root, string system, table backend
 local function setup(spec)
@@ -21,6 +24,7 @@ local function setup(spec)
   local system = ("%s/%d/system"):format(tmp, n)
   vim.fn.mkdir(root, "p")
   vim.fn.mkdir(system, "p")
+  vim.uv.fs_symlink(git_bin, system .. "/git")
   vim.env.PATH = system
   local backend = fake({ global = spec.global, global_pins = spec.global_pins, projects = spec.project and { [root] = spec.project } or nil })
   tools.setup({ backend = backend })
@@ -108,7 +112,11 @@ h.case("a copy below the minimum version is skipped", function()
   result = resolve("tsc", root)
   h.eq(
     { source = result.source, install = result.install },
-    { source = "missing", install = { kind = "global", spec = "npm:typescript@latest" } },
+    -- node_modules makes the root a project, so the project-only install is offered too (D100)
+    {
+      source = "missing",
+      install = { kind = "global", spec = "npm:typescript@latest", project_only = { kind = "local", spec = "npm:typescript@latest" } },
+    },
     "no copy new enough"
   )
 end)
@@ -163,6 +171,198 @@ h.case("without a global pin that isn't installed, the offer is the global insta
   answer(root, "installed")
   local inst = resolve("shfmt", root).install
   h.eq({ inst.kind, inst.spec, inst.scope }, { "pinned", "shfmt@3.8.0" }, "a project pin as well, in use")
+end)
+
+-- D100: in a project, a missing tool the project doesn't pin can be installed for the project only, into the root's
+-- mise.local.toml, which is then kept out of git. git is real, in throwaway repos, with no system or user config.
+vim.env.GIT_CONFIG_NOSYSTEM, vim.env.GIT_CONFIG_GLOBAL, vim.env.GIT_CEILING_DIRECTORIES = "1", tmp .. "/gitconfig", tmp
+h.write(tmp .. "/gitconfig", { "[user]", "name = t", "email = t@t" })
+
+---@param dir string
+---@param ... string git args
+local function git(dir, ...)
+  local out = vim.system({ git_bin, ... }, { cwd = dir, text = true }):wait()
+  assert(out.code == 0, out.stderr)
+end
+
+-- Every notification from here on, to see the .gitignore toast: { text, level }
+local notes = {} ---@type { [1]: string, [2]: integer }[]
+vim.notify = function(msg, level) table.insert(notes, { msg, level }) end
+local INFO, WARN, ERROR = vim.log.levels.INFO, vim.log.levels.WARN, vim.log.levels.ERROR
+local toast = { { "Added mise.local.toml to .gitignore", INFO } }
+
+--- Runs tools.apply for items as if a UI were attached and returns its callback's args.
+local function apply(items, root)
+  local list_uis = vim.api.nvim_list_uis
+  vim.api.nvim_list_uis = function() return { {} } end
+  local ok, errs, failed = h.await(function(done) tools.apply(items, root, done) end)
+  vim.api.nvim_list_uis = list_uis
+  return { ok = ok, errs = errs, failed = failed }
+end
+
+---@param path string
+---@return string? contents, nil when there is no such file
+local function contents(path)
+  local ok, lines = pcall(vim.fn.readfile, path, "b")
+  return ok and table.concat(lines, "\n") or nil
+end
+
+--- Installs name (default ruff) for root's project only; returns what the gitignore file (default root's .gitignore)
+--- holds afterwards, nil when there is none, and the notifications it gave.
+---@param root string
+---@param gitignore? string
+---@param name? string
+local function install_here(root, gitignore, name)
+  name = name or "ruff"
+  local result = resolve(name, root)
+  h.ok(result.install and result.install.project_only, "no project-only offer: " .. vim.inspect(result.install))
+  notes = {}
+  h.eq(apply({ { name = name, install = result.install.project_only } }, root), { ok = true, errs = {}, failed = {} }, "the install")
+  return contents(gitignore or (root .. "/.gitignore")), notes
+end
+
+---@param root string
+---@return tools.Choice?
+local function choice(root) return h.await(function(done) tools.project(root, done) end).choice end
+
+h.case("in a project, a missing tool it doesn't pin is offered for the project only, and resolves from there", function()
+  for _, kind in ipairs({ "git repo", "pyproject.toml", "config answered installed", "config answered use" }) do
+    local answered = kind:match("^config answered (%w+)")
+    local root, _, backend = setup({ project = answered and { stylua = "2.0.0" } or nil })
+    if kind == "git repo" then
+      git(root, "init", "-q")
+    elseif kind == "pyproject.toml" then
+      h.write(root .. "/pyproject.toml", { "[project]" })
+    else
+      -- Answering "use" through tools would trust and install the project, which the fake backend doesn't do
+      local configs = h.await(function(done) tools.project(root, done) end).configs
+      require("tools.state").set(configs, answered)
+      tools.refresh()
+    end
+    local inst = resolve("ruff", root).install
+    h.eq(inst, { kind = "global", spec = "ruff@latest", project_only = { kind = "local", spec = "ruff@latest" } }, kind .. ": the offer")
+    install_here(root)
+    h.eq(backend.calls, { { "use_local", root, { "ruff@latest" } } }, kind .. ": the backend's installs")
+    h.eq(found("ruff", root), { source = "project-mise", version = "1.0.0" }, kind .. ": a fresh resolve")
+    if answered then
+      h.eq({ choice(root), found("stylua", root) }, { answered, { source = "project-mise", version = "2.0.0" } }, kind .. ": the answer and the other pin")
+    end
+  end
+end)
+
+h.case("with a global pin that isn't installed, a project also gets the project-only offer", function()
+  local root = setup({ global_pins = { shfmt = "3.10.0" } })
+  git(root, "init", "-q")
+  h.eq(resolve("shfmt", root).install, {
+    kind = "pinned",
+    spec = "shfmt@3.10.0",
+    version = "3.10.0",
+    config = "config.toml",
+    scope = "global",
+    project_only = { kind = "local", spec = "shfmt@latest" },
+  }, "the offer")
+  install_here(root, nil, "shfmt")
+  h.eq(found("shfmt", root), { source = "project-mise", version = "1.0.0" }, "a fresh resolve")
+end)
+
+h.case("no project-only offer outside a project, in HOME, where its config isn't in use, or with a missing runtime", function()
+  local root = setup({})
+  h.eq(resolve("ruff", root).install, { kind = "global", spec = "ruff@latest" }, "outside a project")
+  -- A ~/.venv or a stray ~/node_modules makes HOME the root; a mise.local.toml there would apply everywhere under it
+  local home = vim.env.HOME
+  root = setup({})
+  vim.fn.mkdir(root .. "/.venv", "p")
+  vim.env.HOME = root
+  local inst = resolve("ruff", root).install
+  vim.env.HOME = home
+  h.eq(inst, { kind = "global", spec = "ruff@latest" }, "HOME with a .venv")
+  for _, answer_with in ipairs({ false, "global" }) do
+    root = setup({ project = { stylua = "2.0.0" } })
+    if answer_with then
+      answer(root, answer_with)
+    end
+    h.eq(resolve("ruff", root).install, { kind = "global", spec = "ruff@latest" }, ("a project config answered %s"):format(answer_with or "never"))
+  end
+  root = setup({})
+  git(root, "init", "-q")
+  h.eq(resolve("yaml-language-server", root).install, { kind = "global", spec = "npm:yaml-language-server@latest", runtime = "node" }, "no node")
+end)
+
+h.case("a project that pins the tool gets its pinned version offered, not a project-only install", function()
+  local root = setup({ project = { ruff = { version = "0.15.0", installed = false } } })
+  git(root, "init", "-q")
+  answer(root, "installed")
+  local inst = resolve("ruff", root).install
+  h.eq({ inst.kind, inst.spec, inst.project_only, inst.global.project_only }, { "pinned", "ruff@0.15.0" }, "the offer")
+end)
+
+h.case("in a git repo, the repo's .gitignore gains one mise.local.toml line when it isn't ignored, with a toast", function()
+  for _, before in ipairs({ false, "node_modules/\n", "node_modules/" }) do
+    local root = setup({})
+    git(root, "init", "-q")
+    if before then
+      vim.fn.writefile(vim.split(before, "\n", { plain = true }), root .. "/.gitignore", "b")
+    end
+    local after, said = install_here(root)
+    h.eq({ after, said }, { (before and "node_modules/\n" or "") .. "mise.local.toml\n", toast }, vim.inspect(before))
+  end
+  -- Projects in subdirectories of a repo: the line goes in the repo's top-level .gitignore, once
+  local repo = setup({})
+  git(repo, "init", "-q")
+  for _, sub in ipairs({ "a", "b" }) do
+    h.write(("%s/%s/pyproject.toml"):format(repo, sub), { "[project]" })
+    local after, said = install_here(repo .. "/" .. sub, repo .. "/.gitignore")
+    h.eq(
+      { after, said, contents(("%s/%s/.gitignore"):format(repo, sub)) },
+      { "mise.local.toml\n", sub == "a" and toast or {} },
+      "a project in " .. sub .. "/"
+    )
+  end
+end)
+
+h.case("nothing changes in .gitignore, and no toast, when git already ignores mise.local.toml, tracks it, or there is no git", function()
+  for _, how in ipairs({ "its name", "*.local.toml", "the global excludes file", "!mise.local.toml", "tracked", "no git" }) do
+    local root = setup({})
+    h.write(root .. "/pyproject.toml", { "[project]" })
+    local excludes = tmp .. "/excludes"
+    h.write(tmp .. "/gitconfig", { "[user]", "name = t", "email = t@t", "[core]", "excludesFile = " .. excludes })
+    h.write(excludes, how == "the global excludes file" and { "mise.local.toml" } or { "" })
+    if how ~= "no git" then
+      git(root, "init", "-q")
+    end
+    local before = ({ ["its name"] = "mise.local.toml", ["*.local.toml"] = "*.local.toml", ["!mise.local.toml"] = "!mise.local.toml" })[how]
+    if before then
+      h.write(root .. "/.gitignore", { before })
+    end
+    if how == "tracked" then
+      h.write(root .. "/mise.local.toml", { "[tools]" })
+      git(root, "add", "mise.local.toml")
+      git(root, "commit", "-qm", "local config")
+    end
+    local after, said = install_here(root)
+    h.eq({ after, said }, { before and (before .. "\n") or nil, {} }, how)
+  end
+  h.write(tmp .. "/gitconfig", { "[user]", "name = t", "email = t@t" })
+end)
+
+h.case("a .gitignore that can't be written or is a link is left alone, and a notification says so", function()
+  -- Read-only: an error instead of the toast
+  local root = setup({})
+  git(root, "init", "-q")
+  h.write(root .. "/.gitignore", { "node_modules/" })
+  vim.uv.fs_chmod(root .. "/.gitignore", tonumber("444", 8))
+  local after, said = install_here(root)
+  h.eq(after, "node_modules/\n", "a read-only .gitignore")
+  h.ok(#said == 1 and said[1][2] == ERROR and vim.startswith(said[1][1], "Couldn't add mise.local.toml to .gitignore: "), vim.inspect(said))
+  -- A link (a stowed .gitignore, say): editing it would change a file outside the repo
+  root = setup({})
+  git(root, "init", "-q")
+  local target = root .. "/../dotfiles-gitignore"
+  h.write(target, { "node_modules/" })
+  vim.uv.fs_symlink(target, root .. "/.gitignore")
+  after, said = install_here(root, target)
+  h.eq(after, "node_modules/\n", "the link's target")
+  h.ok(#said == 1 and said[1][2] == WARN and vim.startswith(said[1][1], "Not adding mise.local.toml to .gitignore: "), vim.inspect(said))
 end)
 
 h.finish()
