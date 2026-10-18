@@ -46,7 +46,10 @@ You write a definition only when no file exists. For a linter, see `edit-files.m
    $SK/iso-mise.sh $T mise registry <tool>
    ```
 
-   If it prints backends (`mise registry ruff` printed `aqua:astral-sh/ruff asdf:simhem/asdf-ruff`), the spec is the short name, `ruff`. Use the short name whatever backend it prints (`aqua:`, `core:`, ...). Exit 1 with `tool not found in registry` means you need a backend spec.
+   A short name installs the first backend it prints. Prefer the short name, since a project's pins match the catalog by spec name (`nvim/lua/tools/init.lua:260,352`), but only when that first backend is one mise maintains: `core:`, `aqua:`, `github:`, `npm:`, `pypi:`, `go:`, `cargo:` or `conda:`.
+   - `mise registry ruff` printed `aqua:astral-sh/ruff asdf:simhem/asdf-ruff`: the spec is `ruff`.
+   - `mise registry neovim` printed `vfox:jdx/vfox-neovim aqua:neovim/neovim`: an `asdf:` or `vfox:` plugin comes first, so the spec is the first mise-maintained backend, written out: `aqua:neovim/neovim`. A bare `neovim` installed through that vfox plugin, which calls GitHub's API without a token and hits its rate limit in CI.
+   - Exit 1 with `tool not found in registry` means you need a backend spec (step 2).
 
 2. **Find the upstream repo before trying backends.** Guessed owners 404: earlier runs guessed the language's org or a similarly named user and lost time on `package not found`. Find it in one of these, and quote where you found it:
    - the server's `---@brief` URL at the top of `nvim-lspconfig/lsp/<name>.lua`;

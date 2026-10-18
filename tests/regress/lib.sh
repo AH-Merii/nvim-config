@@ -40,6 +40,19 @@ mise_env() {
   if [ -d "$SUITE_RUSTUP" ]; then export RUSTUP_HOME=$SUITE_RUSTUP; fi
 }
 
+# nvim_build <ver>: the install dir of the user's Neovim <ver> (e.g. nightly), mise's github:neovim/neovim@<ver>.
+# Asked of the user's own mise, from $HOME so no project config applies: call it before entering the sandbox, whose
+# MISE_* vars (mise_env) and XDG dirs point mise at the suite's own.
+nvim_build() {
+  local dir
+  dir=$(
+    for v in $(compgen -e); do [[ $v =~ ^_*MISE_ ]] && unset "$v"; done
+    cd "$HOME" && mise where "github:neovim/neovim@$1" 2>/dev/null
+  ) && [ -x "$dir/bin/nvim" ] && printf '%s\n' "$dir" && return
+  echo "no Neovim $1: mise has no github:neovim/neovim@$1; install it with \`mise install github:neovim/neovim@$1\`" >&2
+  return 1
+}
+
 # header <file> <key>: value of a "-- @key value" / "# @key value" line
 header() { sed -n -E "s/^(--|#) @$2( +(.*))?$/\3/p" "$1" | head -1; }
 has_header() { grep -q -E "^(--|#) @$2( |$)" "$1"; }

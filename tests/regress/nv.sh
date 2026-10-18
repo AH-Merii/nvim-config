@@ -3,9 +3,15 @@
 # Runs the sandboxed nvim. NVR_HOME holds config/ state/ cache/, NVR_DATA the data dir (default: the
 # suite's data/). Without NVR_HOME a scratch home is built from $CFG and removed on exit.
 S=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=lib.sh
+. "$S/lib.sh"
 case "$1" in
-  # NVR_NVIM: another build, e.g. the test image's pinned nightly (tests/image/Dockerfile)
-  nightly) BIN=${NVR_NVIM:-$HOME/.local/share/mise/installs/neovim/nightly/bin/nvim} ;;
+  # NVR_NVIM: another build, e.g. the test image's pinned nightly (tests/image/Dockerfile). Exported, so an nv.sh
+  # a check starts runs the same build without asking mise, which can't answer inside the sandbox's XDG dirs
+  nightly)
+    BIN=${NVR_NVIM:-}
+    [ -n "$BIN" ] || BIN=$(nvim_build nightly)/bin/nvim || { echo "or set NVR_NVIM to an nvim binary" >&2; exit 2; }
+    export NVR_NVIM=$BIN ;;
   *) echo "usage: nv.sh nightly [nvim args...]" >&2; exit 2 ;;
 esac
 shift
@@ -22,8 +28,6 @@ export NVIM_REGRESS_TAG=${NVIM_REGRESS_TAG:-manual-$$/}
 unset NVIM NVIM_LISTEN_ADDRESS NVIM_APPNAME NVIM_LOG_FILE VIMINIT MYVIMRC
 # clipboard=unnamedplus would run wl-copy/xclip against the user's real clipboard, and leak them
 unset WAYLAND_DISPLAY DISPLAY
-# shellcheck source=lib.sh
-. "$S/lib.sh"
 
 if [ -z "${NVR_HOME:-}" ]; then
   mkdir -p "$RUNS"; NVR_HOME=$(mktemp -d "$RUNS/manual.XXXXXX")

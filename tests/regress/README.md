@@ -94,7 +94,7 @@ mise run test:image suite lsp      # suite.sh args; `unit [args]` for the unit t
 - The checkout is mounted read-only and copied into the container beside the image's `data/`; the container is
   capped at 2 GB. Failed checks' output lands in `last/image/` (`$NVR_OUT`).
 - `nv.sh` and `tests/unit/run.sh` take the nvim binary from `$NVR_NVIM` (the image sets it), else the user's
-  mise nightly.
+  mise nightly, `github:neovim/neovim@nightly` (`mise where` finds it; `nv.sh` fails with a hint when it is missing).
 - `--refresh-only` refreshes and runs nothing; `NVR_REFRESH_STEPS` picks the steps (`plugins tools resolve parsers`,
   the default, in that order).
 - Behaves differently in the container: the hygiene assertions on the live nvim, mise and rustup dirs hold

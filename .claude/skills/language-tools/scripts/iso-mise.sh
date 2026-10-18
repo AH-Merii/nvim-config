@@ -25,6 +25,12 @@ mkdir -p "$T/config" "$T/tmp"
 export TMPDIR=$T/tmp
 # The caller's shell may be mise-activated (MISE_SHELL, __MISE_DIFF, ...); none of that may leak in
 for v in $(compgen -e); do [[ $v =~ ^_*MISE_ ]] && unset "$v"; done
+# The nightly nvim, asked of the user's mise before it is isolated below
+if NVIM_DIR=$(cd "$HOME" && mise where github:neovim/neovim@nightly 2>/dev/null) && [ -x "$NVIM_DIR/bin/nvim" ]; then
+  export NVIM_BIN=$NVIM_DIR/bin/nvim
+else
+  echo "iso-mise.sh: NVIM_BIN is unset: mise has no github:neovim/neovim@nightly (mise install github:neovim/neovim@nightly)" >&2
+fi
 export MISE_DATA_DIR=$T/data MISE_CACHE_DIR=$T/cache MISE_STATE_DIR=$T/state \
   MISE_CONFIG_DIR=$T/config MISE_GLOBAL_CONFIG_FILE=$T/config/config.toml
 # Without this, mise reads ~/.config/mise/config.toml as a project config of $HOME
@@ -35,7 +41,6 @@ PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -v -e '/mise/' -e '/mason/bin' |
 export PATH
 # mise itself must stay reachable
 command -v mise >/dev/null || { echo "iso-mise.sh: mise is not on PATH after stripping" >&2; exit 2; }
-# nvim lives in the user's mise installs, which were stripped above; give it back by absolute path
-export NVIM_BIN=$HOME/.local/share/mise/installs/neovim/nightly/bin/nvim
+# nvim lives in the user's mise installs, which were stripped above; NVIM_BIN gives it back by absolute path
 cd "$T"
 exec "$@"
