@@ -186,9 +186,10 @@ Verified = installed in an isolated mise dir and the binary ran (LSPs also answe
 | pyrefly | `pypi:pyrefly` (decided; `pipx:` is an older alias of `pypi:`) | yes |
 | clangd | `github:clangd/clangd` (decided) | yes |
 | clang-format | `clang-format` (registry, conda backend) | yes |
-| ruff, biome, stylua, shfmt, terraform, typstyle, tinymist, marksman, lua-language-server, terraform-ls | registry short names | yes |
+| ruff, biome, stylua, shfmt, terraform, tinymist, marksman, lua-language-server, terraform-ls | registry short names | yes |
 | golangci-lint, shellcheck, tflint, trivy, hadolint, checkmake, yamllint | registry short names | yes |
-| jactionlint | `jactionlint` (registry: `github:jdx/jactionlint`; v2.1.0, static binary) | yes |
+| jactionlint | `jactionlint` (registry: `github:jdx/jactionlint`; static binary; v2.2.0, the latest on 2026-10-18, run with the linter's args) | yes |
+| fish | `github:fish-shell/fish-shell` (not in the registry by name; static binary, 4.1+ for the builtin fish_indent; Case 12) | yes |
 | fish-lsp, yaml-language-server | `npm:<name>` | yes |
 | prettierd | `npm:@fsouza/prettierd` (needs node at runtime) | yes |
 | gopls | `go:golang.org/x/tools/gopls` | yes |
@@ -339,11 +340,12 @@ Decided since:
 ## Follow-up decided alongside (2026-10-12): the tree-sitter CLI joins the catalog
 
 - The tree-sitter CLI becomes a catalog tool, spec `tree-sitter` (registry, `mise registry tree-sitter` maps it to
-  `aqua:tree-sitter/tree-sitter`). Recorded only: built after the mise build lands.
+  `aqua:tree-sitter/tree-sitter`). Recorded only, and not built yet (2026-10-18): `nvim/lua/tools/catalog.lua` has
+  no tree-sitter entry, so a failed parser build offers nothing.
 - Trigger: nvim-treesitter's parser install runs `tree-sitter build` (`nvim-treesitter/lua/nvim-treesitter/install.lua:305-316`).
   Without the CLI it logs `Error during "tree-sitter build"` (`install.lua:315`) and fails silently; the config tries
-  each language once per session (`nvim/lua/plugins/nvim-treesitter.lua:178,189`).
-- With this, the first failed build offers the global install like any other missing tool, under the same UX rules
+  each language once per session (`nvim/lua/features/treesitter.lua:86,102`).
+- Once built, the first failed build offers the global install like any other missing tool, under the same UX rules
   (offered once, never headless).
 - Why: a fresh machine without the CLI silently loses the parser of every language that isn't bundled. It works on
   this machine only because `tree-sitter = "latest"` was set globally on 2026-10-12.
