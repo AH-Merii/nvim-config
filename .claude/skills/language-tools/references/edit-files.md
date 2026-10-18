@@ -95,7 +95,8 @@ Fields you may need:
 - **`filetypes`**: where the server attaches, when that differs from the language's `filetypes`. Narrow it when nvim-lspconfig lists filetypes another language owns, or widen it to keep nvim-lspconfig's extras (`nvim/lua/lang/c.lua`: clangd also serves objc and cuda). Variants of the listed filetypes get the server too, so a variant never needs listing here. Leaving it out gives the language's filetypes, which replace nvim-lspconfig's list (`nvim/lua/lang/web.lua`: biome serves only JS, TS and JSON).
 - **Share one position encoding** when the server shares a filetype with pyrefly (`ruff` in `nvim/lua/lang/python.lua`). `checks/lsp_attach.lua` fails when one buffer's clients use mixed encodings.
 - **Settings**: `settings`, `capabilities`, `root_markers`, `on_init`, `commands`, `handlers`; see gopls (`go.lua`), rust_analyzer (`rust.lua`) and pyrefly (`python.lua`).
-- **`exit_timeout`** for a server that orphans children (tflint in `terraform.lua`).
+- **No `exit_timeout` for quitting.** `lsp/init.lua`'s VimLeavePre handler stops every server on quit, one that is
+  still starting or busy included, so a server that orphans children or exits slowly needs nothing here (#42).
 
 Do not set `cmd` (`wiring()` replaces it with the resolved binary plus the catalog args). Do not merge blink capabilities either; blink sets them for every server through `vim.lsp.config('*')` (`blink.cmp/plugin/blink-cmp.lua:1-7`).
 
