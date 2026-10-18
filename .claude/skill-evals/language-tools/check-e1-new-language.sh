@@ -76,17 +76,18 @@ else
     "suite '^($names)\$': $(awk '$2 == "nightly" { printf "%s %s; ", $3, $1 }' <<<"$S")$(grep -E '^SUITE (PASS|FAIL)' <<<"$S")${fails:+; failed: $fails $(suite_reasons "$S" "${fails%% *}" | paste -sd' ')}"
 fi
 
-# 6. the decisions doc records Zig: a per-language row, install-spec rows and a decision entry
+# 6. docs: docs/languages.md is regenerated with a Zig row; the decisions doc has install-spec rows and a decision entry
 D=$C/docs/mise-tooling-decisions.md
-row=$(section "$D" "Per-language tools" | grep -iE '^\|[^|]*zig[^|]*\|')
+U=$(languages_doc)
+row=$(languages_row '`zig`')
 specs_txt=$(section "$D" "Install specs")
 decided=$(sed -n '/^Decided since:/,/^## /p' "$D")
 ok=0
-if [[ -n $row ]] && grep -q 'zls' <<<"$row" && grep -qiE 'zig ?fmt' <<<"$row" &&
+if grep -q '^UNIT PASS' <<<"$U" && [[ -n $row ]] && grep -qF '`zls`' <<<"$row" && grep -qF '`zigfmt`' <<<"$row" &&
   grep -F 'zls' <<<"$specs_txt" | grep -qF "${zls_spec:-@none@}" && grep -iE '(^|[^a-z_])zig([^a-z_]|$)' <<<"$specs_txt" | grep -qF "${fmt_spec:-@none@}" &&
   grep -qiE 'zls|zig' <<<"$decided"; then ok=1; fi
-result $ok "the decisions doc has a Zig per-language row, install-spec rows with the catalog specs, and a decision entry" \
-  "row: ${row:-none}; install-spec lines: $(grep -iE 'zls|zig' <<<"$specs_txt" | paste -sd' ' | cut -c1-160); decided-since mentions: $(grep -ciE 'zls|zig' <<<"$decided")"
+result $ok "docs/languages.md is regenerated with a Zig row, and the decisions doc has install-spec rows with the catalog specs and a decision entry" \
+  "languages_doc: $(grep -E '^(PASS|FAIL|UNIT)' <<<"$U" | paste -sd' '); row: ${row:-none}; install-spec lines: $(grep -iE 'zls|zig' <<<"$specs_txt" | paste -sd' ' | cut -c1-160); decided-since mentions: $(grep -ciE 'zls|zig' <<<"$decided")"
 
 # 7. formatting
 check_stylua

@@ -1,7 +1,8 @@
 # nvim-config
 
 My personal Neovim configuration, focused on LSP-driven development, with every language tool installed and run
-through [mise](https://mise.jdx.dev). It supports Go, Rust, Python, Lua, TypeScript, C/C++ and more.
+through [mise](https://mise.jdx.dev). It supports Go, Rust, Python, Lua, TypeScript, C/C++ and more:
+[docs/languages.md](docs/languages.md) lists every language and its tools.
 
 ## What's in it
 

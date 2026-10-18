@@ -59,15 +59,16 @@ else
     "suite '^($names)\$': $(awk '$2 == "nightly" { printf "%s %s; ", $3, $1 }' <<<"$S")$(grep -E '^SUITE (PASS|FAIL)' <<<"$S")${fails:+; failed: $fails $(suite_reasons "$S" "${fails%% *}" | paste -sd' ')}"
 fi
 
-# 5. the decisions doc records selene: the Lua row, an install-spec row with the catalog spec, a decision entry
+# 5. docs: docs/languages.md is regenerated with selene in the Lua row; an install-spec row with the spec, a decision entry
 D=$C/docs/mise-tooling-decisions.md
-row=$(section "$D" "Per-language tools" | grep -iE '^\| *(\*\*)?lua(\*\*)? *\|')
+U=$(languages_doc)
+row=$(languages_row '`lua`')
 specrow=$(section "$D" "Install specs" | grep -F selene)
 decided=$(sed -n '/^Decided since:/,/^## /p' "$D")
 ok=0
-grep -q selene <<<"$row" && grep -qF "${spec:-@none@}" <<<"$specrow" && grep -q selene <<<"$decided" && ok=1
-result $ok "the decisions doc names selene in the Lua row, has an install-spec row with its spec, and a decision entry" \
-  "Lua row: ${row:-none}; install-spec row: ${specrow:-none}; decided-since mentions: $(grep -c selene <<<"$decided")"
+grep -q '^UNIT PASS' <<<"$U" && grep -qF '`selene`' <<<"$row" && grep -qF "${spec:-@none@}" <<<"$specrow" && grep -q selene <<<"$decided" && ok=1
+result $ok "docs/languages.md is regenerated with selene in the Lua row, and the decisions doc has an install-spec row with its spec and a decision entry" \
+  "languages_doc: $(grep -E '^(PASS|FAIL|UNIT)' <<<"$U" | paste -sd' '); Lua row: ${row:-none}; install-spec row: ${specrow:-none}; decided-since mentions: $(grep -c selene <<<"$decided")"
 
 # 6. formatting
 check_stylua

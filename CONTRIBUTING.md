@@ -8,6 +8,7 @@ Design decisions for the bigger features are in [docs/](docs/), one `*-decisions
 ```sh
 mise run setup            # once per clone: pushes check the formatting and scan for secrets first
 mise run fmt              # format the Lua with stylua
+mise run docs             # regenerate docs/languages.md from the language files
 mise tasks                # everything else
 ```
 
@@ -104,6 +105,8 @@ nvim/
   skips that declaration and is reported once at startup; the first declaration, in file name order, stays
 - A variant (a dotted filetype such as `yaml.github-actions`) gets its base's servers and linters plus its own, and its
   own formatters if it names any, else its base's. One with `match` rules needs an `example` path
+- `docs/languages.md` lists each language's and variant's tools and each binary's install spec. `docs/languages.lua`
+  generates it from `lang` and the catalog (`mise run docs`); don't edit it by hand
 
 **The statusline** (`ui/statusline.lua`, steps 4 and 4b in `docs/rearchitecture-decisions.md`)
 - `require("ui.facts").get(buf)` holds a buffer's servers running, the formatters and linters that will run, the
@@ -127,6 +130,8 @@ nvim/
    findings), and a variant under `variants` for a tool that runs only on some files of a filetype
 3. Run `nvim --clean --headless -l tests/unit/lang_test.lua`: it fails when a name has no catalog binary or a catalog
    binary is used by no language
+4. Run `mise run docs` and commit `docs/languages.md` with the change: `tests/unit/languages_doc_test.lua` (and so CI)
+   fails while it is out of date
 
 The `language-tools` skill (`.claude/skills/language-tools/`) walks through the whole change, checks included.
 

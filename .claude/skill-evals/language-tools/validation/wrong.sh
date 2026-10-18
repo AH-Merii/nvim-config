@@ -9,16 +9,17 @@ e1 custom-zig_fmt         zig buffers format with conform's built-in zigfmt
 e1 zls-not-enabled        zls is enabled with an nvim-lspconfig config
 e1 unknown-spec           a catalog entry provides server zls with a spec mise knows
 e1 no-regression-check    regression checks needing zls and the zig formatter
-e1 docs-missing           the decisions doc has a Zig per-language row
+e1 docs-missing           docs/languages.md is regenerated with a Zig row
+e1 docs-stale             docs/languages.md is regenerated with a Zig row
 e1 unformatted-lua        changed Lua passes stylua --check
 e2 bare-spec              a catalog entry provides linter selene with a spec mise knows
 e2 custom-selene          lua buffers lint with nvim-lint's built-in selene
 e2 selene-on-yaml         lua buffers lint with nvim-lint's built-in selene
 e2 covered-by-lua_ls      live: selene reports unused_variable
-e2 docs-missing           the decisions doc names selene
+e2 docs-missing           docs/languages.md is regenerated with selene
 e3 jactionlint-all-yaml   jactionlint runs on the Dependabot file but not on plain YAML
 e3 linters-as-list        .github/dependabot.yml gets a yaml sub-filetype linted by jactionlint and still by yamllint
-e3 contributing-missing   the decisions doc's File-scoped tools table and decision list, and CONTRIBUTING.md
+e3 contributing-missing   docs/languages.md is regenerated with the Dependabot sub-filetype
 e3 no-regression-check    a regression check expects the Dependabot sub-filetype
 LIST
   exit 0
@@ -43,6 +44,8 @@ case "$id/$variant" in
     git checkout -q -- tests/regress/checks/lsp_attach.lua
     ;;
   e1/docs-missing) git checkout -q -- docs ;;
+  # the decisions doc is right, but docs/languages.md was not regenerated
+  e1/docs-stale) git checkout -q -- docs/languages.md ;;
   e1/unformatted-lua) sed -i 's/zls = { spec = "zls", servers = { zls = {} } },/zls = {spec="zls", servers = { zls = {} } },/' nvim/lua/tools/catalog.lua ;;
   e2/bare-spec) sed -i 's/selene = { spec = "aqua:Kampfkarren\/selene"/selene = { spec = "selene"/' nvim/lua/tools/catalog.lua ;;
   e2/custom-selene)

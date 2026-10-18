@@ -57,4 +57,4 @@ These files get a **dotted sub-filetype**, `<base>.<part>`, declared as a varian
    - the sub-filetype line lists the new tool plus all of the base's servers and linters;
    - the base line does not list the new tool;
    - no `MISSING` line: a base server the sub-filetype lost shows as `sub-filetype <ft> loses <base>'s server <name>`.
-5. **Tests and docs.** See `tests.md` ("Sub-filetype") and `docs.md` ("Sub-filetype"). Both have rows that apply only to sub-filetypes.
+5. **Tests and docs.** See `tests.md` ("Sub-filetype") for the checks. For the docs (`docs.md`), `mise run docs` adds the variant's row to `docs/languages.md`, and CONTRIBUTING.md's sentence that lists the sub-filetypes gets it.

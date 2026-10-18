@@ -11,7 +11,8 @@ resolved per project, with project-pinned tools taking priority.
 ## Status
 
 - Decided: resolution order, global installs, UX, where config lives, every per-language tool choice,
-  project prompt, install timing, versions, where it is built, file-scoped tools.
+  project prompt, install timing, versions, where it is built, file-scoped tools. Which tools each language and
+  variant gets today is generated into [languages.md](languages.md) (2026-10-18, `mise run docs`).
 - Done: Mason bin dir removed from the shell PATH.
 - Verified: every chosen tool installs through mise and runs (see "Install specs").
 - Built (2026-10-12), in `nvimt2` (worktree `~/Projects/nvim-config-t2`, branch `nvimt2/mise-tooling`), not merged:
@@ -108,12 +109,10 @@ pyproject-fmt for every TOML file (`nvim/lua/plugins/mason.lua:30-33`).
 
 How: files that need extra tools get a dotted sub-filetype from `vim.filetype.add`, defined in one place.
 
-| Files | Filetype | Extra tools |
-|---|---|---|
-| `*/.github/workflows/*.y{a,}ml` | `yaml.github-actions` | jactionlint, zizmor (lint) |
-| `pyproject.toml` | `toml.pyproject` | pyproject-fmt (format) |
-| `compose.y{a,}ml`, `docker-compose.y{a,}ml` and their `.<name>.` overrides (`compose.override.yaml`) | `yaml.docker-compose` | docker-language-server (server) |
-| `docker-bake.hcl`, `docker-bake.override.hcl` | `hcl.docker-bake` | docker-language-server (server) |
+The table of sub-filetypes that was here moved to [languages.md](languages.md) on 2026-10-18 ("File-scoped tools
+(variants)"), which `mise run docs` generates from the variants in `nvim/lua/lang/`; it had listed
+`yaml.github-actions`, `toml.pyproject`, `yaml.docker-compose` and `hcl.docker-bake`. Why: D73 in
+[rearchitecture-decisions.md](rearchitecture-decisions.md).
 
 Why this works with the existing tools:
 
@@ -152,29 +151,15 @@ Why this works with the existing tools:
 
 ## Per-language tools (2026-10-12)
 
-Bold = change from today. Struck = removed.
-
-| Language | Language server | Formatter | Linter |
-|---|---|---|---|
-| Python | pyrefly + **ruff server** | ruff (conform) | ruff (nvim-lint, backstop) |
-| TOML | **tombi** | **tombi**; pyproject-fmt for `pyproject.toml` | tombi |
-| Lua | lua_ls | stylua | ~~luacheck~~ |
-| JS / TS | **tsc** (TS 7), replaces ~~ts_ls~~ | biome | biome |
-| JSON | none | biome | **biome**, replaces ~~jsonlint~~ |
-| YAML | yamlls | prettierd | yamllint, **jactionlint**, replaces ~~actionlint~~; **zizmor** |
-| Markdown | marksman | prettierd | **markdownlint-cli2**, replaces ~~markdownlint-cli~~ |
-| HTML / CSS / SCSS | **html, cssls** | prettierd | none |
-| sh / bash | **bashls** (runs shellcheck) | shfmt | ~~nvim-lint shellcheck~~ |
-| Fish | fish-lsp | **fish_indent** (fish's builtin, fish via mise; 2026-10-13) | none |
-| C / C++ | clangd | clang-format (**via mise**) | none |
-| Go | gopls (stale settings cleaned) | goimports **then gofumpt** | golangci-lint |
-| Rust | rust-analyzer (**rustup component**) | rustfmt | clippy |
-| Terraform | terraform-ls, tflint | terraform fmt | tflint, trivy |
-| CMake | **neocmakelsp** | gersemi | none |
-| Typst | tinymist (formats with typstyle) | ~~separate typstyle~~ | none |
-| Dockerfile | **docker_language_server** | none | hadolint |
-| Make | none | none | checkmake |
-| PHP | ~~intelephense~~ (PHP dropped) | none | none |
+The table that was here, one row per language with its server, formatter and linter, moved to
+[languages.md](languages.md) on 2026-10-18, which `mise run docs` generates from `nvim/lua/lang/` and the tool
+catalog. Why: D73 in [rearchitecture-decisions.md](rearchitecture-decisions.md). What it recorded as changes from
+Mason: the ruff server; tombi for TOML; tsc (TS 7) replacing ts_ls; biome linting JSON, replacing jsonlint; jactionlint
+replacing actionlint, and zizmor; markdownlint-cli2 replacing markdownlint-cli; the html and cssls servers; bashls,
+which runs shellcheck, replacing nvim-lint's shellcheck; fish_indent (2026-10-13); clang-format through mise; gofumpt
+after goimports; rust-analyzer as a rustup component; neocmakelsp; docker_language_server. Dropped: luacheck, a
+separate typstyle (tinymist formats), intelephense (PHP). The old table is in git history
+(`git show ee67afa:docs/mise-tooling-decisions.md`).
 
 Notes on specific choices:
 
