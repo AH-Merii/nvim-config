@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.0](https://github.com/AH-Merii/nvim-config/compare/v0.8.0...v0.9.0) (2026-10-18)
+
+
+### Features
+
+* .env files get Neovim's own env filetype ([6322fee](https://github.com/AH-Merii/nvim-config/commit/6322fee6f1dc4200ca1fc577777417f2e8bdb7d0))
+
+
+### Restructuring
+
+* **app:** run startup as six named, timed phases ([d98b40e](https://github.com/AH-Merii/nvim-config/commit/d98b40e045632154e576129841b6f06d9936fbab))
+
 ## [0.8.0](https://github.com/AH-Merii/nvim-config/compare/v0.7.0...v0.8.0) (2026-10-18)
 
 
