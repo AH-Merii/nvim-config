@@ -94,6 +94,15 @@ live() {
   suite --work "eval-$ID"
 }
 
+# languages_doc: the clone's own test that docs/languages.md is what `mise run docs` renders; prints run.sh's output and
+# fails while the file is out of date
+languages_doc() { (cd "$C" && TMPDIR=$SCRATCH timeout 60 tests/unit/run.sh languages_doc 2>&1); }
+# languages_row <text>: the rows of docs/languages.md's "Tools by language" table whose Filetypes cell contains the text,
+# e.g. `zig`
+languages_row() {
+  awk -F' [|] ' -v t="$1" '/^## / { on = ($0 == "## Tools by language") } on && /^\| / && index($2, t) { print }' "$C/docs/languages.md" 2>/dev/null
+}
+
 # section <file> <heading prefix>: the lines of a markdown "## " section
 section() { awk -v h="## $2" 'index($0, h) == 1 { on=1; next } on && /^## / { exit } on' "$1"; }
 

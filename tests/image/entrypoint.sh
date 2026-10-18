@@ -7,10 +7,10 @@ set -u
 SRC=/src W=/work
 [ -f "$SRC/nvim/init.lua" ] || { echo "nvr-test: no checkout at $SRC; run with -v \"\$PWD:$SRC:ro\"" >&2; exit 2; }
 
-# only the config and the tests; the checkout's own sandbox, results and run state stay out
+# only the config, the tests and docs/ (languages_doc_test renders docs/languages.md); the checkout's own sandbox, results and run state stay out
 tar -C "$SRC" -cf - --exclude=tests/regress/data --exclude=tests/regress/run --exclude=tests/regress/last \
   --exclude=tests/regress/state --exclude=tests/regress/bin --exclude=tests/regress/cache-seed \
-  --exclude=tests/regress/shared-cache nvim tests | tar -C "$W" -xf - || exit 2
+  --exclude=tests/regress/shared-cache nvim tests docs | tar -C "$W" -xf - || exit 2
 
 # data/ holds the plugins and parsers of the config the image was built from
 sum=$(cd "$W" && find nvim -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)

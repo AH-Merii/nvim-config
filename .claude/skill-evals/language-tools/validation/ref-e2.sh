@@ -20,6 +20,6 @@ check("selene reports the unused_variable finding", vim.iter(diags):any(function
   vim.inspect(vim.tbl_map(function(d) return d.code end, diags)))
 LUA
 D=docs/mise-tooling-decisions.md
-sed -i 's/^| Lua | lua_ls | stylua | ~~luacheck~~ |$/| Lua | lua_ls | stylua | **selene**; ~~luacheck~~ |/' $D
+"${NVIM:-nvim}" --clean --headless -l docs/languages.lua >/dev/null
 perl -0pi -e 's/(\| gofumpt \| `gofumpt` \(registry, static binary\) \| yes \|\n)/$1| selene | `aqua:Kampfkarren\/selene` (not in the registry; static binary) | yes |\n/' $D
 perl -0pi -e 's/(Decided since:\n\n)/$1- **selene for Lua** (2026-10-12). `mise registry selene` printed `tool not found in registry`; `mise latest\n  aqua:Kampfkarren\/selene` printed `0.32.0`. nvim-lint ships `selene`. Without a selene.toml it flags `vim` (open point).\n/' $D

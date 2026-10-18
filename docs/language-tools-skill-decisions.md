@@ -8,6 +8,11 @@ mise tooling (`docs/mise-tooling-decisions.md`). Dates are when the decision was
 
 - Built (2026-10-13) in the `nvimt2` slot, branch `nvimt2/language-tools-skill`, stacked on `nvimt2/mise-tooling`.
 - Evaluated (2026-10-13) against no skill; kept because it passed where no skill didn't (see "Evaluation").
+- Changed (2026-10-18), D73 in `docs/rearchitecture-decisions.md`: the per-language and file-scoped tables moved out
+  of `docs/mise-tooling-decisions.md` into the generated `docs/languages.md`. Step 6, `check.sh` and the evals' docs
+  checks now ask for `mise run docs` and check the file is current, not for hand-edited rows. The evaluation below ran
+  before that change; the changed docs checks were tried on the reference solutions' doc fragments only, not
+  revalidated with `validation/validate.sh`.
 
 ## Decisions (2026-10-13)
 

@@ -29,6 +29,8 @@ The full proposal, with its measurements and sources, was written outside the re
 - Built: step 5, `features/`, with `lsp/`, `textobjects/` and the rest of `ui/` ("Step 5: features/" below).
 - Built: step 6a, `app/` runs startup as named, timed phases, still on lazy.nvim ("Step 6a: app/" below).
 - Built: step 6b, vim.pack replaces lazy.nvim (D45; "Step 6b: vim.pack" below).
+- Built: D73, `docs/languages.md` generated from `lang/` by `mise run docs` ("D73: the per-language tool tables are
+  generated" below).
 - Decided and built (2026-10-18): D72, linting skips a BufEnter that can't find anything new (below).
 
 ## Target layout
@@ -1425,6 +1427,44 @@ config on lazy.nvim, on a data dir with the same plugin revisions under `lazy/` 
 The TUI and the file runs are faster in every round (by 6 to 15 ms); the headless no-file run is not, by D61's rule.
 No run is slower, and the TUI start, the real one, is under the ~100 ms budget on both sides.
 Where the time went was not measured.
+
+## D73: the per-language tool tables are generated (2026-10-18)
+
+**Context.** Which servers, formatters and linters each language gets was kept by hand in two tables in
+`docs/mise-tooling-decisions.md`, a dated decisions record: "Per-language tools" and the file-scoped (sub-filetype)
+table (`git show ee67afa:docs/mise-tooling-decisions.md`, lines 111-116 and 157-177). Since step 1, `nvim/lua/lang/` is
+the one source of what applies where, so the tables could only repeat it, and they drifted: the file-scoped table
+listed 4 sub-filetypes, while the language files declare 9 variants (the rows of "File-scoped tools (variants)" in
+`docs/languages.md`). Agents missed those rows too: skill-eval runs without the language-tools skill missed the
+decisions-doc rows every time (`docs/language-tools-skill-decisions.md:33-35`).
+
+**Decision.** `docs/languages.md` is generated from `require("lang")` (its filetypes, `of(ft)` and `views()`) and the
+tool catalog, and replaces both tables:
+
+- `docs/languages.lua` renders it: one row per language and group of filetypes with the same tools (servers,
+  formatters in run order, linters with the server that covers each), one row per variant with the files that get it
+  and only the tools its base lacks, and one row per binary with its mise spec or rustup component, project dirs,
+  runtime and languages. Every list is sorted or in run order, so the output is deterministic. Its header says it is
+  generated and to run `mise run docs`.
+- `mise run docs` (`mise-tasks/docs`) rewrites it with `nvim --clean --headless -l docs/languages.lua`: no plugins,
+  as the unit tier loads `lang`.
+- `tests/unit/languages_doc_test.lua` fails while the committed file differs from the render, naming the first
+  differing line and saying to run `mise run docs`. It also checks the render names every filetype and every server,
+  formatter and linter a language uses, and, on a fixture language, a covered linter's server and a variant's own
+  files and tools. CI runs the unit tier (`.github/workflows/test.yml:58`), so a stale doc fails a pull request.
+- The two tables in `docs/mise-tooling-decisions.md` became dated notes that point at `docs/languages.md` and keep
+  what the per-language table recorded as changes from Mason. Its "Install specs" table stays: its Verified column is
+  evidence from the install runs, which the code can't give.
+- The language-tools skill says to run `mise run docs` where it said to edit the rows; its `check.sh` and the
+  skill evals check the generated doc is current instead of looking for hand-edited rows.
+
+**Rejected.**
+
+- Keep the tables by hand, with a test that compares them with `lang`: the rows were free text (bold and struck
+  marks, "replaces", notes), which a test can only parse loosely, and agents would still have to write them.
+- The generator in `nvim/lua/`: `lang/init.lua` loads every file in `lang/` as a language (`nvim/lua/lang/init.lua:402`),
+  and nothing at run time needs it. It sits beside the file it writes instead.
+- Show the tables only in Neovim (`:Tools`): they are read on GitHub and by agents that don't start the editor.
 
 ## D72: linting skips a BufEnter that can't find anything new (2026-10-18)
 

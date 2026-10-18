@@ -25,10 +25,10 @@ Then remove, and tick off each item:
 5. A variant that only existed for this tool: its entry under `variants`, and its cases in `checks/tools_subfiletypes.lua`.
 6. A whole language: its file in `nvim/lua/lang/`. Its `parsers` go with it; keep a parser you still want by moving it to another language or to `ensure_installed` in `nvim/lua/features/treesitter.lua`.
 7. In tests: every `@needs` naming the binary, because `--refresh` fails on a need missing from the catalog. Also the fixture file, its entry in the `lsp_attach.lua` file list, and checks that only tested it.
-8. Docs: strike the tool in the per-language table (`~~name~~`, with "replaces" or "dropped" and why), and add a "Decided since" bullet.
+8. Docs: run `mise run docs`, which drops the tool from `docs/languages.md`, and add a "Decided since" bullet that names it and says it was replaced or dropped, and why.
 
 Some things are not tool wiring, so leave them unless the user asks: a language's `keys` (labels for its runtime ftplugin's maps), `parsers` and `options` when only a tool goes. When PHP's tools were dropped, its labels stayed: `nvim/lua/lang/php.lua` holds only them.
 
 Nothing is uninstalled from the user's mise. The user runs `mise uninstall` themselves if they want to. The suite's mise never uninstalls either (`tests/regress/README.md`, "Refresh").
 
-Verify with `nvim --clean --headless -l tests/unit/lang_test.lua` (it fails while a language names a tool the catalog lost) and `$SK/check.sh $R`: it lists each removed binary, and fails while a check still lists it in `@needs` or the decisions doc doesn't strike it (`~~name~~`). Pass `FT="<the language's filetypes>"` to see that the old tool is on no `ft` line. Then run the suite (SKILL.md step 7).
+Verify with `nvim --clean --headless -l tests/unit/lang_test.lua` (it fails while a language names a tool the catalog lost) and `$SK/check.sh $R`: it lists each removed binary, and fails while a check still lists it in `@needs`, the "Decided since" list doesn't name it, or `docs/languages.md` is out of date. Pass `FT="<the language's filetypes>"` to see that the old tool is on no `ft` line. Then run the suite (SKILL.md step 7).
