@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="Regenerate docs/languages.md from nvim/lua/lang/ and the tool catalog (headless, no plugins)"
+set -euo pipefail
+exec "${NVIM:-nvim}" --clean --headless -l docs/languages.lua
