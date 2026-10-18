@@ -310,8 +310,8 @@ h.case("a row with an unknown field is refused, naming where it was declared", f
   h.ok(not ok and err:find("needs", 1, true) and err:find("keys_test.lua", 1, true), "error: " .. tostring(err))
 end)
 
-h.case("rows declared again from the same place (lazy re-imports a spec) replace the first ones", function()
-  -- lazy unloads and runs each spec module again after an install (lazy/core/plugin.lua:184)
+h.case("rows declared again from the same place (a module sourced again) replace the first ones", function()
+  -- :source of a feature file runs its rows again (CONTRIBUTING.md, "Testing Changes")
   local function spec(name)
     keys.feature("again")({ { "<leader>A", counter(name), name }, { "<leader>B", counter(name .. "B"), "B", need = "again" } })
     keys.language("againlang")({ "<leader>C", counter(name .. "C"), "C" })

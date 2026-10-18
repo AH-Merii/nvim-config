@@ -3,16 +3,18 @@ local M = {}
 
 M.plugins = {
   {
-    "chrisgrieser/nvim-origami",
-    dependencies = { "nvim-treesitter/nvim-treesitter" },
-    event = { "BufReadPre", "BufWinEnter" },
-    opts = {
-      foldtext = {
-        lineCount = {
-          template = "󰘖 %d", -- `%d` is replaced with the number of folded lines
+    src = "chrisgrieser/nvim-origami",
+    -- with the first file; it sets up the buffers and windows already open when it loads
+    phase = "buffer",
+    setup = function()
+      require("origami").setup({
+        foldtext = {
+          lineCount = {
+            template = "󰘖 %d", -- `%d` is replaced with the number of folded lines
+          },
         },
-      },
-    },
+      })
+    end,
   },
 }
 

@@ -1,27 +1,60 @@
--- suite.sh --refresh: sync data/ to the config under test. Lazy to the lockfile, the suite's mise and rustup to
--- every check's @needs (it never uninstalls), parsers to the config's list.
+-- suite.sh --refresh: sync data/ to the config under test. Plugins to the lockfile (vim.pack clones what is missing),
+-- the suite's mise and rustup to every check's @needs (it never uninstalls), parsers to the config's list.
 -- NVR_REFRESH_DRY=1 (suite.sh --refresh-dry-run): only print the tools wanted and which of them do not resolve.
--- NVR_REFRESH_STEPS picks the steps, in order (default: all four): lazy, tools (the suite's mise and rustup installs),
+-- NVR_REFRESH_STEPS picks the steps, in order (default: all four): plugins, tools (the suite's mise and rustup installs),
 -- resolve (every need resolves through the config's resolver), parsers. The test image runs tools alone on a stub
 -- config, so a config change doesn't reinstall them (tests/image/Dockerfile).
 local failed = false
 local dry = vim.env.NVR_REFRESH_DRY == "1"
 local suite = vim.fs.dirname(vim.fs.normalize(debug.getinfo(1, "S").source:sub(2)))
-local function say(fmt, ...) io.stdout:write(string.format(fmt, ...), "\n") end
+-- from a new line: vim.pack's and nvim-treesitter's progress messages end without one
+local function say(fmt, ...) io.stdout:write("\n", string.format(fmt, ...), "\n") end
 local function fail(fmt, ...) failed = true; say("FAIL " .. fmt, ...) end
 
-local function lazy_sync()
-  local lazy = require("lazy")
-  for _, op in ipairs({ "install", "restore", "clean" }) do
-    local ok, err = pcall(lazy[op], { wait = true, show = false })
-    if not ok then fail("lazy %s: %s", op, err) end
+-- vim.pack installed what the lockfile has and data/ lacked when the config started (lua/app/plugins.lua). This puts
+-- every plugin at the lockfile's revision, deletes what the config no longer names (and lazy.nvim's old checkouts),
+-- and waits for blink's prebuilt fuzzy library, which its setup downloads.
+local function plugins_sync()
+  local list = require("app.plugins").list()
+  local names = vim.tbl_map(function(p) return p.name end, list)
+  local ok, err = pcall(vim.pack.update, names, { target = "lockfile", force = true })
+  if not ok then fail("plugins: update to the lockfile: %s", err) end
+  local extra = {}
+  for _, p in ipairs(vim.pack.get(nil, { info = false })) do
+    if not vim.list_contains(names, p.spec.name) then table.insert(extra, p.spec.name) end
   end
-  local missing = {}
-  for _, p in ipairs(require("lazy").plugins()) do
-    if not p._.installed then table.insert(missing, p.name) end
+  if #extra > 0 then
+    ok, err = pcall(vim.pack.del, extra)
+    if not ok then fail("plugins: delete %s: %s", table.concat(extra, " "), err) end
+    say("plugins: deleted %s", table.concat(extra, " "))
   end
-  if #missing > 0 then fail("lazy plugins not installed: %s", table.concat(missing, " ")) end
-  say("lazy: %d plugins at the lockfile", #require("lazy").plugins())
+  local old = vim.fs.joinpath(vim.fn.stdpath("data"), "lazy")
+  if vim.uv.fs_stat(old) then
+    vim.fs.rm(old, { recursive = true, force = true })
+    say("plugins: deleted lazy.nvim's checkouts in %s", old)
+  end
+
+  local lock = vim.json.decode(table.concat(vim.fn.readfile(vim.go.packlockfile), "\n")).plugins
+  local wrong = {}
+  for _, p in ipairs(vim.pack.get(names, { info = false })) do
+    local want = (lock[p.spec.name] or {}).rev
+    local have = vim.trim(vim.fn.system({ "git", "-C", p.path, "rev-parse", "HEAD" }))
+    if have ~= want then table.insert(wrong, ("%s at %s, lockfile %s"):format(p.spec.name, have, tostring(want))) end
+  end
+  for _, p in ipairs(list) do
+    if not vim.uv.fs_stat(p.path) then table.insert(wrong, p.name .. " not installed") end
+  end
+  if #wrong > 0 then fail("plugins: %s", table.concat(wrong, "; ")) end
+
+  local blink = vim.pack.get({ "blink.cmp" }, { info = false })[1].path .. "/target/release"
+  local tag = vim.trim(vim.fn.system({ "git", "-C", vim.fs.dirname(vim.fs.dirname(blink)), "describe", "--tags", "--exact-match" }))
+  local function downloaded()
+    return vim.uv.fs_stat(blink .. "/libblink_cmp_fuzzy.so") and vim.trim(table.concat(vim.fn.readfile(blink .. "/version"), "")) == tag
+  end
+  if not vim.wait(180000, function() return pcall(downloaded) and downloaded() end, 200) then
+    fail("plugins: blink's fuzzy library for %s not in %s after 3 minutes", tag, blink)
+  end
+  say("plugins: %d at the lockfile, blink's fuzzy library %s", #list - #wrong, tag)
 end
 
 -- @needs of every check in the suite, not only the selected ones; same parse as lib.sh's header()
@@ -169,8 +202,8 @@ vim.api.nvim_create_autocmd("VimEnter", {
         vim.g.did_very_lazy = true
         vim.api.nvim_exec_autocmds("User", { pattern = "VeryLazy", modeline = false })
       end
-      local all = { lazy = lazy_sync, tools = tools_sync, resolve = tools_resolve, parsers = parsers_sync }
-      local names = dry and "tools resolve" or vim.env.NVR_REFRESH_STEPS or "lazy tools resolve parsers"
+      local all = { plugins = plugins_sync, tools = tools_sync, resolve = tools_resolve, parsers = parsers_sync }
+      local names = dry and "tools resolve" or vim.env.NVR_REFRESH_STEPS or "plugins tools resolve parsers"
       for name in names:gmatch("%S+") do
         local ok, err = true, nil
         if all[name] then ok, err = xpcall(all[name], debug.traceback) else fail("unknown refresh step %s", name) end

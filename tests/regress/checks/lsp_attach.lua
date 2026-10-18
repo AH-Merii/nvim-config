@@ -90,7 +90,7 @@ local function verify(buf, label)
   end
   check(label .. ": attached clients share one position encoding", vim.tbl_count(encodings) <= 1, vim.inspect(encodings))
 end
--- a file given on the command line is opened before lazy and VeryLazy run
+-- a file given on the command line is opened before VeryLazy and the deferred plugins
 verify(vim.api.nvim_get_current_buf(), "startup arg " .. vim.fn.argv(0))
 for _, f in ipairs(files) do
   vim.cmd.edit(f)

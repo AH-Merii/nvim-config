@@ -2,10 +2,8 @@
 
 local specs = {
   {
-    "rachartier/tiny-inline-diagnostic.nvim",
-    event = "VeryLazy", -- Or `LspAttach`
-    priority = 1000, -- needs to be loaded in first
-    config = function()
+    src = "rachartier/tiny-inline-diagnostic.nvim",
+    setup = function()
       -- Default configuration
       require("tiny-inline-diagnostic").setup({
         preset = "modern",
@@ -118,65 +116,12 @@ local specs = {
   },
 }
 
--- trouble's lists, and its actions in snacks' pickers
+-- trouble's lists; its keys and its actions in snacks' pickers are made in setup() below
 local trouble = {
-  "folke/trouble.nvim",
-  cmd = "Trouble",
-  opts = {}, -- for default options, refer to the configuration section for custom setup.
-  lazy = true,
-  specs = {
-    "folke/snacks.nvim",
-    opts = function(_, opts)
-      -- trouble's picker actions, required when one runs: requiring them here loaded trouble with snacks at startup
-      local actions = {}
-      for name, desc in pairs({
-        trouble_open = "smart-open-with-trouble",
-        trouble_open_selected = "open-with-trouble",
-        trouble_open_all = "open-all-with-trouble",
-        trouble_add = "smart-add-to-trouble",
-        trouble_add_selected = "add-to-trouble",
-        trouble_add_all = "add-all-to-trouble",
-      }) do
-        actions[name] = {
-          action = function(...) return require("trouble.sources.snacks").actions[name].action(...) end,
-          desc = desc,
-        }
-      end
-      return vim.tbl_deep_extend("force", opts or {}, {
-        picker = {
-          actions = actions,
-          win = {
-            input = {
-              keys = {
-                ["<c-t>"] = {
-                  "trouble_open",
-                  mode = { "n", "i" },
-                },
-              },
-            },
-          },
-        },
-      })
-    end,
-  },
-  keys = {
-    {
-      "<leader>xx",
-      "<cmd>Trouble diagnostics toggle<cr>",
-      desc = "Diagnostics (Trouble)",
-    },
-    {
-      "<leader>xL",
-      "<cmd>Trouble loclist toggle<cr>",
-      desc = "Location List (Trouble)",
-    },
-    {
-      "<leader>xQ",
-      "<cmd>Trouble qflist toggle<cr>",
-      desc = "Quickfix List (Trouble)",
-    },
-  },
-  config = function()
+  src = "folke/trouble.nvim",
+  -- `nvim +Trouble` runs before VeryLazy; setup defines the real command (trouble/config/init.lua:242)
+  cmd = { "Trouble" },
+  setup = function()
     require("trouble").setup({
       modes = {
         diagnostics = { win = { size = 15 } },
@@ -219,13 +164,39 @@ function M.setup()
   require("keys").need("diagnostics", function(buf) return #vim.lsp.get_clients({ bufnr = buf }) > 0 or linting.has(buf) end)
   require("keys").feature("diagnostics")({
     { "<leader>x", group = "Diagnostics", icon = { icon = "", color = "orange" } },
+    { "<leader>xx", "<cmd>Trouble diagnostics toggle<cr>", "Diagnostics (Trouble)" },
     { "<leader>xX", "<cmd>Trouble diagnostics toggle filter.buf=0<cr>", "Buffer Diagnostics (Trouble)", need = "diagnostics" },
+    { "<leader>xL", "<cmd>Trouble loclist toggle<cr>", "Location List (Trouble)" },
+    { "<leader>xQ", "<cmd>Trouble qflist toggle<cr>", "Quickfix List (Trouble)" },
     {
       "<leader>sd",
       function() Snacks.picker.diagnostics_buffer() end,
       "Diagnostics (Buffer)",
       need = "diagnostics",
       icon = { icon = "", color = "orange" },
+    },
+  })
+
+  -- trouble's actions in snacks' pickers, merged into snacks' options before it loads: requiring them here would load
+  -- trouble with snacks at startup, so each action requires them when it runs
+  local actions = {}
+  for name, desc in pairs({
+    trouble_open = "smart-open-with-trouble",
+    trouble_open_selected = "open-with-trouble",
+    trouble_open_all = "open-all-with-trouble",
+    trouble_add = "smart-add-to-trouble",
+    trouble_add_selected = "add-to-trouble",
+    trouble_add_all = "add-all-to-trouble",
+  }) do
+    actions[name] = {
+      action = function(...) return require("trouble.sources.snacks").actions[name].action(...) end,
+      desc = desc,
+    }
+  end
+  require("ui.snacks").extend({
+    picker = {
+      actions = actions,
+      win = { input = { keys = { ["<c-t>"] = { "trouble_open", mode = { "n", "i" } } } } },
     },
   })
 

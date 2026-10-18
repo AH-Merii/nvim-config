@@ -512,7 +512,7 @@ local function add(row, defaults, owner, at, index, ft)
       ft = ft,
       owner = owner,
       at = at,
-      -- the same row declared again (lazy runs a spec module again after an install) replaces itself
+      -- the same row declared again (its module sourced again) replaces itself
       origin = ("%s|%s|%d|%s"):format(owner, at, index, ft or ""),
     }
     if row.toggle then

@@ -36,7 +36,8 @@ The tool list is the `@needs` of every check plus the catalog, as on the host; t
 
 Two small seams make the layering possible, with no change on the host:
 
-- `refresh.lua` reads `NVR_REFRESH_STEPS` (default `lazy tools resolve parsers`, today's order). `tools` was
+- `refresh.lua` reads `NVR_REFRESH_STEPS` (default `plugins tools resolve parsers`, today's order; the first
+  step was `lazy` until step 6b of the rearchitecture moved the config to vim.pack). `tools` was
   split into `tools` (the `mise use -g` and rustup installs, which need only `lua/tools/catalog.lua`) and
   `resolve` (every need resolves through the config's resolver).
 - `suite.sh --refresh-only` refreshes and exits without running checks.
@@ -57,7 +58,7 @@ Multi-stage, at the user's request: build-only tools stay out of the final image
 | `nvim` | the pinned nightly, built from source | `NVIM_COMMIT` changes |
 | `needs` | every check's `@needs`, as one stub check `needs.lua` | any check changes (seconds) |
 | `tools` | `NVR_REFRESH_STEPS=tools` on a stub config holding only `catalog.lua` | the catalog, the needs list or the suite's scripts change |
-| `plugins` | `lazy resolve parsers` on the real config | any config change |
+| `plugins` | `plugins resolve parsers` on the real config | any config change |
 | `test` | `runtime` plus `/opt/nvim`, `data/rustup`, `data/mise`, `data/nvim` | |
 
 - The `needs` stage keeps the tools layer when a check is added without a new tool: the `tools` stage copies
@@ -73,8 +74,9 @@ Multi-stage, at the user's request: build-only tools stay out of the final image
   host: the resolver finds `rust-analyzer` there and asks `rustup which`); the tree-sitter CLI, gcc and
   libc6-dev, because `fresh_bootstrap.sh` downloads and builds parsers on a first start; git, curl, tmux
   (`pending_keys.sh`), gawk (`suite.sh` uses `asorti`), procps (`pgrep`); python3 (the pypi venvs point at it);
-  libicu76 (marksman, a .NET binary, exits without it); lua5.1 and luarocks (`:checkhealth lazy` in
-  `startup.lua` errors without them, as the host has both).
+  libicu76 (marksman, a .NET binary, exits without it). lua5.1 and luarocks were here for `:checkhealth lazy`
+  in `startup.lua`; vim.pack replaced lazy.nvim (docs/rearchitecture-decisions.md, "Step 6b: vim.pack") and
+  `startup.lua` reads `:checkhealth vim.pack`, so both went.
 
 ## Base image (2026-10-17)
 

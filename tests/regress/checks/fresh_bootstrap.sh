@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
-# @desc     a first start from an empty data dir bootstraps lazy, installs every plugin and parser, without a hit-enter prompt or an error, and the file opened at launch gets its servers from the suite's tools
+# @desc     a first start from an empty data dir installs every plugin (vim.pack, from the lockfile) and parser, without a hit-enter prompt or an error, and the file opened at launch gets its servers from the suite's tools
 # @areas    startup installer treesitter lsp tools
 # @budget   180
 # @fresh
 # @needs    lua-language-server
-# @network  the real first start: lazy.nvim clone, ~30 plugin clones, blink.cmp binary, ~30 parser tarballs
+# @network  the real first start: 24 plugin clones, blink.cmp binary, ~30 parser tarballs
 #           Measured in the fresh sandbox (with Mason, before mise): VimEnter at 6.5-14s, parsers ~10s after it.
 #
 # Same TUI driver as fresh_no_prompt.sh (tmux, private server killed on exit; 3s init-time event loop that
-# forces the first-start prompt race), on an empty data dir, launched with main.lua so the opened buffer, whose
-# FileType comes before lazy has loaded anything, must get lua_ls from the suite's tools (the binary is resolved
-# while plugins install). Installs are off: the suite's mise is shared by every check and only --refresh fills it.
+# forces the first-start prompt race), on an empty data dir, launched with main.lua so the opened buffer must get
+# lua_ls from the suite's tools (the binary is resolved before plugins install, in the tools phase). Installs are off: the suite's mise is shared by every check and only --refresh fills it.
 set -u
 unset TMUX
 D=$FIX/.nvr
@@ -73,12 +72,11 @@ local function ts_state()
   return started, errs, pending
 end
 
-local function lazy_missing()
+local function plugins_missing()
   local out = {}
-  for name, p in pairs(require("lazy.core.config").plugins) do
-    if not p._.installed then table.insert(out, name) end
+  for _, p in ipairs(require("app.plugins").list()) do
+    if not vim.uv.fs_stat(p.path) then table.insert(out, p.name) end
   end
-  table.sort(out)
   return out
 end
 
@@ -115,13 +113,14 @@ local function report()
   info(string.format("echoes before VimEnter: %d%s", #init,
     #init > 0 and (" (first: " .. join(vim.tbl_map(function(e) return e.text end, init), 3) .. ")") or ""))
 
-  -- lazy reports a plugin hook that raised as "Failed to run `config` for <plugin>" (also init, build, ...)
+  -- app.plugins reports a plugin function that raised as "<plugin>: setup failed:" (also init, build), echoed before
+  -- snacks.notifier is set up and a notification after (checked below)
   local hook_errs = {}
   for _, e in ipairs(NVR.echoes) do
-    local hook, name = e.text:match("Failed to run `(%w+)` for ([%w%._%-]+)")
+    local name, hook = e.text:match("([%w%._%-]+): (%w+) failed:")
     if hook then table.insert(hook_errs, name .. " " .. hook) end
   end
-  rec(#hook_errs == 0, "every plugin's init, build and config run without error at the first start",
+  rec(#hook_errs == 0, "every plugin's init, build and setup run without error at the first start",
     #hook_errs > 0 and join(hook_errs) or nil)
 
   local started, errs, pending = ts_state()
@@ -136,8 +135,8 @@ local function report()
   rec(#pending == 0 and #errlist == 0 and #unloadable == 0, "parsers installed at first start load, no install errors",
     string.format("%d installed; pending [%s]; errors [%s]; not loadable [%s]", n, join(pending), join(errlist, 2), join(unloadable)))
 
-  local lm = lazy_missing()
-  rec(#lm == 0, "every lazy plugin installed", #lm > 0 and ("missing " .. join(lm)) or nil)
+  local pm = plugins_missing()
+  rec(#pm == 0, "every plugin installed", #pm > 0 and ("missing " .. join(pm)) or nil)
 
   local attach_name = "file opened at launch gets its servers from the suite's tools"
   if MODE == "bootstrap" and not (buf0 and vim.api.nvim_buf_is_valid(buf0)) then
@@ -201,7 +200,7 @@ vim.api.nvim_create_autocmd("VimEnter", {
   once = true,
   callback = function()
     t_enter = now()
-    -- by argv, not the current buffer: on a first start lazy's install window has focus
+    -- by argv, not the current buffer, which a check's own window could take
     local b = vim.fn.argc() > 0 and vim.fn.bufnr(vim.fn.fnamemodify(vim.fn.argv(0), ":p")) or -1
     buf0 = b > 0 and b or nil
     timer:start(250, 250, vim.schedule_wrap(function()

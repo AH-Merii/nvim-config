@@ -106,7 +106,7 @@ cp -a ~/nvr/src/nvim ~/.config/nvim && cp -a ~/nvr/src/fix ~/nvr/fix" || return 
 
 # settle <png>: wait for startup and the parser installs to finish, however long they take; give up only
 # after SETTLE_STALL seconds (default 180) without progress: a prompt, a new parser, or an install process
-# (lazy's git, a parser build) starting or ending. The first hit-enter or -- More -- prompt is captured to
+# (vim.pack's git, a parser build) starting or ending. The first hit-enter or -- More -- prompt is captured to
 # <png>; a -- More -- is paged to its end with G, a hit-enter prompt is dismissed with <CR> and counted.
 # Sets PROMPTS and PARSERS.
 settle() {
@@ -168,7 +168,7 @@ scenes() {
   LOG=$out/$ver-messages.txt
   : >"$LOG"
 
-  # 1. first start: lazy bootstraps and installs, the parsers install on VimEnter, no hit-enter prompt
+  # 1. first start: vim.pack installs the plugins, the parsers install on VimEnter, no hit-enter prompt
   echo "== 1 first start" >>"$LOG"
   start "$ver" || return 1
   settle "$out/$ver-1-first-start-prompt.png"

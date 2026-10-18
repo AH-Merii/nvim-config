@@ -40,27 +40,33 @@ local function attach(buf, lang)
 end
 
 local specs = {
+  -- before nvim-treesitter, for textobjects/, which its setup sets up; textobjects/ wraps the plugin's modules when it
+  -- is first required, so it is not required before this
+  { src = "nvim-treesitter/nvim-treesitter-textobjects", version = "main", phase = "startup" },
   {
-    "nvim-treesitter/nvim-treesitter",
-    branch = "main",
-    version = false,
-    lazy = false,
-    build = {
+    src = "nvim-treesitter/nvim-treesitter",
+    version = "main",
+    -- before the first file's FileType; its setup uses Snacks.toggle, and snacks loads before it (ui/snacks.lua)
+    phase = "startup",
+    build = function(path)
       -- master compiled parsers into the plugin dir; main installs them under stdpath("data")/site
-      function(plugin)
-        vim.fn.delete(plugin.dir .. "/parser", "rf")
-        vim.fn.delete(plugin.dir .. "/parser-info", "rf")
-      end,
-      ":TSUpdate",
-    },
-    dependencies = {
-      -- loaded first, for textobjects/, which config sets up; textobjects/ wraps the plugin's modules when it is
-      -- first required, so it is not required before this
-      { "nvim-treesitter/nvim-treesitter-textobjects", branch = "main" },
-      -- config uses Snacks.toggle; on the first start lazy runs configs as plugins finish installing, not by priority
-      "folke/snacks.nvim",
-    },
-    config = function()
+      vim.fn.delete(path .. "/parser", "rf")
+      vim.fn.delete(path .. "/parser-info", "rf")
+      -- Each parser's queries are a link into a checkout's runtime/queries (install.lua do_link_queries). update()
+      -- leaves a parser whose revision is unchanged alone (install.lua needs_update), so links into another
+      -- checkout, as lazy.nvim's was, are pointed at this one here
+      local queries = require("nvim-treesitter.config").get_install_dir("queries")
+      for lang, kind in vim.fs.dir(queries) do
+        local link, src = vim.fs.joinpath(queries, lang), vim.fs.joinpath(path, "runtime", "queries", lang)
+        if kind == "link" and vim.uv.fs_readlink(link) ~= src and vim.uv.fs_stat(src) then
+          vim.uv.fs_unlink(link)
+          vim.uv.fs_symlink(src, link)
+        end
+      end
+      -- :TSUpdate, which nvim-treesitter's plugin/ file defines after this runs at startup
+      require("nvim-treesitter").update(nil, { summary = true })
+    end,
+    setup = function()
       local ts = require("nvim-treesitter")
       local keys = require("keys")
       keys.need("treesitter", function(buf) return attached[buf] ~= nil end)
@@ -72,7 +78,8 @@ local specs = {
         { "<leader>TT", toggle = Snacks.toggle.treesitter() },
       })
       local group = vim.api.nvim_create_augroup("features.treesitter", { clear = true })
-      -- on the first start lazy runs this config inside its install wait, where the install log raises a hit-enter prompt
+      -- at VimEnter, not now: what the install logs before the screen is up raises a hit-enter prompt
+      -- (checks/fresh_no_prompt.sh)
       vim.api.nvim_create_autocmd("VimEnter", {
         group = group,
         once = true,

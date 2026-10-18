@@ -4,25 +4,25 @@
 -- A feature is a module under features/ that owns its plugins, keys, autocmds and options:
 --
 --   return {
---     plugins = { { "lewis6991/gitsigns.nvim", config = function() … end } }, -- lazy.nvim specs
+--     plugins = { { src = "lewis6991/gitsigns.nvim", phase = "startup", setup = function() … end } }, -- app.Plugin
 --     setup = function() … end, -- rows, needs, autocmds and options, run once at startup
 --   }
 --
 -- setup() runs before any plugin loads, so what needs a plugin (a Snacks toggle, gitsigns' own table) goes in that
--- plugin's spec, or in a callback it gives M.at_very_lazy. The adapters and ui modules bring the plugins they
--- wrap the same way, as a `plugins` list. Their setup is their own: the plugin's config calls it, or for lsp the
--- servers phase (lua/app/init.lua).
+-- plugin's setup, or in a callback it gives M.at_very_lazy. The adapters and ui modules bring the plugins they
+-- wrap the same way, as a `plugins` list. Their setup is their own: the plugin's setup calls it, or for lsp the
+-- servers phase (lua/app/init.lua). lua/app/plugins.lua documents the plugin shape (app.Plugin).
 local M = {}
 
--- Modules whose `plugins` are collected, before the features'. Their specs come first, so a feature's spec for the
--- same plugin (trouble's snacks picker actions) merges over theirs, as lazy merges later fragments.
+-- Modules whose `plugins` are collected, before the features'. Each phase loads its plugins in this order, so the
+-- theme and snacks load first.
 M.adapters = { "ui.theme", "ui.icons", "ui.snacks", "ui.statusline", "lsp", "format.conform", "linting.nvim_lint", "keys.which_key" }
 
 -- The features, in the order their setup() runs.
 M.features = { "editing", "search", "git", "completion", "folds", "diagnostics", "treesitter", "windows", "files", "lua_dev", "lsp_status", "profiling" }
 
---- Every module's plugins, adapters first, as one list of lazy.nvim specs (app/lazy.lua).
----@return LazySpec[]
+--- Every module's plugins, adapters first, as one list (app/plugins.lua).
+---@return app.Plugin[]
 function M.plugins()
   local specs = {}
   for _, name in ipairs(M.adapters) do

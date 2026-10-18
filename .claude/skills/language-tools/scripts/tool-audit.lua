@@ -4,7 +4,6 @@
 -- BASE_CATALOG, BASE_LANG: the base commit's lua/tools/catalog.lua and lua/lang/ dir; with them it also prints the
 -- binaries and sub-filetypes (variants) the change added or removed ("new", "newft", "removed" lines).
 -- Exits 1 when a check fails; each FAIL line names the file to fix.
-require("lazy").load({ plugins = { "conform.nvim", "nvim-lint", "nvim-lspconfig" } })
 local catalog, lang = require("tools.catalog"), require("lang")
 local conform, lint = require("conform"), require("lint")
 local enabled = require("lsp").servers

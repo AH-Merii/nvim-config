@@ -108,13 +108,13 @@ if [ $REFRESH = 1 ]; then
     data=$H/data log=$S/last/refresh-dry-run.log
     mkdir -p "$data"; cp -a --reflink=auto "$S/data/nvim" "$data/nvim"
   else
-    steps=${NVR_REFRESH_STEPS:-"lazy, tools (the suite's mise and rustup) and parsers"}
+    steps=${NVR_REFRESH_STEPS:-"plugins, tools (the suite's mise and rustup) and parsers"}
     echo "refresh: $steps in $S/data for $CFG"
   fi
   ( cd "$H" && exec env NVR_HOME="$H" NVR_DATA="$data" NVR_REFRESH_DRY=$DRY NVIM_REGRESS_TAG="$RUNID/refresh/" \
       timeout 1200 setsid "$S/nv.sh" nightly --headless -c "luafile $S/refresh.lua" ) >"$log" 2>&1
   rc=$?
-  sed "s/\x1b\[[0-9;]*m//g" "$log" | grep -E "^(lazy|tools|parsers):|FAIL|REFRESH"
+  sed "s/\x1b\[[0-9;]*m//g" "$log" | grep -E "^(plugins|tools|parsers):|FAIL|REFRESH"
   pids=$(tagged_pids "$RUNID/refresh/")
   # shellcheck disable=SC2086
   [ -n "$pids" ] && { echo "refresh left: $(describe_pids $pids)"; kill_pids KILL $pids; }
@@ -149,7 +149,7 @@ run_check() {
   fixture=$(header "$f" fixture); fixture=${fixture:-default}
   fdir=$(dirname "$f")/fixtures/$fixture; [ -d "$fdir" ] || fdir=$S/fixtures/$fixture
   fix=$H/fix-$name; st=$H/state-$name
-  rm -rf "$fix" "$st"; cp -a --reflink=auto "$fdir" "$fix"; seed_state "$st"
+  rm -rf "$fix" "$st"; cp -a --reflink=auto "$fdir" "$fix"; mkdir -p "$st"
   # git cannot track a nested .git, so fixtures store it as dot-git
   [ -d "$fix/dot-git" ] && mv "$fix/dot-git" "$fix/.git"
   data=$H/data

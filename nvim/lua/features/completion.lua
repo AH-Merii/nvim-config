@@ -1,13 +1,14 @@
 -- Completion and snippets: blink.cmp, with friendly-snippets and lazydev's source
 
 local specs = {
+  -- blink's snippets source reads them from the runtimepath
+  { src = "rafamadriz/friendly-snippets", phase = "startup" },
   {
-    "saghen/blink.cmp",
-    dependencies = {
-      "rafamadriz/friendly-snippets",
-    },
-    version = "1.*",
-    config = function()
+    src = "saghen/blink.cmp",
+    -- a release tag: blink downloads the prebuilt fuzzy matcher for the tag it is at
+    version = vim.version.range("1.*"),
+    phase = "startup",
+    setup = function()
       require("blink.cmp").setup({
         sources = {
           per_filetype = {

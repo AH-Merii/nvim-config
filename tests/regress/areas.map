@@ -1,9 +1,9 @@
 # <glob, relative to the nvim config dir>  <areas...>   (suite.sh --changed)
 # A changed file matching no line runs every area. startup and smoke always run under --changed.
 init.lua                          startup tools
-lazy-lock.json                    startup installer lsp format lint treesitter git completion which-key ui editing tools
+nvim-pack-lock.json               startup installer lsp format lint treesitter git completion which-key ui editing tools
 lua/app/init.lua                  startup tools
-lua/app/lazy.lua                  startup installer
+lua/app/plugins.lua               startup installer
 lua/features/init.lua             startup installer
 lua/lsp/buffer.lua                lsp keys which-key
 lua/lsp/init.lua                  lsp tools

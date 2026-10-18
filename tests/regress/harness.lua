@@ -1,4 +1,4 @@
--- Loaded with -c by suite.sh. On VimEnter it fires lazy's VeryLazy (headless never gets UIEnter),
+-- Loaded with -c by suite.sh. On VimEnter it fires User VeryLazy (headless never gets UIEnter, lua/app/init.lua),
 -- runs $CHECK and appends one line per result to $CHECK_OUT, then quits. See README.md for the API.
 local OUT = assert(vim.env.CHECK_OUT, "CHECK_OUT unset")
 local CHECK = assert(vim.env.CHECK, "CHECK unset")
@@ -264,7 +264,7 @@ local function main()
     vim.g.did_very_lazy = true
     vim.api.nvim_exec_autocmds("User", { pattern = "VeryLazy", modeline = false })
   end
-  vim.wait(30) -- lazy defers its VeryLazy work by 10ms
+  vim.wait(30) -- what the deferred plugins' setups schedule
   vim.v.errmsg = ""
   local ok, err = true, nil
   if needs_resolve() then ok, err = xpcall(dofile, debug.traceback, CHECK) end

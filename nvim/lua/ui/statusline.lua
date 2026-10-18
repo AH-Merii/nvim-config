@@ -1,9 +1,10 @@
 local function get_colors() return require("ui.theme").palette() end
 
 local spec = {
-  "AH-Merii/neoblocks.nvim",
-  event = "VeryLazy",
-  config = function()
+  src = "AH-Merii/neoblocks.nvim",
+  -- $NVIM_PLUGIN_DEV/neoblocks.nvim, when set, instead of the installed copy (lua/app/plugins.lua)
+  dev = true,
+  setup = function()
     local sl = require("neoblocks.statusline")
     -- What the segments show of a buffer's servers, tools and checkout (lua/ui/facts.lua); this spec only draws it
     local facts = require("ui.facts")

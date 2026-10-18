@@ -14,7 +14,7 @@ suite.sh --changed main         # iteration: areas touched by `git diff main` in
 suite.sh --work <feature>       # iteration: the checks in work/<feature>/
 suite.sh --list [...]           # print what would run, run nothing
 suite.sh --selftest             # the runner's own tests: leak, over budget, fsmonitor, missing server
-suite.sh --refresh              # sync lazy, the suite's tools and parsers in data/ for the current CFG, then run
+suite.sh --refresh              # sync plugins, the suite's tools and parsers in data/ for the current CFG, then run
 suite.sh --refresh-only         # the same sync, then exit without running checks (the test image's build)
 suite.sh --refresh-dry-run      # print the tools every check needs and which do not resolve, change nothing, run nothing
 CFG=/path/to/nvim suite.sh      # test another config dir (default: ../../nvim, this repo's config)
@@ -46,7 +46,8 @@ add a line when a new config file appears.
 
 ### Refresh
 
-`--refresh` brings lazy to the lockfile and parsers to the config's list. Tools:
+`--refresh` brings the plugins to the lockfile (vim.pack clones what is missing) and parsers to the config's list.
+Tools:
 
 - Every tool a check runs comes from the suite's own mise, never the user's: `data/mise/data` is its
   `MISE_DATA_DIR` and `data/mise/config.toml` its global config (`lib.sh` `mise_env`). Rust components
@@ -60,7 +61,7 @@ add a line when a new config file appears.
 - It never uninstalls; delete `data/mise` or `data/rustup` by hand to start over.
 - An empty keep-list fails the refresh.
 - `--refresh-dry-run` prints the keep-list, the specs and components, and which needs do not
-  resolve now, without lazy, parsers or installs, then exits. Log in `last/refresh-dry-run.log`.
+  resolve now, without plugins, parsers or installs, then exits. Log in `last/refresh-dry-run.log`.
 
 ### Feature work: work/ then checks/
 
@@ -94,7 +95,7 @@ mise run test:image suite lsp      # suite.sh args; `unit [args]` for the unit t
   capped at 2 GB. Failed checks' output lands in `last/image/` (`$NVR_OUT`).
 - `nv.sh` and `tests/unit/run.sh` take the nvim binary from `$NVR_NVIM` (the image sets it), else the user's
   mise nightly.
-- `--refresh-only` refreshes and runs nothing; `NVR_REFRESH_STEPS` picks the steps (`lazy tools resolve parsers`,
+- `--refresh-only` refreshes and runs nothing; `NVR_REFRESH_STEPS` picks the steps (`plugins tools resolve parsers`,
   the default, in that order).
 - Behaves differently in the container: the hygiene assertions on the live nvim, mise and rustup dirs hold
   trivially (they don't exist there), `--changed` has no git history (`.git` is not copied), and `cache-seed/` is
@@ -108,13 +109,13 @@ mise run test:image suite lsp      # suite.sh args; `unit [args]` for the unit t
 | `nv.sh` | launcher: `nv.sh nightly [nvim args]`, sandboxed env (see Hygiene) |
 | `lib.sh` | shared shell helpers |
 | `harness.lua` | headless check harness, loaded with `-c` |
-| `refresh.lua` | `--refresh`: lazy install/restore/clean, the suite's mise and rustup installs for every `@needs`, parser install/update |
+| `refresh.lua` | `--refresh`: plugins to the lockfile (vim.pack update and delete, blink's library), the suite's mise and rustup installs for every `@needs`, parser install/update |
 | `areas.map` | config file glob to areas, for `--changed` |
 | `checks/` | the kept checks |
 | `selftest/` | checks that must fail in a given way (`@expect-fail <regex>`), for changes to the runner |
 | `work/<feature>/` | checks of a feature in development, optional `fixtures/` |
 | `fixtures/<name>/` | fixture trees; `default` is a small git repo with one file per language |
-| `data/` | `data/nvim`: seed XDG_DATA_HOME (lazy plugins, parsers), each version runs on a reflink copy; `data/mise`, `data/rustup`: the suite's tools, used in place |
+| `data/` | `data/nvim`: seed XDG_DATA_HOME (plugins in `site/pack/core/opt`, parsers), each version runs on a reflink copy; `data/mise`, `data/rustup`: the suite's tools, used in place |
 | `cache-seed/` | go-build, golangci-lint, gopls caches copied into each run so linters start warm |
 | `shared-cache/` | Go module and npm download caches, used in place by every run (not copied), so Go and npm runs start warm |
 | `gui.sh` | optional GUI check: a fresh start in ghostty in the `cachyos` QEMU VM, never on the host desktop |
@@ -221,7 +222,6 @@ Keymap clashes (`checks/keymap_clashes.lua`, report only). For n, x and o it lis
   environment. A tagged process still alive 3s after the check ends FAILs the check with its name
   ("leaked: tflint(1234)"), then the group and every tagged process is killed. Known, expected
   leaks go in the check's `@allow-leak` with a reason.
-- Lazy's checker state is seeded per check so no check git-fetches the plugins.
 - Before the run: no text file and no symlink anywhere under `data/` may reach a live nvim dir or an
   old sandbox (copied tool trees start binaries by absolute path; nvim-treesitter links
   `site/queries/*` into its plugin dir by absolute path); `--refresh` repoints them into `data/`.
@@ -249,7 +249,7 @@ gui.sh start nightly main.lua      # or drive it by hand: keys '<Space>', expr '
 gui.sh down                        # release the lease (powers the VM off)
 ```
 
-The scenes: first start (lazy bootstrap, plugin and parser install, no hit-enter prompt), the
+The scenes: first start (plugin and parser install, no hit-enter prompt), the
 missing-tool prompt on `main.lua` (answered Install; `mise use -g` in the guest), which-key for `<leader>` with lua_ls attached,
 the completion menu, pending keys (`"a2d`), and `:Gitsigns diffthis` with `]c`. In the guest, the
 config replaces `~/.config/nvim` (the home-manager one is kept as `nvim.hm`), the build is
