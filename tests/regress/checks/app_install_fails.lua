@@ -43,7 +43,10 @@ vim.fn.writefile({
   "  phases = vim.tbl_map(function(t) return t.name end, require('app').times()),",
   "  plugins = ok and plugins or {},",
   "  servers = vim.tbl_count(vim.lsp._enabled_configs or {}),",
-  "  messages = vim.api.nvim_exec2('messages', { output = true }).output,",
+  -- where a report goes: snacks.notifier once it is set up (lua/app/init.lua sends startup reports after the
+  -- phases), else :messages
+  "  messages = vim.api.nvim_exec2('messages', { output = true }).output .. '\\n' .. table.concat(vim.tbl_map(",
+  "    function(n) return n.msg end, rawget(_G, 'Snacks') and Snacks.notifier.get_history() or {}), '\\n'),",
   "}) }, vim.env.NVR_OUT)",
 }, probe)
 local child = vim.system({ vim.env.NV, vim.env.V, "--headless", "-c", "luafile " .. probe, "-c", "qa!", "main.lua" }, {

@@ -48,7 +48,7 @@ local opts = {
   notifier = {
     enabled = true,
     -- Errors stay until dismissed (<leader>N), like ui2 message errors, except the routine ones
-    -- ui/messages/messages.lua marks (a search that found nothing); the rest is snacks' default keep
+    -- neoblocks' messages module marks `routine` (a search that found nothing); the rest is snacks' default keep
     -- (snacks/notifier.lua:131-133).
     keep = function(n) return n.level == "error" and not n.routine or vim.fn.getcmdpos() > 0 end,
   },
@@ -158,11 +158,19 @@ local spec = {
   end,
 
   init = function()
-    -- What snacks itself shows: the toggles' group, the message history (ui/messages) and the notifications
+    -- What snacks itself shows: the toggles' group, the message history (neoblocks' messages) and the notifications
     local function icon(glyph, color) return { icon = glyph, color = color } end
+    -- neoblocks may have failed to install or load; its install failure is a toast of its own (lua/app/plugins.lua)
+    local function history()
+      local ok, nb = pcall(require, "neoblocks")
+      if not (ok and nb.did_setup) then
+        return vim.notify("Message history: neoblocks.nvim isn't loaded; :messages has ui2's", vim.log.levels.WARN)
+      end
+      nb.messages.history()
+    end
     require("keys").feature("ui")({
       { "<leader>T", group = "Toggle Features", icon = icon("", "yellow") },
-      { "<leader>n", function() require("ui.messages.history").open() end, "Message History", icon = icon("󰂚", "yellow") },
+      { "<leader>n", history, "Message History", icon = icon("󰂚", "yellow") },
       { "<leader>N", function() Snacks.notifier.hide() end, "Dismiss Notifications", icon = icon("󰎟", "yellow") },
     })
   end,

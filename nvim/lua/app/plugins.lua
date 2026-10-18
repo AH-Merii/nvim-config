@@ -47,7 +47,7 @@ end
 local function try(name, what, fn)
   local ok, err = xpcall(fn, debug.traceback)
   if not ok then
-    vim.notify(("%s: %s failed:\n%s"):format(name, what, err), vim.log.levels.ERROR, { title = "app.plugins" })
+    require("app").report(("%s: %s failed:\n%s"):format(name, what, err), "app.plugins")
   end
 end
 
@@ -191,7 +191,7 @@ function M.setup(plugins)
   for _, p in ipairs(plugins) do
     local name = name_of(p)
     if by_name[name] then
-      vim.notify(("%s is given twice; the second is skipped"):format(name), vim.log.levels.ERROR, { title = "app.plugins" })
+      require("app").report(("%s is given twice; the second is skipped"):format(name), "app.plugins")
     else
       by_name[name] = p
       list[#list + 1] = p
@@ -228,9 +228,7 @@ function M.setup(plugins)
     -- update, drops the restored pins again
     local msg = "vim.pack could not install every plugin; the others load. Restart Neovim before :packupdate, which"
       .. " would drop the failed plugins from the lockfile:\n%s"
-    vim.notify(msg:format(err), vim.log.levels.ERROR, {
-      title = "app.plugins",
-    })
+    require("app").report(msg:format(err), "app.plugins")
     restore_pins(lockfile, pinned)
   end
 
