@@ -109,5 +109,5 @@ for _, p in ipairs(prompts) do
 end
 check("no prompt names a command", #prompts > 0 and #commands == 0, vim.inspect(commands))
 
-local installs = vim.tbl_filter(function(c) return c:find(" use %-g") or c:find(" install") or c:find(" trust") or c:find("component add") end, ran)
+local installs = vim.tbl_filter(function(c) return c:find(" use ") or c:find(" install") or c:find(" trust") or c:find("component add") end, ran)
 check("nothing installed or trusted", #installs == 0, vim.inspect(installs))

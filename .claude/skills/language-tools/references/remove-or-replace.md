@@ -29,6 +29,6 @@ Then remove, and tick off each item:
 
 Some things are not tool wiring, so leave them unless the user asks: a language's `keys` (labels for its runtime ftplugin's maps), `parsers` and `options` when only a tool goes. When PHP's tools were dropped, its labels stayed: `nvim/lua/lang/php.lua` holds only them.
 
-Nothing is uninstalled from the user's mise. The user runs `mise uninstall` themselves if they want to. The suite's mise never uninstalls either (`tests/regress/README.md`, "Refresh").
+Nothing is uninstalled from the user's mise. The user runs `mise unuse --path ~/.config/mise/conf.d/nvim-config.toml <tool>` themselves if they want to: the config's installs are in that file, and `mise unuse -g` only edits `config.toml`. The suite's mise never uninstalls either (`tests/regress/README.md`, "Refresh").
 
 Verify with `nvim --clean --headless -l tests/unit/lang_test.lua` (it fails while a language names a tool the catalog lost) and `$SK/check.sh $R`: it lists each removed binary, and fails while a check still lists it in `@needs`, the "Decided since" list doesn't name it, or `docs/languages.md` is out of date. Pass `FT="<the language's filetypes>"` to see that the old tool is on no `ft` line. Then run the suite (SKILL.md step 7).

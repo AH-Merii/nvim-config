@@ -2,7 +2,7 @@
 -- Which filetypes use a tool, and a server's settings, are in the language files (lua/lang/).
 
 ---@class tools.Entry
----@field spec? string mise spec for `mise use -g`, version left out ("latest" is added); nil when only the system provides it
+---@field spec? string mise spec for a global install (`mise use --path <tools file>`), version left out ("latest" is added); nil when only the system provides it
 ---@field project? string[] dirs under a project, searched upward from its root, that may hold a project copy
 ---@field runtime? "node"|"go"|"rust" what the binary needs on PATH when it runs
 ---@field component? string rustup component providing it; checked with `rustup which` and installed with `rustup component add`
@@ -15,7 +15,7 @@
 
 ---@class tools.Runtime
 ---@field bin string
----@field spec string `mise use -g` spec when it is missing
+---@field spec string mise spec for its global install when it is missing
 
 local M = {}
 

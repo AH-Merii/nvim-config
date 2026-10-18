@@ -52,8 +52,11 @@ reads or deletes them now, so remove that directory when you no longer need it. 
 
 - **Update plugins:** `:packupdate`, then `:write` in the list of changes to apply them (`:quit` to cancel).
   `:packupdate ++lockfile` puts every plugin back at the lockfile's revision.
-- **Install a missing tool:** open a file it works on and accept the offer, or `:Tools install`. Update tools with
-  `mise upgrade`.
+- **Install a missing tool:** open a file it works on and accept the offer, or `:Tools install`. It goes into
+  `~/.config/mise/conf.d/nvim-config.toml`, a global mise file of the config's own, so your `config.toml` is left
+  alone; when your `config.toml` pins a version that isn't installed, that version is installed and no file changes.
+  Update tools with `mise upgrade`; remove one with
+  `mise unuse --path ~/.config/mise/conf.d/nvim-config.toml <tool>`.
 - **Format and lint:** automatic, on save (conform.nvim) and on edits (nvim-lint).
 - **Turn off install offers:** `vim.g.install_tools = "off"`.
 
