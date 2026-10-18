@@ -14,6 +14,8 @@ resolved per project, with project-pinned tools taking priority.
   project prompt, install timing, versions, where it is built, file-scoped tools. Which tools each language and
   variant gets today is generated into [languages.md](languages.md) (2026-10-18, `mise run docs`).
 - Done: Mason bin dir removed from the shell PATH.
+- Changed (2026-10-18, D91 at the end): global installs go to the config's own global mise file,
+  `~/.config/mise/conf.d/nvim-config.toml`, not `~/.config/mise/config.toml`.
 - Verified: every chosen tool installs through mise and runs (see "Install specs").
 - Built (2026-10-12), in `nvimt2` (worktree `~/Projects/nvim-config-t2`, branch `nvimt2/mise-tooling`), not merged:
   - resolver, catalog and sub-filetypes in `nvim/lua/tools/`;
@@ -55,6 +57,8 @@ Facts this rests on:
 - **Versions**: written as `"latest"`, matching the rest of the global config; updated with `mise upgrade`.
 
 - Global installs use `mise use -g` and land in the tracked global config `~/.config/mise/config.toml`.
+  **Superseded (2026-10-18)** by D91 below: they land in the config's own global file,
+  `~/.config/mise/conf.d/nvim-config.toml`.
 - Verified in isolation: `mise use -g` on a symlinked config keeps the symlink and all comments, and appends
   the new tool at the end of `[tools]`.
 
@@ -382,6 +386,12 @@ Walking through every resolver case with the user, from screenshots of `:Tools` 
   reads `Installed pyrefly and ruff`, or `Couldn't install ruff` followed by mise's error.
   - Why: the user doesn't need the command; "globally with mise" says where and how, and sets it apart from the
     project installs of cases 4-6.
+  - When the user's global config pins the tool at a version that isn't installed (D99):
+    `sh needs shfmt 3.10.0 (pinned by your global config.toml)` / `Install 3.10.0, the version your global config.toml
+    pins` / `Not now (…)`; several tools: `Install the versions your global config.toml pins`. The tool's `:Tools`
+    menu offers the same `Install 3.10.0, the version your global config.toml pins`, and no "latest" alternative.
+    A channel pin names no version, so it reads `Install the lts version your global config.toml pins` (mise lists
+    an unresolved `npm:prettier = "lts"` as version `lts`, found in review).
 - **Case 3 (project `.venv`/`node_modules` has the tool): it wins, silently.** The row reads
   `project .venv · 0.15.0` (or `project node_modules · …`). A tool the project env lacks falls through to case 1 or 2;
   Neovim never installs into a project's `.venv` or `node_modules`.
@@ -493,3 +503,171 @@ Where the build fills a gap the cases above left, or departs from them:
 - **`:Tools retry` is now `:Tools rescan`**, matching the row.
 - **The linters list and nvim-lint share one check** (`nvim/lua/tools/lint.lua`): `covering_server` moved there from
   `nvim/lua/plugins/nvim-lint.lua`, with the "will this linter run" test both use.
+
+## D91: the config's tools go to a global file of its own (2026-10-18)
+
+**Context.** A global install ran `mise use -g <spec>@latest` (`nvim/lua/tools/mise.lua:184` before this change),
+which writes `~/.config/mise/config.toml`. On the user's machine that file is a symlink into the dotfiles repo
+(`stat ~/.config/mise/config.toml`: `symbolic link … -> ../../SMS-Supercharge-My-Shell/base/mise/.config/mise/config.toml`),
+so every tool the config installed became an uncommitted change there: 14 lines on 2026-10-18 (lua-language-server,
+stylua, biome, tombi, `npm:typescript`, …). `-g` also "updates the global config file that already declares the
+tool" (`mise use --help`, mise 2026.10.8): in an isolated probe, `mise use -g shfmt@latest` turned a user's
+`shfmt = "3.12.0"` into `"latest"` in place.
+
+**Decision.** A global install runs `mise use --path <file> <specs>` (`tools.mise.use_global`), where the file
+(`tools.mise.tools_file()`) is:
+
+- `conf.d/nvim-config.toml` in mise's config dir: `$MISE_CONFIG_DIR`, else `$XDG_CONFIG_HOME/mise`, else
+  `~/.config/mise`, the same dir `is_global_config` already uses;
+- `$MISE_GLOBAL_CONFIG_FILE` when it is set, since that variable "replaces all of these files with one file"
+  (https://mise.jdx.dev/configuration.html#global-config), conf.d included. The regress suite and the
+  language-tools skill's `iso-mise.sh` set it, so their installs behave as before.
+
+Why conf.d is still global: "Global config applies in every directory. It lives in `~/.config/mise`
+(`MISE_CONFIG_DIR`) … The directory can also hold `mise.toml`, `conf.d/` fragments, …"
+(https://mise.jdx.dev/configuration.html#global-config), and conf.d's `*.toml` files load "in alphabetical order,
+before the directory's own `config.toml`, so `config.toml` overrides its fragments"
+(https://mise.jdx.dev/configuration.html#conf-d). On the user's machine `~/.config/mise` is a real directory and
+only `config.toml` is a link (`stat`: `directory /home/a_merii/.config/mise`), so the new file is outside the
+dotfiles.
+
+Probed in an isolated mise (`MISE_DATA_DIR`, `MISE_CACHE_DIR`, `MISE_STATE_DIR` and `MISE_CONFIG_DIR` under
+`~/.cache/nvim-config/tools-confd/`, mise 2026.10.8), with a `config.toml` holding the user's own tools:
+
+- `mise use --path $MISE_CONFIG_DIR/conf.d/nvim-config.toml stylua@latest` created `conf.d/` and the file
+  (`[tools]` / `stylua = "latest"`) and left `config.toml` unchanged. From a dir with no project config,
+  `mise which stylua` found it and `mise bin-paths -C /` (the resolver's global layer) listed it; `mise config ls`
+  listed both files. With `XDG_CONFIG_HOME` set and `MISE_CONFIG_DIR` unset, `$XDG_CONFIG_HOME/mise/conf.d/` was read.
+- With `MISE_GLOBAL_CONFIG_FILE` set, the conf.d file was not read (`mise which stylua`: "not currently active"),
+  and `mise use -g` wrote that file.
+- `config.toml` wins over the conf.d file: with `shfmt = "3.12.0"` there and `"latest"` in ours, `mise which shfmt`
+  gave the 3.12.0 install. A user's own pin keeps working while it is installed; one that isn't is D99 below.
+- The user's `mise use -g stylua@2.5.0` for a tool only in our file rewrote our file ("Updates the global config file
+  that already declares the tool"). `mise ls` and `mise ls --global` list our tools with our file as their source;
+  `mise outdated` and `mise upgrade --dry-run` included them, so "update tools with `mise upgrade`" still holds.
+- Removing one: `mise unuse --path <file> <tool>` removed it ("mise removed: shfmt from …/conf.d/nvim-config.toml").
+  `mise unuse -g <tool>` edits only `config.toml`: for a tool only in our file it changed nothing and exited 0.
+  `mise uninstall <tool>@<version>` removes the install and leaves the entry, as for any config file.
+- The config's other mise calls need no change: `bin-paths -C /` lists the file's tools (above); `config ls` in a
+  project lists the file, and `is_global_config` takes it for global, not a project's, as it is under the config dir
+  (`nvim/lua/tools/mise.lua:31-37`). Writing it in Neovim refreshes the tools like `config.toml` did
+  (`*/mise/conf.d/*.toml` in `config_patterns`). A project's `.mise/conf.d/*.toml`, which mise also reads (`mise config
+  ls` in a probe project listed `.mise/conf.d/a.toml`), is matched by `*/.mise/conf.d/*.toml`.
+
+Tests: `tests/unit/tools_mise_test.lua` runs `use_global` against a fake `mise` that writes each spec to the file
+the real one would. Sibling wrong versions each fail it: still `-g`; a path hard-coded under `~/.config`; a path
+that ignores `XDG_CONFIG_HOME`; one that ignores `MISE_GLOBAL_CONFIG_FILE`; a do-nothing install. With neither
+`MISE_CONFIG_DIR` nor `XDG_CONFIG_HOME` set, the file is `~/.config/mise/conf.d/nvim-config.toml`: a fallback
+without `.config` (`~/mise/conf.d/…`) and one with no fallback (a relative `mise/conf.d/…`) each fail that case and
+pass the rest. The tools regress checks spot installs by `" use "` instead of `" use -g"`.
+
+Rejected:
+
+- Keep `-g`: the problem above.
+- The `write_targets.tools` setting, which `mise use -g` honours ("otherwise the file set by the
+  `write_targets.tools` setting", https://mise.jdx.dev/cli/use.html): it redirects the user's own `mise use -g`
+  too, and has to be set in the dotfiles' `config.toml`.
+- `config.local.toml` in the global dir: also untracked by the dotfiles, but it is the user's file for
+  machine-specific values, and as a local file it overrides `config.toml` ("Every local file overrides every shared
+  file in the same directory", https://mise.jdx.dev/configuration.html), so the config's `latest` would beat the
+  user's own pins.
+- A file outside mise's config dir (Neovim's `stdpath("data")`, say): mise would not read it as global, so the tools
+  would not be active in a terminal, which `-g` gave and the decision keeps.
+
+**Migration.** No code moves entries. A tool already in `config.toml` keeps working and is not installed again: the
+resolver finds it through `mise bin-paths -C /` as `global-mise` (`nvim/lua/tools/init.lua:356-361`) and offers an
+install only for a missing tool. Which `config.toml` lines the config wrote can't be told apart from the user's own
+for certain, so the config doesn't edit that file. `-g` left two kinds of change in the dotfiles' diff: a `+` line
+on its own (a new entry) and a `-`/`+` pair (a committed pin rewritten in place, its comment kept). Only the first
+kind moves: moving a pair's `+` line and running `unuse -g` deletes the user's committed pin, which a review
+rehearsal showed (a committed `shfmt = "3.14.1" # pinned for CI` was gone). A user who wants the entries out
+follows these steps once:
+
+1. Keep a copy, and list what changed:
+
+   ```sh
+   f=$(readlink -f ~/.config/mise/config.toml)   # the file in the dotfiles repo
+   cp "$f" ~/.cache/mise-config.toml.bak
+   git -C "$(dirname "$f")" diff -- "$f"
+   ```
+
+2. Sort the lines:
+   - A `-` line and a `+` line for the same tool: `-g` rewrote a committed pin, e.g.
+     `-shfmt = "3.14.1" # pinned for CI` / `+shfmt = "latest" # pinned for CI`. Don't move it; step 4 restores it.
+   - A `+` line on its own: a new entry. It is the config's when its version is `"latest"`, `"lts"` or `"stable"`
+     (what installs write: `nvim/lua/tools/init.lua:378` and `catalog.runtimes`) and the tool is in the catalog: in
+     this repo, `grep -nF 'spec = "<tool>' nvim/lua/tools/catalog.lua` prints its line.
+   - A line you added or changed yourself and haven't committed looks the same. Any other version, or a tool not in
+     the catalog, is yours; so is one you remember adding. Leave those: they keep working where they are.
+3. Move the config's `+` lines (step 2's second kind only):
+
+   ```sh
+   mise use --path ~/.config/mise/conf.d/nvim-config.toml <tool>@<version> ... && mise unuse -g --no-prune <tool>@<version> ...
+   ```
+
+   `mise use --path` first, so the tools stay active throughout; versions already installed are not downloaded
+   again ("2 already installed"); `--no-prune` keeps the installs; the `@<version>` matches the line as written,
+   e.g. `stylua@latest`.
+4. Put the rewritten pins back:
+
+   ```sh
+   git -C "$(dirname "$f")" restore -p -- "$f"
+   ```
+
+   Answer `y` to a hunk that holds only `-`/`+` pairs, `n` to one that holds a line of yours. `s` splits a hunk
+   where an unchanged line separates the two. A pin right next to a line of yours can't be split: answer `n` and
+   copy the `-` line over its `+` line in an editor.
+5. Check: `git -C "$(dirname "$f")" diff -- "$f"` lists only your own lines, `diff ~/.cache/mise-config.toml.bak "$f"`
+   lists only the moved lines and the restored pins, and `mise which <tool>` finds each tool. A restored pin whose
+   version isn't installed (`-g` installed the latest instead) needs `mise install <tool>@<version>`.
+
+Rehearsed in the isolated mise (shared installs, `MISE_CONFIG_DIR` under `~/.cache/nvim-config/d91-fix/`) with
+`config.toml` a symlink into a throwaway git repo holding a committed `shfmt = "3.14.1" # pinned for CI`, after
+`mise use -g shfmt@latest stylua@latest` and a hand-added, uncommitted line of the user's:
+
+- A committed `jq = "1.8.2"` after the pin, and the user's line `usage = "2.0.0"` at the end: the diff was the shfmt
+  pair and `+stylua = "latest"`, `+usage = "2.0.0"`; `grep` found `stylua` and `shfmt` in the catalog, not `usage`.
+  After step 3, `restore -p` showed one hunk; `s`, `y`, `n` restored the pin and kept `usage`. `git diff` then held
+  only `+usage = "2.0.0"`, the backup diff only the shfmt line and the stylua line, our file `stylua = "latest"`, the
+  link was intact, and `mise which` found shfmt 3.14.1, stylua and jq.
+- User's line `jq = "1.8.2"` right after the pin: one hunk, and `s` gave "Sorry, cannot split this hunk". `y`
+  discarded the user's `jq` line with the pin (`mise which jq`: "not currently active"); `n` plus the hand edit kept
+  it, with the same checks passing.
+- `git restore -p -U0` is no shortcut: with no context lines, `y` failed ("patch does not apply").
+
+An earlier rehearsal of step 3 alone (by the original change) moved a quoted `"aqua:koalaman/shellcheck"` key too.
+
+### D99: a global pin that isn't installed gets that version installed (2026-10-18)
+
+**Context.** Review found that a pin in the user's `config.toml` beats the config's own file, installed or not.
+With `shfmt = "3.10.0"` there and not installed, in the isolated mise, `mise use --path …/conf.d/nvim-config.toml
+shfmt@latest` printed "tools: shfmt@3.14.1" and exited 0, then `mise which shfmt` gave "shfmt is a mise bin however it
+is not currently active". The resolver offered that install for any missing tool and took exit 0 for success, so
+Install did nothing visible and the tool stayed missing.
+
+**Decision (the user's choice A).** When a global config other than the config's own file (`config.toml`, or any
+global file that outranks the fragment) makes mise use a version of the tool that isn't installed, Install runs
+`mise install <tool>@<that version>` and writes no config file. It is the existing `pinned` install with
+`scope = "global"` and `config` the file's name; there is no "latest" alternative, since the pin would still win
+over it. The prompt says it's the user's global config (case 2 above).
+
+- `tools.mise.global_pins` runs `mise ls --current --json -C /` and keeps each tool's first version, its `installed`
+  flag and its source file, leaving out `tools_file()`. With `shfmt = "3.10.0"` in `config.toml` it reported
+  `"version": "3.10.0"`, `"installed": false` and `config.toml` as the source.
+- Cost: one `mise ls` per refresh (`global_pins` in `nvim/lua/tools/init.lua`), started alongside `mise bin-paths -C /`
+  so it adds no wait: 16 ms against bin-paths' 18 ms, averaged over 10 runs each in the isolated mise. Asking only once
+  a tool turned out missing, as first planned, made a missing tool's result land one mise call after the others':
+  `tests/unit/facts_test.lua` then saw two FactsChanged for one answer (`want: { false, { 3 } }`,
+  `got: { false, { 3, 3 } }`), i.e. the statusline's missing count dropping and coming back.
+- A project pin comes first: in the project it is what mise uses.
+
+Checked live in the isolated mise with `config.toml` holding `shfmt = "3.9.0"` and the fragment `shfmt = "latest"`:
+the resolver gave `pinned by your global config.toml but not installed` and the install `shfmt@3.9.0`, Install
+succeeded, a fresh resolve found `installs/shfmt/3.9.0/shfmt` as `global-mise`, and neither file changed.
+
+Tests: `tests/unit/tools_test.lua` ("a version the global config pins but isn't installed is what Install installs",
+"without a global pin that isn't installed, the offer is the global install"). Sibling wrong versions each fail one:
+global pins ignored; a "latest" alternative kept; the pinned version written with `mise use` instead; the global pin
+checked before the project's. `tests/unit/tools_mise_test.lua` ("global pins: …") runs `global_pins` against a fake
+`mise ls`; it fails when the config's own file isn't left out, when a later version overwrites the first, and
+without `-C /` (raised in review).
