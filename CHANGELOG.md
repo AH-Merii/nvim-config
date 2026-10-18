@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/AH-Merii/nvim-config/compare/v0.12.0...v0.13.0) (2026-10-18)
+
+
+### Features
+
+* **ui:** messages and the cmdline come from neoblocks' messages module ([#58](https://github.com/AH-Merii/nvim-config/issues/58)) ([1101292](https://github.com/AH-Merii/nvim-config/commit/11012923a0e985a9f29e1cb03a5d47ad0e936b15))
+
 ## [0.12.0](https://github.com/AH-Merii/nvim-config/compare/v0.11.0...v0.12.0) (2026-10-18)
 
 
