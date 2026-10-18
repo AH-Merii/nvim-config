@@ -28,7 +28,7 @@ setup tells you if yours doesn't.
 2. `registries` - Neovim's own keys as key rows (`keys.neovim`), each language file's `keys` rows (`keys.languages`),
    the LSP keys (`lsp.buffer`), and each feature's `setup()` in the order of `M.features` in
    `lua/features/init.lua`: its rows, needs, autocmds and options
-3. `tools` - The dotenv filetype rule, the languages' variant filetypes and buffer options (`lang.setup()`), the tool
+3. `tools` - The languages' variant filetypes and buffer options (`lang.setup()`), the tool
    resolver, install prompts and `:Tools` (before any plugin looks a tool up)
 4. `plugins` - `lua/app/lazy.lua`: bootstrap lazy.nvim and give it every module's `plugins`
    (`require("features").plugins()`); lazy loads the startup plugins here

@@ -1158,7 +1158,7 @@ branch.
 - *The proposal's six phases, in its order* (proposal Part 4, "Startup, in phases"):
   1. `options`: `options.lua`, then `ui2.enable()` and `ui.messages.setup()`;
   2. `registries`: `keys.neovim`, `keys.languages`, `lsp.buffer`, `features.setup()`;
-  3. `tools`: the dotenv rule (below), `lang.setup()`, `tools.setup()`, `tools.ux.setup()`;
+  3. `tools`: `lang.setup()`, `tools.setup()`, `tools.ux.setup()`;
   4. `plugins`: `app.lazy.setup()`;
   5. `servers`: `lsp.setup()`;
   6. `deferred`, at `User VeryLazy`: the features' `at_very_lazy` callbacks.
@@ -1215,15 +1215,18 @@ branch.
     (`runtime/lua/vim/filetype.lua:2847`, `['^[jt]sconfig.*%.json$'] = 'jsonc'`), and a user pattern is anchored the
     same way (`filetype.lua:3085`). `vim.filetype.match` gives jsonc for `tsconfig.base.json` and `jsconfig.json` on
     both main and this branch. The two patterns differ only on names with no dot before `json`.
-  - The dotenv rules moved to the tools phase, before `lang.setup()`. No language file declares dotenv, and Neovim
-    names these files `env` (`filetype.lua:495,1704,2785`), with its own syntax and ftplugin.
-  - Rejected: a language-level `match` field in `lang.Spec` and a `lang/dotenv.lua`. dotenv has no tools, but
-    `lang.of("dotenv")` would start answering, and the facts, `:Tools`, `:Status` and the format and lint modules read
-    that answer. `views.filetypes` would also need an `extension` table, which changes the views the unit tier checks
-    (`tests/unit/lang_test.lua:128`). That is too much for one rule.
-  - Found: the `.env.*` pattern (`["%.env%.[%w_.-]+"] = "dotenv"`) has no effect on main either. `.env.local` is `env`
-    on both, the runtime's `^%.env%.` winning. It is kept as is; whether the dotenv rules should go in favour of
-    the runtime's `env` is the user's call.
+  - The dotenv rules are gone; `.env` files get Neovim's own `env` filetype, with its syntax and ftplugin
+    (`runtime/lua/vim/filetype.lua:495,1704,2785`). The user decided this once review found what the rules did:
+    - No language file declares dotenv, and nothing in the config read the filetype (`grep -rn dotenv nvim/` on main
+      finds only the rules).
+    - The `.env.*` pattern (`["%.env%.[%w_.-]+"] = "dotenv"`) had no effect on main: `vim.filetype.match` gives `env`
+      for `.env.local` there, the runtime's `^%.env%.` winning.
+    - Now `.env`, `.env.local` and `foo.env` are all `env` (they were `dotenv`, `env` and `dotenv` on main). A file
+      named just `env` gets no filetype (it was `dotenv`): the runtime has no rule for that name.
+  - Rejected: keeping the rules in the tools phase, or a language-level `match` field in `lang.Spec` with a
+    `lang/dotenv.lua`. dotenv has no tools, but `lang.of("dotenv")` would start answering, and the facts, `:Tools`,
+    `:Status` and the format and lint modules read that answer. `views.filetypes` would also need an `extension`
+    table, which changes the views the unit tier checks (`tests/unit/lang_test.lua:128`).
 - *`app.start()` runs once per session.* Re-sourcing `init.lua` does nothing; restart with `ZR` (`:restart`)
   instead. A second run would make every phase's state, autocmds and plugin setups again, and lazy would notify that
   re-sourcing is not supported (`lazy/init.lua:41-47`).
