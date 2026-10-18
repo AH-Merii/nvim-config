@@ -61,7 +61,7 @@ Other measurements:
 ## Causes, biggest first
 
 1. **nvim-highlight-colors re-renders on every scroll.** It hooks `WinScrolled` (`nvim-highlight-colors/init.lua:298-304`).
-   With `scrolloff = 999` (`nvim/lua/config/options.lua:28`), every `j` scrolls the window, so each `j` does all of
+   With `scrolloff = 999` (`nvim/lua/options.lua:34`), every `j` scrolls the window, so each `j` does all of
    this:
    - re-scans the visible rows with its regexes;
    - calls `vim.version()` once per LSP client (`utils.lua:206`). On nightly that builds the whole `api_info()`

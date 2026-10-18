@@ -1,0 +1,57 @@
+-- The plugins phase (lua/app/): lazy.nvim, bootstrapped if missing, given every module's plugins. lazy loads the startup
+-- plugins inside setup() and the rest on their events, keys and commands.
+local M = {}
+
+function M.setup()
+  local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
+
+  if not vim.uv.fs_stat(lazypath) then
+    local out = vim.fn.system({
+      "git",
+      "clone",
+      "--filter=blob:none",
+      "https://github.com/folke/lazy.nvim.git",
+      "--branch=stable", -- latest stable release
+      lazypath,
+    })
+    if vim.v.shell_error ~= 0 then
+      vim.api.nvim_echo({
+        { "Failed to clone lazy.nvim:\n", "ErrorMsg" },
+        { out, "WarningMsg" },
+        { "\nPress any key to exit..." },
+      }, true, {})
+      vim.fn.getchar()
+      os.exit(1)
+    end
+  end
+
+  vim.opt.rtp:prepend(lazypath)
+
+  -- Every plugin comes from the module that owns it, as a list of specs (features.plugins()), not from a directory
+  -- of spec modules: lazy runs such modules again after an install or update (lazy/core/plugin.lua:184), which would
+  -- split the state and autocmds they make from the ones made the first time. A table spec is parsed again instead.
+  local spec = require("features").plugins()
+
+  require("lazy").setup(spec, {
+    install = {
+      missing = true,
+      colorscheme = { "onedark" },
+    },
+    checker = {
+      enabled = true,
+      notify = false,
+    },
+    performance = {
+      rtp = {
+        disabled_plugins = {
+          "gzip",
+          "tarPlugin",
+          "tutor",
+          "zipPlugin",
+        },
+      },
+    },
+  })
+end
+
+return M

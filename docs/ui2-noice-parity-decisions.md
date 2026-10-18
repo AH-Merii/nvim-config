@@ -65,7 +65,7 @@ Runtime refs: `R` = nightly runtime (NVIM v0.13.0-dev-1808+g561857c4a8), `N` = n
 
 | File | Does |
 |---|---|
-| `ui/messages/init.lua` | Called from `options.lua` right after `ui2.enable()`. Returns early with no UI; runs each module's `setup(ui)` in pcall and warns if one fails or returns false |
+| `ui/messages/init.lua` | Called from the options phase (`lua/app/init.lua`) right after `ui2.enable()`. Returns early with no UI; runs each module's `setup(ui)` in pcall and warns if one fails or returns false |
 | `ui/messages/cmdline.lua` | `:` and `input()` popup; `/` `?` at the bottom |
 | `ui/messages/messages.lua` | Routes messages to toasts or the split; keeps a ring of every message |
 | `ui/messages/history.lua` | `<leader>n` picker over the ring plus `vim.notify` history |

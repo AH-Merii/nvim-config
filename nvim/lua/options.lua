@@ -1,9 +1,8 @@
+-- Editor-wide options and the leaders, the first startup phase (lua/app/): every <leader> key row needs mapleader
+
 -- 🏁 Leader Keys
 vim.g.mapleader = " "
 vim.g.maplocalleader = " "
-
--- Enable Lazydev for vim globals
-vim.g.lazydev_enabled = true
 
 -- Remote-plugin hosts: no installed plugin ships an rplugin/ dir, and looking for a python3 host when the first Python
 -- buffer opens ($VIMRUNTIME/ftplugin/python.vim asks has('python3')) costs about 55 ms
@@ -57,17 +56,6 @@ vim.o.showcmdloc = "statusline" -- partial commands in the statusline; ui.messag
 -- one too, but it only opens when Normal has a background, and onedark is transparent here.
 vim.o.winborder = "rounded"
 
--- Neovim's built-in message and cmdline UI (:h ui2), enabled before plugins so it sees every message.
--- ui.messages then hooks it to behave like noice did: ':' in a popup near the top, messages as
--- snacks.notifier toasts, long output in a split (lua/ui/messages/). Until snacks is set up, and for
--- anything the hooks pass on, these targets apply: messages go to the msg window (bottom-right float,
--- cleared after the 'messagesopt' timeout) and output of a typed command to the cmdline. g< opens the
--- pager with the whole history. Does nothing headless (no UI attached).
-require("vim._core.ui2").enable({
-  msg = { targets = { default = "msg", typed_cmd = "cmd" } },
-})
-require("ui.messages").setup()
-
 -- 󰞷 Editing & Indentation
 vim.opt.expandtab = true
 vim.opt.shiftwidth = 2
@@ -84,13 +72,3 @@ vim.opt.smartcase = true
 --  Splits & Windows
 vim.opt.splitbelow = true
 vim.opt.splitright = true
-
--- 🗂 Filetype Detection
-vim.filetype.add({
-  extension = { env = "dotenv" },
-  filename = { [".env"] = "dotenv", ["env"] = "dotenv" },
-  pattern = {
-    ["[jt]sconfig.*.json"] = "jsonc",
-    ["%.env%.[%w_.-]+"] = "dotenv",
-  },
-})

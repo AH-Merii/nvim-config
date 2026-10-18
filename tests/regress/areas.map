@@ -2,7 +2,8 @@
 # A changed file matching no line runs every area. startup and smoke always run under --changed.
 init.lua                          startup tools
 lazy-lock.json                    startup installer lsp format lint treesitter git completion which-key ui editing tools
-lua/core/lazy.lua                 startup installer
+lua/app/init.lua                  startup tools
+lua/app/lazy.lua                  startup installer
 lua/features/init.lua             startup installer
 lua/lsp/buffer.lua                lsp keys which-key
 lua/lsp/init.lua                  lsp tools
@@ -26,7 +27,7 @@ lua/features/folds.lua            editing treesitter
 lua/features/lua_dev.lua          editing lsp keys which-key
 lua/features/files.lua            keys editing
 lua/features/profiling.lua        keys
-lua/config/options.lua            editing ui
+lua/options.lua                   editing ui
 lua/ui/messages/*                ui
 lua/features/lsp_status.lua      keys lsp
 lua/lsp/pyrefly.lua               lsp keys

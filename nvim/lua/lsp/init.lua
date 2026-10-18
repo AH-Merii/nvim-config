@@ -219,7 +219,8 @@ function M.setup()
   end
 
   local group = vim.api.nvim_create_augroup("lsp", { clear = true })
-  -- Made before vim.lsp.enable's own FileType autocmd so it runs first, after lazy loaded the filetype's plugins
+  -- Made before vim.lsp.enable's own FileType autocmd so it runs first, and after lazy's, which loads the filetype's
+  -- plugins
   vim.api.nvim_create_autocmd("FileType", {
     group = group,
     callback = function(ev)
@@ -298,13 +299,12 @@ function M.setup()
   })
 end
 
--- nvim-lspconfig, for its server configs (lsp/*.lua) only: setup() enables them and runs each from the binary mise
--- resolves
+-- nvim-lspconfig, for its server configs (lsp/*.lua) only. It loads at startup, so it is on the runtimepath when the
+-- servers phase (lua/app/) calls setup(), which enables them and runs each from the binary mise resolves
 M.plugins = {
   {
     "neovim/nvim-lspconfig",
     lazy = false,
-    config = function() M.setup() end,
   },
 }
 

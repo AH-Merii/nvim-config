@@ -20,19 +20,24 @@ setup tells you if yours doesn't.
 
 ### Initialization Flow
 
-The loading sequence is strictly ordered in `init.lua`, after `vim.loader.enable()` (Neovim's byte-compiled module
-cache, before the first require):
+`init.lua` enables `vim.loader` (Neovim's byte-compiled module cache, before the first require) and calls
+`require("app").start()`. `lua/app/init.lua` runs the startup phases in the order of its `M.phases` list, each once:
 
-1. `lang`, `tools` and `tools.ux` - The languages' variant filetypes and buffer options, the tool resolver, install prompts
-   and `:Tools` (before any plugin looks a tool up)
-2. `config.options` - Set Vim options & define `mapleader`
-3. `keys.neovim` and `keys.languages` - Neovim's own keys as key rows, its LSP defaults included; each language file's
-   `keys` rows
-4. `lsp.buffer` - The LSP keys and toggles, and what an attached server gives a buffer
-5. `features` - Each feature's `setup()`, in the order of `M.features` in `lua/features/init.lua`: its rows, needs,
-   autocmds and options
-6. `core.lazy` - Bootstrap lazy.nvim and load every module's `plugins` (`require("features").plugins()`)
-7. `features.after_lazy()` - Make the features' `VeryLazy` callbacks, after lazy's own `VeryLazy` listener
+1. `options` - `lua/options.lua` (editor-wide options and `mapleader`), then ui2 and `ui.messages`, before any
+   message can be lost
+2. `registries` - Neovim's own keys as key rows (`keys.neovim`), each language file's `keys` rows (`keys.languages`),
+   the LSP keys (`lsp.buffer`), and each feature's `setup()` in the order of `M.features` in
+   `lua/features/init.lua`: its rows, needs, autocmds and options
+3. `tools` - The dotenv filetype rule, the languages' variant filetypes and buffer options (`lang.setup()`), the tool
+   resolver, install prompts and `:Tools` (before any plugin looks a tool up)
+4. `plugins` - `lua/app/lazy.lua`: bootstrap lazy.nvim and give it every module's `plugins`
+   (`require("features").plugins()`); lazy loads the startup plugins here
+5. `servers` - `lsp.setup()`: one `vim.lsp.config` per server a language names, then `vim.lsp.enable`
+6. `deferred` - At `VeryLazy`, after the plugins lazy loads then: the callbacks given to
+   `require("features").at_very_lazy(fn)`
+
+Each phase is timed: `:lua =require("app").times()` lists the phases that ran and their milliseconds.
+`checks/app_phases.lua` holds the order.
 
 **Critical**: This order ensures dependencies are met (e.g., `mapleader` defined before any key row; `keys` raises
 for a `<leader>` row added without it).
@@ -41,10 +46,10 @@ for a `<leader>` row added without it).
 
 ```
 nvim/
-├── init.lua                  # Entry point (loads modules in order)
+├── init.lua                  # Entry point: vim.loader, then the startup phases (lua/app/)
 ├── lua/
-│   ├── core/lazy.lua        # lazy.nvim bootstrap, given every module's plugins
-│   ├── config/options.lua   # Vim options
+│   ├── app/                 # Startup phases (init.lua); lazy.nvim bootstrap, given every module's plugins (lazy.lua)
+│   ├── options.lua          # Editor-wide options
 │   ├── lang/                # One data file per language, and the registry that reads them (init.lua)
 │   ├── tools/               # Tool resolver (mise), catalog, prompts and :Tools
 │   ├── lsp/                 # Enabled servers, each run from its resolved binary (init.lua); the LSP keys and what a
@@ -61,7 +66,7 @@ nvim/
 
 ### Module Dependencies
 
-- Every key row depends on `config.options` (needs `mapleader`)
+- Every key row depends on `options` (needs `mapleader`)
 - `features/lsp_status.lua` makes its commands at `VeryLazy`, after nvim-lspconfig's plugin file defines its own
   `:LspInfo` and `:LspLog`
 - `blink.cmp` adds its completion capabilities to every server through `vim.lsp.config('*')`
