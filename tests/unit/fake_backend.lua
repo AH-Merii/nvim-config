@@ -1,10 +1,12 @@
 -- A fake tool backend (tools.Backend) for unit tests: mise's answers come from a table, and each tool it holds is a
 -- real executable in a throwaway install dir whose `--version` prints its version. It supports only what the unit
--- tests use: global tools, a project's pins, and global installs; the other installs raise.
+-- tests use: global tools, a project's pins, the global config's pins, global installs and installs of a pinned
+-- version; the other installs raise.
 --
 --   local backend = fake({
 --     global = { ruff = "0.17.0", node = "22.0.0" },            -- catalog binary (or runtime binary) -> version
 --     projects = { [root] = { ruff = "0.15.0", tsc = { version = "7.0.2", installed = false } } },
+--     global_pins = { shfmt = "3.10.0" },                       -- pinned by the global config.toml, not installed
 --   })
 --   tools.setup({ backend = backend })
 --   backend.calls                                               -- { { "use_global", { "ruff@latest" } }, ... }
@@ -16,10 +18,11 @@ local h = require("helper")
 ---@field version string
 ---@field installed? boolean default true
 
----@param opts { global?: table<string, string>, projects?: table<string, table<string, string|fake.Pin>>, latest?: string }
+---@param opts { global?: table<string, string>, projects?: table<string, table<string, string|fake.Pin>>, global_pins?: table<string, string>, latest?: string }
 return function(opts)
   local dir = h.tmpdir()
   local global = vim.deepcopy(opts.global or {}) ---@type table<string, string>
+  local global_pins = vim.deepcopy(opts.global_pins or {}) ---@type table<string, string>
   local B = { calls = {} } ---@type tools.Backend|{ calls: { [1]: string, [2]: any }[] }
 
   ---@param bin string
@@ -92,6 +95,15 @@ return function(opts)
     vim.schedule(function() cb(scan) end)
   end
 
+  --- The global config.toml's pins that are not installed yet (installing one puts it in global).
+  function B.global_pins(cb)
+    local pins = {}
+    for bin, version in pairs(global_pins) do
+      pins[tool_of(bin)] = { version = version, installed = global[bin] == version, source = dir .. "/config/config.toml" }
+    end
+    vim.schedule(function() cb(pins) end)
+  end
+
   function B.env(_, dirs, cb)
     local path = table.concat(vim.list_extend(vim.list_slice(dirs), B.clean_path()), ":")
     vim.schedule(function() cb({ PATH = path }) end)
@@ -119,7 +131,19 @@ return function(opts)
     vim.schedule(function() cb(true) end)
   end
 
-  for _, op in ipairs({ "install", "trust", "install_project" }) do
+  --- Installs each spec's binaries globally at its version, e.g. "shfmt@3.10.0".
+  function B.install(specs, cb)
+    table.insert(B.calls, { "install", specs })
+    for _, spec in ipairs(specs) do
+      local tool, version = spec:match("^(.*)@([^@]*)$")
+      for _, bin in ipairs(bins_of(tool)) do
+        global[bin] = version
+      end
+    end
+    vim.schedule(function() cb(true) end)
+  end
+
+  for _, op in ipairs({ "trust", "install_project" }) do
     B[op] = function() error("fake backend: " .. op .. " is not supported") end
   end
 

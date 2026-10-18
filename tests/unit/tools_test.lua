@@ -22,7 +22,7 @@ local function setup(spec)
   vim.fn.mkdir(root, "p")
   vim.fn.mkdir(system, "p")
   vim.env.PATH = system
-  local backend = fake({ global = spec.global, projects = spec.project and { [root] = spec.project } or nil })
+  local backend = fake({ global = spec.global, global_pins = spec.global_pins, projects = spec.project and { [root] = spec.project } or nil })
   tools.setup({ backend = backend })
   return root, system, backend
 end
@@ -138,6 +138,31 @@ h.case("a tool whose runtime went missing installs only the runtime", function()
   install({ "yaml-language-server" }, root)
   h.eq(backend.calls, { { "use_global", { "node@lts" } } }, "the backend's installs")
   h.eq(resolve("yaml-language-server", root).source, "global-mise", "the source once node is in")
+end)
+
+-- D99: mise reads the global config.toml after conf.d and lets it win (https://mise.jdx.dev/configuration.html), so
+-- with a pin there that isn't installed, a "latest" written to the config's own file leaves the tool missing
+h.case("a version the global config pins but isn't installed is what Install installs, and the tool is found", function()
+  local root, _, backend = setup({ global_pins = { shfmt = "3.10.0" } })
+  local result = resolve("shfmt", root)
+  h.eq(
+    { source = result.source, install = result.install },
+    { source = "missing", install = { kind = "pinned", spec = "shfmt@3.10.0", version = "3.10.0", config = "config.toml", scope = "global" } },
+    "the result"
+  )
+  h.eq(install({ "shfmt" }, root), { ok = true, errs = {}, failed = {} }, "the install's outcome")
+  h.eq(backend.calls, { { "install", { "shfmt@3.10.0" } } }, "the backend's installs: no write to the config's own file")
+  h.eq(found("shfmt", root), { source = "global-mise", version = "3.10.0" }, "a fresh resolve")
+end)
+
+h.case("without a global pin that isn't installed, the offer is the global install into the config's own file", function()
+  local root = setup({})
+  h.eq(resolve("shfmt", root).install, { kind = "global", spec = "shfmt@latest" }, "no global pin")
+  -- The project's own pin is what mise uses in the project, so it comes before the global one
+  root = setup({ project = { shfmt = { version = "3.8.0", installed = false } }, global_pins = { shfmt = "3.10.0" } })
+  answer(root, "installed")
+  local inst = resolve("shfmt", root).install
+  h.eq({ inst.kind, inst.spec, inst.scope }, { "pinned", "shfmt@3.8.0" }, "a project pin as well, in use")
 end)
 
 h.finish()
