@@ -191,7 +191,8 @@ and never echoes. ui2 keeps no history of its own (its pager renders `:messages`
 headless, so `MSG` covers every message it would show (only gui.sh checks that ui2 attaches). Not
 `v:errmsg`: `:silent!` and `try` still set it, for errors the user never sees (nvim's two markdown
 ftplugins both `sil! nunmap <buffer> [[` on `:edit!`). Before quitting it waits up to 15s for running
-nvim-lint linters, which nvim-lint does not stop on exit.
+nvim-lint linters, which the config kills at the quit, so an error a run reports late is still seen. A check
+that must see what a quit leaves running drives its own nvim instead (`checks/lint_quit_kill.sh`).
 
 Headless gotchas the harness handles: lazy's VeryLazy never fires without a UI, so the harness
 fires it after VimEnter; which-key and other VeryLazy plugins are loaded by the time the check

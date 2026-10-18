@@ -38,6 +38,8 @@ The full proposal, with its measurements and sources, was written outside the re
   neoblocks loads at startup (below).
 - Decided (2026-10-18): D93, an amendment to D61: a one-off cost is judged by its delta, not by whether the
   total crosses ~100 ms ("D61 amendment" below).
+- Fixed (D95): no linter run outlives Neovim: what is left of each is killed at quit, or when the run exits
+  ("Linters at exit" below).
 
 ## Target layout
 
@@ -1532,7 +1534,8 @@ child's parent while the probe ran showed all 7 were the plugin of `tflint --lan
 Started by hand, tflint's server mostly handles SIGTERM, exits 0 and stops its plugin, but once in 5 runs
 SIGTERMed 30 ms after initialize it died of the signal (exit -15) and its plugin ran on. So the #42 SIGTERM can land
 while tflint starts its plugin, before it handles the signal. Linters don't outlive Neovim: a stand-in yamllint that
-sleeps 10 s made the quit itself take 10.4 s, so Neovim's exit waits for a running linter.
+sleeps 10 s made the quit itself take 10.4 s, so Neovim's exit waits for a running linter. (Corrected: the regress
+harness waited, not Neovim, and linters do outlive it; see "Linters at exit" below.)
 
 **Decision.** Any server can exit without stopping its children, so the rule covers every server, not tflint, and
 every way a server exits, not only the quit. Each server is the leader of its own process group: `vim.lsp.rpc.start`
@@ -1552,7 +1555,7 @@ of its own. So a group is skipped when a process with the leader's pid runs with
 
 **Rejected.**
 - *Kill nvim-lint's running linters on quit*: the leaked process was the server's child, and Neovim already waits for a
-  running linter before it exits (above).
+  running linter before it exits (above). (Corrected: it doesn't, and D95 kills them; see "Linters at exit" below.)
 - *Kill only the leader*: the leader is gone already; the orphan is the problem.
 - *Only at the quit, for servers still running when it began* (this branch's first version): a server vim.lsp's
   handler waited for is gone by then, and a restarted server's children run until the quit. Review reproduced the
@@ -1561,7 +1564,8 @@ of its own. So a group is skipped when a process with the leader's pid runs with
 - *SIGTERM to the group*: a child may ignore it; what is left is orphaned, so there is nothing to shut down gracefully.
 
 **Known limits.** A child that leaves the group (its own `setsid`) escapes. Without procfs (not Linux) the start time
-is unknown and no group is swept. Quitting while a slow linter runs waits for it; not changed here.
+is unknown and no group is swept. Quitting while a slow linter runs waits for it; not changed here. (Corrected: the
+quit doesn't wait; see "Linters at exit" below.)
 
 **Checks.** `lsp_exit_children.lua`: stand-in ruff servers each start a `sleep 600` child that ignores SIGTERM. One
 never answers initialize, one exits on shutdown, one has `exit_timeout = 1000`, one is restarted mid-check, and its
@@ -1680,3 +1684,115 @@ line drawn, with D61's frame budget. D78's startup cost is accepted on this rule
 
 **Rejected.** Treating ~100 ms as a hard line for one-off costs: it would turn an undetectable delta into a regression
 because of where the total happened to sit.
+
+## Linters at exit (2026-10-18)
+
+**Context.** Saving lints the buffer (`linting/init.lua:187`), so `:wq` starts the file's linters just before Neovim
+exits. nvim-lint keeps one process per buffer and linter, spawned detached (nvim-lint `lua/lint.lua:91-108,405`), and
+has no public cancel-all. "Server children at quit" above says a 10 s stand-in linter made a quit take 10.4 s, so
+Neovim waits for a running linter. The first question was whether that wait is real and felt.
+
+**Measurement.** `:wq` in the TUI under a private tmux server, timed from the Enter key to the nvim process exiting, in
+the regress sandbox (nightly 0.13.0-dev-1868, origin/main 743a9f9). The config as is was timed against a baseline
+whose linting adapter runs nothing. Each round ran 3 timings per arm, the arms interleaved and the first arm
+alternating by round, for 5 rounds. Each run waited for VeryLazy, the file's servers attached and no linter running
+for 1.5 s. `:wq` is a per-event action in D61's classes, with a ~100 ms budget. Raw data is in
+`~/.cache/nvim-config/lint-quit/raw/rounds-base.txt` (`summary.txt` beside it), and the scripts are in
+`~/.cache/nvim-config/lint-quit/scripts/`.
+
+| file | what ran on the save | config (median ms) | baseline | rounds with config slower |
+| --- | --- | --- | --- | --- |
+| `app.py` | nothing: the ruff server covers ruff (`lang/python.lua:97`, `linting/init.lua:66-68`) | 70 | 72 | 3 of 5 |
+| `app.py`, ruff server off | ruff | 100 | 90 | 3 of 5, 1 tie |
+| `main.tf` in a 3-file module | nothing: tflint's server covers tflint (`lang/terraform.lua:11`), and the suite has no trivy | 136 | 140 | 1 of 5 |
+| `main.tf`, tflint server off | tflint | 149 | 147 | 3 of 5 |
+| `config.yaml` | yamllint 1.38.0, from the project's `.venv` | 70 | 70 | 3 of 5 |
+| `config.yaml`, stand-in yamllint that ignores SIGTERM and sleeps 10 s | the stand-in | 72 | 66 | 3 of 5 |
+
+No case is real by D61's rule, since in each one the rounds disagree on the direction. Every pooled difference is
+10 ms or less, against the 100 ms budget. Even the stand-in, which still has about 10 s to run when the quit starts,
+does not hold the quit. Neovim does not wait for processes started with `vim.uv.spawn`: a `nvim --clean` that spawns a
+detached `sleep 10` reading its pipes exits in 11-12 ms, startup included (`raw/clean-exit.txt`). The TUI's embedded
+server exits within 1 ms of the client (`raw/server-exit.txt`). golangci-lint and trivy were not timed, because the
+suite has neither. The stand-in covers them too: a quit does not wait for any linter, however long it runs.
+
+The 10.4 s that #55's section reports came from the regress harness. Before quitting, it waited up to 15 s for
+nvim-lint's running linters, so that only real leaks remained (`tests/regress/harness.lua:272-278` on 743a9f9). A
+probe check that wrote a buffer with the stand-in took 10.4 s in the suite, while its body ended 7 ms after the write
+(`raw/harness-wait.txt`).
+
+So nothing waits at the quit, and a linter still running then is orphaned and runs to its end. The stand-in was still
+alive 3 s after each of its 15 quits, while the real ruff, tflint and yamllint runs had all gone by then (0 of 45). A
+linter that runs for long (golangci-lint on a big package, say; unmeasured) keeps running after the quit and spends
+CPU on output that nobody reads. This is the leak "Server children at quit" fixed for servers.
+
+**Decision (D95, approved by the user).** Kill what is left of every linter run, for every linter, with what #55
+built for servers: at VimLeavePre for the runs still going, and as each run's own process exits.
+
+- *The process group.* nvim-lint spawns each linter detached, so the run's pid leads the group its children join.
+  nvim-lint doesn't expose that pid, so `linting/nvim_lint.lua` watches the `vim.uv.spawn` calls its `try_lint` makes
+  (nvim-lint's `uv` is `vim.loop`, the same table), as `lsp/init.lua` watches `vim.lsp.rpc.start`'s one `vim.system`
+  call. Each run's group is recorded when it starts.
+- *The kill and the pid-reuse guard.* Both move from `lsp/init.lua` to `tools.proc` (`groups()`: `add`, `forget`,
+  `kill`, `kill_all`), shared by the servers and the linters, each with its own set. A kill sends SIGKILL to the
+  group and forgets it, and skips a group whose leader's pid now runs with another start time.
+- *When a run exits, its group goes too.* Nothing reads a child that outlives its run. This matters for the runs
+  nvim-lint cancels for a newer one: it sends SIGINT, then SIGKILLs only the run's own pid 10 s later
+  (`lint.lua:297-313`), so a child that ignores SIGINT lived on, past the quit. Review reproduced it
+  (`~/.cache/nvim-config/lint-quit-review/scripts/cancel_orphan.sh`: the child `sleep 600` was alive after the quit,
+  reparented to the user manager). A cancelled run whose process still runs at the quit is still recorded, so the
+  quit kills it.
+- *Nothing else kills a run.* Closing a window, unloading or deleting a buffer kills nothing: the buffer's findings
+  still matter while Neovim runs, and nvim-lint already cancels a buffer's run when it lints that buffer again.
+
+A daemon a linter starts survives its run if it leaves the group, as daemons started from Node do. core_d, the daemon
+launcher prettierd 0.29.0 bundles, spawns its server with `detached: true` (`core_d/lib/launcher.js:42-43,69-70`
+in the user's mise install), and Node makes such a child "the leader of a new process group and session"
+(<https://nodejs.org/api/child_process.html#optionsdetached>). A `sleep` started that way by node 24.18.0 had its
+own pgid and sid (`~/.cache/nvim-config/lint-quit/raw/node-detached.txt`). No linter in `lang/` starts a daemon.
+
+**Rejected.**
+- *Read nvim-lint's `running_procs_by_buf`* (a private local in `lint.lua:91-108`, reachable only through the debug
+  library): it ties the config to nvim-lint's internals. It also drops a run as soon as nvim-lint cancels it, so the
+  run opening the file started would be missed when the write starts another. `get_running()` gives only names.
+- *Call nvim-lint's public `lint()` per linter instead of `try_lint`, keeping the returned procs*: the config would
+  then redo `try_lint`'s per-buffer bookkeeping (cancelling the previous run of a linter in that buffer).
+- *Kill on BufDelete, BufUnload or WinClosed*: it would cut short runs whose results are still wanted.
+- *SIGTERM*: a linter may ignore it (the stand-in does), and its output goes nowhere.
+- *Forget a run's group when its process exits* (this branch's first version): a cancelled run's children outlived
+  the quit, as above.
+- *Keep a run's group recorded while it has members* (`vim.uv.kill(-pid, 0)`), and kill it only at the quit: its
+  children would run on, unread, until then.
+
+**Known limits.** A child that leaves the group (its own `setsid`) escapes. A daemon that a linter starts inside the
+group dies with the run, so it would start again on every lint. Without procfs the start time is unknown and no
+group is killed. The watch stops working if nvim-lint stops spawning through `vim.loop.spawn`; `lint_quit_kill`
+then fails.
+
+**The harness's wait.** Before it quits, the regress harness waits up to 15 s for nvim-lint's runs
+(`tests/regress/harness.lua:272-279`). It stays; its comment and `tests/regress/README.md` now give the reason.
+Without it, the quit would kill the runs a check leaves going, so the suite's leak detection would catch a regression
+of this fix in every check that lints. But an error a run reports late (a parser error in `:messages`, an ERROR
+notification) would no longer reach the harness's MSG and NOTIFY lines, which it reads after the wait. The wait costs
+nothing unless a run is still going. In a full `suite.sh -v` run on this branch, which prints every INFO line, none
+says "linters still running at exit" (`grep -c` gives 0 in `~/.cache/nvim-config/lint-quit/full-suite-fix.log`).
+`lint_quit_kill` drives its own nvim over a socket, so the wait can't hide an orphan there.
+
+**Checks.** `lint_quit_kill.sh`: a stand-in yamllint ignores SIGTERM and SIGINT; on one buffer it sleeps in a child,
+on another it reports a finding after 2 s.
+
+- `:wq` with two runs going (the one opening the file started and the one the write started) exits within 5 s, and
+  none of their processes is alive 3 s later.
+- While Neovim runs, nothing but the quit kills a run: `:wq` that closes one window of three, `:bunload` and
+  `:bdelete` each leave the buffer's newest run going, and the other buffer's lint, running at the `:wq`, still
+  reports its finding.
+- Two writes cancel two runs; once nvim-lint has SIGKILLed their own pids, the quit leaves none of their processes.
+
+On main (c7db37e) the quit cases fail, with the runs' yamllint and sleep alive. Sibling wrong versions each fail
+it: no kill; the kill on BufDelete instead of at the quit; the kill on WinClosed; the kill at the quit plus on
+BufDelete; the kill at the quit plus on BufUnload; SIGTERM to the group; forgetting a run's group when it exits
+(`~/.cache/nvim-config/lint-quit/variants/run.sh`, results in `result.txt` there). SIGKILL to the leader only at the
+quit now passes: the leader's exit then kills its group. It is no longer a wrong version, so it isn't counted.
+`tests/unit/linting_test.lua` checks that a raising nvim-lint call leaves `vim.uv.spawn` as it was; a version without
+the `pcall` fails it (`variants/result-unit.txt`). `lsp_exit_children` and `tests/unit/lsp_test.lua` pass unchanged
+after the move to `tools.proc`.
