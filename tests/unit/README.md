@@ -16,6 +16,17 @@ nvim --clean --headless -l tests/unit/tools_test.lua   # one file alone, from th
 PASS or FAIL per file with its time and a failing file's output, and exits non-zero on any failure. It uses the
 suite's nightly Neovim when it is installed, else `nvim`; `NVIM=/path/to/nvim` picks another.
 
+`tools_mise_live_test.lua` checks a project-only install against the real mise. It needs mise on `PATH` and may
+download jq, so it skips unless asked:
+
+```sh
+TOOLS_LIVE_MISE=1 tests/unit/run.sh tools_mise_live
+TOOLS_LIVE_MISE=1 TOOLS_LIVE_MISE_DATA=<mise data dir> tests/unit/run.sh tools_mise_live   # reuse its installs
+```
+
+Its mise config, state and cache dirs are throwaway ones; `TOOLS_LIVE_MISE_DATA` is the one dir it writes outside
+them (jq's install).
+
 ## Writing a test
 
 - One file per module, `tests/unit/<module>_test.lua`.

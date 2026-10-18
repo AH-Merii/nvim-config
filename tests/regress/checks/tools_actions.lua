@@ -1,4 +1,4 @@
--- @desc     a :Tools tool menu acts only on that tool: a found server binary offers its server, a missing one an install and no restart, neither re-resolves every tool; a tool without a server opens no menu and says where it comes from
+-- @desc     a :Tools tool menu acts only on that tool: a found server binary offers its server, a missing one an install (in a project also one for the project only) and no restart, neither re-resolves every tool; a tool without a server opens no menu and says where it comes from
 -- @areas    tools ui lsp
 -- @budget   25
 -- @needs    lua-language-server stylua
@@ -49,6 +49,7 @@ local offered, result = actions(FIX .. "/doc/main.typ", { "= Title" }, "tinymist
 if check("tinymist is missing in the suite", result ~= nil and result.path == nil, result and result.source) then
   check("a missing server binary is not offered a start or restart", #offered > 0 and not has(offered, "^Restart") and not has(offered, "^Start"), vim.inspect(offered))
   check("it is offered an install", has(offered, "^Install"), vim.inspect(offered))
+  check("in a project, also for the project only", has(offered, "^Install for this project only$"), vim.inspect(offered))
   check("its menu does not re-resolve every tool", not rescans(offered), vim.inspect(offered))
 end
 

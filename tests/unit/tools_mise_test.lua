@@ -1,7 +1,8 @@
--- The mise backend's global install (require("tools.mise").use_global) against a fake `mise` on PATH that writes each
--- spec to the file the real one would: `--path <file>`, or the global config for `-g`. The rule: the config's tools
--- go to a global file of its own, never into the user's global config.toml (a dotfiles file for many users).
--- Decision: D91 in docs/mise-tooling-decisions.md.
+-- The mise backend's installs (require("tools.mise").use_global, use_local) against a fake `mise` on PATH that writes
+-- each spec to the file the real one would: `--path <file>`, or the global config for `-g`. The rules: the config's
+-- tools go to a global file of its own, never into the user's global config.toml (a dotfiles file for many users),
+-- and a project-only install goes to the project root's mise.local.toml. Decisions: D91 and D100 in
+-- docs/mise-tooling-decisions.md.
 local here = vim.fs.dirname(vim.fs.abspath(debug.getinfo(1, "S").source:sub(2)))
 package.path = table.concat({ here .. "/../../nvim/lua/?.lua", here .. "/../../nvim/lua/?/init.lua", here .. "/?.lua", package.path }, ";")
 
@@ -15,10 +16,19 @@ vim.env.HOME = tmp .. "/home"
 -- config.toml in the config dir (MISE_CONFIG_DIR, else $XDG_CONFIG_HOME/mise, else ~/.config/mise); no target
 -- means a project config in the cwd, which the backend must never write. It refuses any file outside the test dir.
 -- `ls ... -C /` (global configs only) prints $FAKE_MISE_LS; without `-C /` it prints a project's tools.
+-- Each call is logged to $tmp/calls as "<cwd>|<MISE_YES>|<args>". Trust lives in $tmp/trusted, one dir per line: like
+-- mise, `use --path <file>` trusts the file's dir. `config set --file <file> tools.<tool> <version>` adds the tool to
+-- an existing file and, like mise, fails on a missing one; `install` installs nothing.
 h.write(tmp .. "/bin/mise", {
   "#!/bin/sh",
+  ("trusted=%s/trusted; touch $trusted; echo \"$PWD|$MISE_YES|$*\" >> %s/calls"):format(tmp, tmp),
+  'if [ "$1" = install ]; then exit 0; fi',
+  'if [ "$1 $2 $3" = "config set --file" ]; then',
+  '  [ -f "$4" ] || { echo "mise ERROR config file not found: $4" >&2; exit 1; }',
+  '  case "$5" in tools.*) echo "${5#tools.} = \\"$6\\"" >> "$4"; exit 0 ;; *) exit 2 ;; esac',
+  "fi",
   'if [ "$1" = ls ]; then case " $* " in *" -C / "*) cat "$FAKE_MISE_LS" ;; *) echo \'{"ruff":[{"version":"0.1.0","installed":false,"source":{"path":"/p/mise.toml"}}]}\' ;; esac; exit 0; fi',
-  '[ "$1" = use ] || { echo "fake mise: only use and ls" >&2; exit 2; }',
+  '[ "$1" = use ] || { echo "fake mise: only use, ls, config set and install" >&2; exit 2; }',
   "shift",
   "target= specs=",
   "while [ $# -gt 0 ]; do",
@@ -35,6 +45,7 @@ h.write(tmp .. "/bin/mise", {
   ('case "$target" in %s/*) ;; *) echo "fake mise: $target is outside the test dir" >&2; exit 3 ;; esac'):format(tmp),
   'mkdir -p "$(dirname "$target")" || exit 1',
   'for s in $specs; do echo "$s" >> "$target"; done',
+  'grep -qxF "$(dirname "$target")" $trusted || dirname "$target" >> $trusted',
 }, true)
 vim.env.PATH = tmp .. "/bin:" .. vim.env.PATH
 
@@ -117,6 +128,64 @@ h.case("with MISE_GLOBAL_CONFIG_FILE set, mise reads no conf.d, so the install g
   use_global({ "shfmt@latest" })
   h.eq(read(dir .. "/single.toml"), { "shfmt@latest" }, "MISE_GLOBAL_CONFIG_FILE")
   h.eq(read(dir .. "/mise/conf.d/nvim-config.toml"), nil, "a conf.d file mise would not read")
+end)
+
+-- D100: a project-only install
+---@return string[] the dirs mise trusts
+local function trusted() return read(tmp .. "/trusted") or {} end
+---@return { cwd: string, yes: string, args: string }[] the mise calls since the log was last cleared
+local function calls()
+  return vim.tbl_map(function(line)
+    local cwd, yes, args = line:match("^(.-)|(.-)|(.*)$")
+    return { cwd = cwd, yes = yes, args = args }
+  end, read(tmp .. "/calls") or {})
+end
+
+h.case("a project-only install puts the tool in the project root's mise.local.toml, installs it, and writes no global file", function()
+  for _, before in ipairs({ false, { "[tools]", 'stylua = "2.0.0"' } }) do
+    local dir = fresh()
+    vim.env.MISE_CONFIG_DIR = dir .. "/mise"
+    h.write(dir .. "/mise/config.toml", user)
+    local root = dir .. "/project"
+    vim.fn.mkdir(root, "p")
+    if before then
+      h.write(root .. "/mise.local.toml", before)
+    end
+    vim.fn.writefile({}, tmp .. "/calls")
+    local ok, err = h.await(function(done) mise.use_local(root, { "ruff@latest" }, done) end)
+    h.ok(ok, "the install failed: " .. tostring(err))
+    local what = before and "an existing file" or "no file before"
+    h.eq(read(root .. "/mise.local.toml"), vim.list_extend(vim.deepcopy(before or {}), { 'ruff = "latest"' }), what .. ": mise.local.toml")
+    h.ok(vim.iter(calls()):any(function(c) return c.args == "install ruff@latest" end), what .. ": no install: " .. vim.inspect(calls()))
+    h.eq({ read(dir .. "/mise/conf.d/nvim-config.toml"), read(dir .. "/mise/config.toml") }, { nil, user }, what .. ": the global files")
+  end
+end)
+
+h.case("a project-only install leaves the project root's trust as it was", function()
+  -- `mise use --path` trusts the file's whole dir, and with it any [env] exec a `git pull` later adds to mise.toml
+  for _, was in ipairs({ false, true }) do
+    local dir = fresh()
+    local root = dir .. "/project"
+    h.write(root .. "/mise.toml", { "[tools]" })
+    vim.fn.writefile(was and { root } or {}, tmp .. "/trusted")
+    local ok, err = h.await(function(done) mise.use_local(root, { "ruff@latest" }, done) end)
+    h.ok(ok, "the install failed: " .. tostring(err))
+    h.eq(vim.list_contains(trusted(), root), was, "trusted before: " .. tostring(was))
+  end
+end)
+
+h.case("a project-only install runs mise only from /, so no project config is read during it", function()
+  -- With MISE_YES, mise trusts and reads (exec templates included) an untrusted config in its cwd: one a `git pull`
+  -- brought after the project was scanned would run
+  local dir = fresh()
+  local root = dir .. "/project"
+  h.write(root .. "/mise.toml", { "[tools]" })
+  vim.fn.writefile({}, tmp .. "/calls")
+  local ok, err = h.await(function(done) mise.use_local(root, { "ruff@latest" }, done) end)
+  h.ok(ok, "the install failed: " .. tostring(err))
+  local made = calls()
+  h.ok(#made > 0, "no mise call")
+  h.eq(vim.tbl_filter(function(c) return c.cwd ~= "/" end, made), {}, "mise calls outside /")
 end)
 
 h.finish()
