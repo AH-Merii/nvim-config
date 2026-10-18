@@ -32,7 +32,9 @@ do
     elseif after_rule then
       after_rule = false
       sec = line:match("^(%d+)%.%s") or line:match("^(%d+%.%d+)%s")
-    elseif sec and SECTIONS[sec] and line:match("^%-%-%-%-+ ~$") then
+    -- a table starts at its column headings ("Tag  Char  Note Normal-mode action ~"); help files before
+    -- neovim/neovim@d65f9daf45 put a "----- ~" rule under them, which reads as a non-row line
+    elseif sec and SECTIONS[sec] and line:match("^Tag%s.*~$") then
       in_table = true
     elseif in_table then
       local tag, rest = line:match("^|([^|]+)|%s*(.*)$")
