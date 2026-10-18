@@ -35,6 +35,61 @@ local wrapped = {} ---@type table<string, function> server -> the root_dir set b
 local rootless = {} ---@type table<string, string> server -> resolver root of its client without a root_dir, which all such buffers share
 local running = {} ---@type table<string, string> server .. "\0" .. root -> binary its client was started with
 local processes = setmetatable({}, { __mode = "k" }) ---@type table<vim.lsp.rpc.PublicClient, true> every server process started
+-- The process group of each server started here whose children may still run: its leader's pid (vim.lsp.rpc.start
+-- runs a server detached, vim/net/_transport.lua, so the pid is also the id of the group its children are born in) ->
+-- the leader's start time, which tells the group from a later one given the same id
+local groups = {} ---@type table<integer, string>
+
+--- A process's start time, field 22 of /proc/<pid>/stat; nil without one (no procfs, or no such process).
+---@param pid integer
+---@return string?
+local function started(pid)
+  local f = io.open(("/proc/%d/stat"):format(pid))
+  if not f then
+    return nil
+  end
+  local stat = f:read("*a") or ""
+  f:close()
+  -- After the command name, in parentheses and maybe with spaces, the fields from the third on
+  return vim.split(stat:match(".*%) (.*)") or "", " ")[20]
+end
+
+--- Kills what is left of a server's process group: children the server didn't stop, and the server if it still runs.
+--- Skipped when the id names another group: one whose processes are all gone frees it, and a new process with that pid
+--- can lead a group of its own. Callable in a fast event.
+---@param pid integer
+local function sweep(pid)
+  local start = groups[pid]
+  groups[pid] = nil
+  local now = start and started(pid)
+  if start and (now == nil or now == start) then
+    vim.uv.kill(-pid, "sigkill")
+  end
+end
+
+local warned = false
+--- vim.lsp.rpc.start(...), and the pid of the process it spawned, which its client does not expose: the one vim.system
+--- call it makes is watched. Warns once when that stops holding, since the sweep then misses the server.
+---@return vim.lsp.rpc.PublicClient rpc, integer? pid
+local function rpc_start(...)
+  local system, pid, calls = vim.system, nil, 0
+  vim.system = function(...)
+    local obj = system(...)
+    pid, calls = obj.pid, calls + 1
+    return obj
+  end
+  local ok, rpc = pcall(vim.lsp.rpc.start, ...)
+  vim.system = system
+  if not ok then
+    error(rpc, 0)
+  end
+  if (calls ~= 1 or not pid) and not warned then
+    warned = true
+    local msg = "vim.lsp.rpc.start made %d vim.system calls, so a server's pid is unknown: its children can outlive it"
+    vim.notify(msg:format(calls), vim.log.levels.WARN, { title = "LSP" })
+  end
+  return rpc, calls == 1 and pid or nil
+end
 
 ---@param root string
 local function norm(root) return vim.fs.normalize(vim.fs.abspath(root)) end
@@ -97,8 +152,26 @@ local function wiring(name, bin, base)
         error(("%s: no %s binary for %s"):format(name, bin, root or "this buffer"))
       end
       running[name .. "\0" .. norm(root)] = result.path
-      local rpc = vim.lsp.rpc.start({ result.path, unpack(catalog.server_args(name) or {}) }, dispatchers, { cwd = root, env = result.env })
+      -- Once the server exits, its group goes too: a restart's or :LspStop's, not only the quit's. The client sees the
+      -- exit only after the server's pipes close, so a child holding them waits for the quit
+      local pid
+      local on_exit = dispatchers.on_exit
+      dispatchers = vim.tbl_extend("force", dispatchers, {
+        on_exit = function(...)
+          if pid then
+            sweep(pid)
+          end
+          if on_exit then
+            return on_exit(...)
+          end
+        end,
+      })
+      local rpc
+      rpc, pid = rpc_start({ result.path, unpack(catalog.server_args(name) or {}) }, dispatchers, { cwd = root, env = result.env })
       processes[rpc] = true
+      if pid then
+        groups[pid] = started(pid)
+      end
       return rpc
     end,
     -- Once root_dir is set root_markers is ignored, so it finds the root itself and then waits for the binary
@@ -239,7 +312,9 @@ function M.setup()
   -- orphaned. So every server process started here gets one rule: one still initializing was sent no shutdown and is
   -- terminated at once; an initialized one with exit_timeout = false gets quit_grace ms to finish the shutdown (one
   -- with a number had it in vim.lsp's handler); then whatever still runs is terminated, as Client:stop force-stops,
-  -- and given quit_wait ms to exit.
+  -- and given quit_wait ms to exit. A server can still exit without stopping its own children: tflint killed by that
+  -- SIGTERM while it starts its plugin, before it handles the signal, leaves the plugin running. So last, what is left
+  -- of every server's process group is killed, the servers vim.lsp's handler already saw exit included.
   local quit_grace, quit_wait = 100, 400
   vim.api.nvim_create_autocmd("VimLeavePre", {
     group = group,
@@ -262,6 +337,9 @@ function M.setup()
         rpc.terminate()
       end
       vim.wait(quit_wait, function() return closed(left) end, 5)
+      for pid in pairs(groups) do
+        sweep(pid)
+      end
     end,
   })
 
