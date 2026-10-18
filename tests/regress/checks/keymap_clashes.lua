@@ -84,13 +84,16 @@ end
 
 local INDEX = vim.env.VIMRUNTIME .. "/doc/index.txt"
 local native, per_sec = parse_index(INDEX)
+-- a parse that finds too little stops the check here: the clash list it would write and the detector's verdict
+-- would only repeat the parse failure, and the state file would lose the version's real list
+local index_ok = true
 local SEC_MIN = { ["2"] = 100, ["2.1"] = 20, ["2.3"] = 25, ["2.4"] = 30, ["2.5"] = 25, ["2.6"] = 1, ["3"] = 40 }
 for s, min in vim.spairs(SEC_MIN) do
-  check(("index.txt: section %s has at least %d commands"):format(s, min), (per_sec[s] or 0) >= min, per_sec[s] or 0)
+  index_ok = check(("index.txt: section %s has at least %d commands"):format(s, min), (per_sec[s] or 0) >= min, per_sec[s] or 0) and index_ok
 end
 local MODE_MIN = { n = 250, x = 120, o = 80 }
 for _, m in ipairs(MODES) do
-  check(("index.txt: %s mode has at least %d built-in keys"):format(m, MODE_MIN[m]), vim.tbl_count(native[m]) >= MODE_MIN[m], vim.tbl_count(native[m]))
+  index_ok = check(("index.txt: %s mode has at least %d built-in keys"):format(m, MODE_MIN[m]), vim.tbl_count(native[m]) >= MODE_MIN[m], vim.tbl_count(native[m])) and index_ok
 end
 -- key notation and mode spread: present since Vim 7
 local KNOWN = { n = { "w", "gg", "zz", "<C-A>", "[<C-D>", "g<C-G>", "<C-W>", "'" }, x = { "iw", "w", "<C-\\><C-N>", "o" }, o = { "iw", "w", "v", "<C-V>" } }
@@ -101,7 +104,8 @@ for m, keys in pairs(KNOWN) do
   end
 end
 table.sort(absent)
-check("index.txt: long-standing keys parse into their modes", #absent == 0, #absent > 0 and ("missing: " .. table.concat(absent, ", ")) or nil)
+index_ok = check("index.txt: long-standing keys parse into their modes", #absent == 0, #absent > 0 and ("missing: " .. table.concat(absent, ", ")) or nil) and index_ok
+if not index_ok then return end
 
 -- ---- fixtures ------------------------------------------------------------------------------------
 vim.fn.writefile({ "Plain prose for the text filetype.", "", "A second paragraph." }, FIX .. "/notes.txt")
