@@ -10,6 +10,9 @@ M.plugins = {
 }
 
 function M.setup()
+  -- lazydev on for every Lua project; it is also lazydev's default when unset (lazydev/config.lua:25)
+  vim.g.lazydev_enabled = true
+
   -- Debug helpers for :lua, once snacks is loaded: dd(...) inspects its arguments, bt() shows a backtrace
   require("features").at_very_lazy(function()
     _G.dd = function(...) Snacks.debug.inspect(...) end
