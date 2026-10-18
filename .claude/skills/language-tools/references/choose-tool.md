@@ -4,7 +4,7 @@ Every command here is read-only. Queries that touch mise go through `scripts/iso
 
 ```sh
 R=<repo root>; SK=$R/.claude/skills/language-tools/scripts
-L=~/.local/share/nvimt2/site/pack/core/opt   # this config's plugins (NVIM_APPNAME=nvimt2); else $R/tests/regress/data/nvim/site/pack/core/opt
+L=~/.local/share/nvimn/site/pack/core/opt    # this config's plugins (NVIM_APPNAME=nvimn, README); else $R/tests/regress/data/nvim/site/pack/core/opt
 T=<your isolated dir>               # made once: mkdir -p ~/.cache/language-tools && mktemp -d -p ~/.cache/language-tools
 ```
 
