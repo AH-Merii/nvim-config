@@ -101,6 +101,27 @@ function M.bin_paths(scope, cb)
   end)
 end
 
+--- mise tool name -> the version the user's global configs make mise use, with whether it is installed and the file
+--- that sets it; the config's own file (tools_file) is left out, as installing into it is the usual global install.
+---@param cb fun(pins: table<string, { version: string, installed: boolean, source: string }>)
+function M.global_pins(cb)
+  M.mise({ "ls", "--current", "--json", "-C", "/" }, nil, function(out)
+    local pins = {}
+    local ok, tools = pcall(vim.json.decode, out.stdout)
+    local own = M.tools_file()
+    for tool, versions in pairs(out.code == 0 and ok and type(tools) == "table" and tools or {}) do
+      for _, v in ipairs(versions) do
+        local source = v.source and v.source.path and vim.fs.normalize(v.source.path)
+        -- The first version listed is the one on PATH
+        if source and source ~= own and not pins[tool] then
+          pins[tool] = { version = v.version, installed = v.installed == true, source = source }
+        end
+      end
+    end
+    cb(pins)
+  end)
+end
+
 ---@class tools.ProjectScan
 ---@field configs string[] project config files mise reads in root, nearest first
 ---@field untrusted? string a config that blocks every mise call in root until trusted ([env] etc.)
@@ -176,12 +197,21 @@ end
 ---@return string?
 function M.missing() return not M.bin() and "mise is not installed" or nil end
 
---- `mise use -g <specs>` (into the global config). Specs are full, e.g. "ruff@latest".
+--- The global config file the config installs into: conf.d/nvim-config.toml in mise's config dir, which mise reads as
+--- global config, so the user's config.toml (often a dotfiles file) is left alone. MISE_GLOBAL_CONFIG_FILE replaces
+--- every global file, conf.d included, so with it set the tools go there.
+---@return string
+function M.tools_file()
+  local global = vim.env.MISE_GLOBAL_CONFIG_FILE
+  return global and global ~= "" and vim.fs.normalize(global) or config_dir() .. "/conf.d/nvim-config.toml"
+end
+
+--- `mise use --path <tools_file> <specs>`: a global install into the config's own file. Specs are full, e.g. "ruff@latest".
 ---@param specs string[]
 ---@param cb fun(ok: boolean, err?: string)
 function M.use_global(specs, cb)
   -- cwd /: an untrusted project config with [env] would make mise refuse
-  proc.install({ M.bin(), "use", "-g", unpack(specs) }, { cwd = "/", env = { MISE_YES = "1" } }, cb)
+  proc.install({ M.bin(), "use", "--path", M.tools_file(), unpack(specs) }, { cwd = "/", env = { MISE_YES = "1" } }, cb)
 end
 
 --- `mise install <specs>` from /, e.g. "ruff@0.15.0": a project's pinned versions land in mise's shared store without

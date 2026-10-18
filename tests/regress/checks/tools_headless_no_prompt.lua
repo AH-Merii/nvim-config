@@ -26,7 +26,7 @@ vim.system = function(cmd, ...)
 end
 local function installs()
   return vim.tbl_filter(function(c)
-    return c:find(" use %-g") or c:find(" install") or c:find(" trust") or c:find("component add")
+    return c:find(" use ") or c:find(" install") or c:find(" trust") or c:find("component add")
   end, ran)
 end
 

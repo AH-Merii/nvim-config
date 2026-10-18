@@ -15,13 +15,14 @@ M.event = "ToolsChanged"
 ---@alias tools.Source "project-env"|"project-mise"|"global-mise"|"system"|"missing"
 
 ---@class tools.Install
----@field kind "global"|"component"|"pinned"|"project"|"none" `mise use -g`, `rustup component add`, `mise install <tool>@<pinned version>`, project `mise install`, or nothing to offer
----@field spec? string global: the tool's `mise use -g` argument, e.g. "ruff@latest", nil when only its runtime is missing; pinned: "ruff@0.15.0"
+---@field kind "global"|"component"|"pinned"|"project"|"none" a global `mise use` (tools.mise.tools_file), `rustup component add`, `mise install <tool>@<pinned version>` (the project's pin, or the global config's), project `mise install`, or nothing to offer
+---@field spec? string global: the tool's `mise use` argument, e.g. "ruff@latest", nil when only its runtime is missing; pinned: "ruff@0.15.0"
 ---@field runtime? string global: a runtime (catalog.runtimes) missing from PATH, installed in the same step, e.g. "node"
 ---@field component? string component: the rustup component; global with runtime "rust": the component added after rust
 ---@field toolchain? string component: the toolchain the project pins in rust-toolchain(.toml), e.g. "1.92"
 ---@field version? string pinned: the version the project pins
----@field config? string pinned, project: file name of the project config that pins it
+---@field config? string pinned, project: file name of the config that pins it
+---@field scope? "global" pinned: the user's global mise config pins the version, not the project
 ---@field global? tools.Install pinned: the global install offered instead
 
 ---@class tools.Copy
@@ -55,12 +56,13 @@ M.event = "ToolsChanged"
 
 ---@class tools.Backend where tools come from and how they are installed: tools.mise, or a fake in tests/unit
 ---@field bin_paths fun(scope: "/", cb: fun(dirs?: string[], err?: string)) bin dirs of the global tools, in PATH order
+---@field global_pins fun(cb: fun(pins: table<string, { version: string, installed: boolean, source: string }>)) mise tool name -> the version the user's global configs make mise use, outside the config's own file
 ---@field scan_project fun(root: string, cb: fun(scan: tools.ProjectScan)) what the project's configs pin in root
 ---@field env fun(scope: string, dirs: string[], cb: fun(env: table<string, string>)) env for a tool that needs a runtime
 ---@field install_version fun(path: string): string? the version of a binary in the backend's install dir
 ---@field clean_path fun(): string[] Neovim's PATH without the backend's shims and install dirs (the system layer)
 ---@field missing fun(): string? why installs can't run, nil when they can
----@field use_global fun(specs: string[], cb: fun(ok: boolean, err?: string)) global install, e.g. "ruff@latest"
+---@field use_global fun(specs: string[], cb: fun(ok: boolean, err?: string)) global install into the config's own global mise file, e.g. "ruff@latest"
 ---@field install fun(specs: string[], cb: fun(ok: boolean, err?: string)) a pinned version, e.g. "ruff@0.15.0"
 ---@field trust fun(configs: string[], root: string, cb: fun(ok: boolean, err?: string))
 ---@field install_project fun(root: string, cb: fun(ok: boolean, err?: string)) every tool the project pins
@@ -72,7 +74,7 @@ local backend = require("tools.mise") ---@type tools.Backend
 ---@field value? any
 ---@field waiting? fun(value: any)[]
 
-local shared = {} ---@type table<string, tools.Slot> "global" -> global mise bin dirs
+local shared = {} ---@type table<string, tools.Slot> "global" -> global mise bin dirs, "pins" -> global pins
 local projects = {} ---@type table<string, tools.Slot> root -> tools.Project
 local envs = {} ---@type table<string, tools.Slot> scope -> env
 local results = {} ---@type table<string, table<string, tools.Slot>> root -> name -> tools.Result
@@ -117,6 +119,23 @@ local function global_dirs(cb)
   memo(shared, "global", function(done)
     backend.bin_paths("/", function(dirs) done(dirs or {}) end)
   end, cb)
+end
+
+--- The versions the user's global mise configs pin, once until the next refresh.
+---@param cb fun(pins: table<string, { version: string, installed: boolean, source: string }>)
+local function global_pins(cb)
+  memo(shared, "pins", function(done) backend.global_pins(done) end, cb)
+end
+
+--- The global pin of a mise tool when it isn't installed: mise reads the user's config.toml after the config's own
+--- conf.d file and lets it win, so installing "latest" there would leave the tool missing.
+---@param tool string
+---@param cb fun(pin?: { version: string, source: string })
+local function missing_global_pin(tool, cb)
+  global_pins(function(pins)
+    local pin = pins[tool]
+    cb(pin and not pin.installed and pin or nil)
+  end)
 end
 
 ---@param root string
@@ -309,6 +328,11 @@ local function has_runtime(runtime, env) return find_in(vim.split(env.PATH or ""
 ---@param done fun(result: tools.Result)
 local function compute(name, root, done)
   local entry = catalog.tools[name] or {}
+  if entry.spec then
+    -- Asked alongside the global bin dirs, so a missing tool's result doesn't wait one more mise call after the
+    -- others' (a statusline that counts the missing tools would drop it in between)
+    global_pins(function() end)
+  end
   scan(root, function(project)
     global_dirs(function(gdirs)
       scope_env(project, function(env)
@@ -371,7 +395,17 @@ local function compute(name, root, done)
               elseif entry.component then
                 return missing("rustup not found", { kind = "global", runtime = "rust", component = entry.component })
               elseif global then
-                return missing(runtime and ("not installed, and %s is not on PATH"):format(runtime) or "not installed", global)
+                return missing_global_pin(entry.spec, function(pin)
+                  if pin then
+                    local config = vim.fs.basename(pin.source)
+                    local spec = ("%s@%s"):format(entry.spec, pin.version)
+                    return missing(
+                      ("pinned by your global %s but not installed"):format(config),
+                      { kind = "pinned", spec = spec, version = pin.version, config = config, scope = "global" }
+                    )
+                  end
+                  missing(runtime and ("not installed, and %s is not on PATH"):format(runtime) or "not installed", global)
+                end)
               end
               return missing("not on PATH; install it with the system package manager", { kind = "none" })
             end
@@ -671,7 +705,7 @@ local function reporter(cb, title)
   end
 end
 
---- `mise use -g <specs>` (into the global config), then refresh. Specs are full, e.g. "ruff@latest" (tools.Install.spec).
+--- A global `mise use <specs>` (into the config's own global file, tools.mise.tools_file), then refresh. Specs are full, e.g. "ruff@latest" (tools.Install.spec).
 ---@param specs string[]
 ---@param cb? fun(ok: boolean, err?: string)
 function M.install_global(specs, cb)
@@ -769,7 +803,7 @@ end
 ---@field name string catalog binary
 ---@field install tools.Install
 
---- Runs installs, then refreshes: global ones in one `mise use -g` together with the runtimes they miss (a rustup
+--- Runs installs, then refreshes: global ones in one `mise use` together with the runtimes they miss (a rustup
 --- component that needed rust is added once rust is in), pinned versions in one `mise install`, components in one
 --- `rustup component add`. cb gets mise's or rustup's errors and the names whose install failed.
 ---@param items tools.InstallItem[]
@@ -906,7 +940,17 @@ function M.set_choice(root, choice, cb)
 end
 
 --- File patterns of the mise configs a project may have; writing one refreshes everything
-M.config_patterns = { "mise.toml", ".mise.toml", "mise.local.toml", ".tool-versions", "*/mise/config.toml", "*/.mise/config.toml", "*/.config/mise.toml" }
+M.config_patterns = {
+  "mise.toml",
+  ".mise.toml",
+  "mise.local.toml",
+  ".tool-versions",
+  "*/mise/config.toml",
+  "*/mise/conf.d/*.toml",
+  "*/.mise/config.toml",
+  "*/.mise/conf.d/*.toml",
+  "*/.config/mise.toml",
+}
 
 --- opts.backend replaces where tools come from (default tools.mise) and drops every cached answer.
 ---@param opts? { backend?: tools.Backend }
