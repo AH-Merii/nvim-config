@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/AH-Merii/nvim-config/compare/v0.10.0...v0.11.0) (2026-10-18)
+
+
+### Features
+
+* **linting:** entering a buffer lints only when something changed ([#53](https://github.com/AH-Merii/nvim-config/issues/53)) ([3994978](https://github.com/AH-Merii/nvim-config/commit/3994978fa6c4a67572b2fd3ad48dd95fc4bc6f29))
+
 ## [0.10.0](https://github.com/AH-Merii/nvim-config/compare/v0.9.0...v0.10.0) (2026-10-18)
 
 
