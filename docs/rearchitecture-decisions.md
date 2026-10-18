@@ -1436,7 +1436,8 @@ BufReadPre, BufRead, BufReadPost, FileType and FileChangedShellPost, and no BufE
 `~/.cache/nvim-config/lint-skip/probe/reload-events.lua`), so main did not lint a reloaded buffer until its next
 BufEnter (`checks/lint_bufenter_skip.lua`'s reload case fails on main).
 
-**Decision.** The user approved the first point; the others are this change's choices:
+**Decision.** The user approved the first point up front, and the reload, FileType and LspDetach points after seeing
+them (D74); FocusGained and ShellCmdPost close the gap a `git checkout` left (D75):
 
 - BufEnter lints only when the buffer's `b:changedtick` moved, or any buffer was written, since its last lint. A
   linter that reads a whole package or module (golangci-lint, tflint) can find new things in `b.go` when `a.go` is
