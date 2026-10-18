@@ -27,6 +27,8 @@ The full proposal, with its measurements and sources, was written outside the re
 - Built: step 4b, neoblocks.nvim's statusline replaces lualine ("Step 4b: neoblocks statusline" below).
 - Built: step 3, `keys/`, with D49 ("Step 3: keys/" below).
 - Built: step 5, `features/`, with `lsp/`, `textobjects/` and the rest of `ui/` ("Step 5: features/" below).
+- Built: step 6a, `app/` runs startup as named, timed phases, still on lazy.nvim ("Step 6a: app/" below). Next: 6b,
+  vim.pack (D45).
 
 ## Target layout
 
@@ -1129,3 +1131,121 @@ interleaved rounds of 9
 | this branch before that line | 97.5 ms | 9 × 9, against main's 93.2 ms over 9 × 9 |
 
 The branch matches main on equal footing, and the gain is the cache.
+
+## Step 6a: app/ (2026-10-18)
+
+Built on `rearch/app` from `origin/main` 2d1adef (step 5). Behaviour is unchanged; lazy.nvim stays until 6b. A dump of
+the sandbox's state after VeryLazy (autocmds in their order per event, maps, commands, options, `vim.g`, lazy's
+plugins, loaded modules), taken with main's config and with this branch's, differs only in the module names and the
+autocmd order listed below. The dump groups autocmds by event and pattern, so order across patterns was read from the
+code. The ColorScheme, LspAttach, VimResized and WinResized listeners that plugins make also came out in another order;
+that order is lazy's startup load order, which comes from `pairs()` over its plugins (`lazy/core/loader.lua:163-172`)
+and varies from run to run on main too ("Step 5"). The dump is a scratch script (`~/.cache/nvim-config/rearch/app/tmp/dump.lua`), not in the
+branch.
+
+**Built.**
+
+- `init.lua` is `vim.loader.enable()`, then `require("app").start()`.
+- `lua/app/init.lua`: `M.phases`, the six phases in order, and `M.start()`, which runs them. `M.times()` lists the
+  phases that ran, in the order they ran, each with its milliseconds.
+- `lua/app/lazy.lua`: was `core/lazy.lua`, now a `setup()` the plugins phase calls. 6b replaces it.
+- `lua/options.lua`: was `config/options.lua`, now editor-wide options and the leaders only.
+- `checks/app_phases.lua`: the phases are recorded once each, in order, each timed, and the deferred one waits for
+  VeryLazy.
+
+**Decisions.**
+
+- *The proposal's six phases, in its order* (proposal Part 4, "Startup, in phases"):
+  1. `options`: `options.lua`, then `ui2.enable()` and `ui.messages.setup()`;
+  2. `registries`: `keys.neovim`, `keys.languages`, `lsp.buffer`, `features.setup()`;
+  3. `tools`: the dotenv rule (below), `lang.setup()`, `tools.setup()`, `tools.ux.setup()`;
+  4. `plugins`: `app.lazy.setup()`;
+  5. `servers`: `lsp.setup()`;
+  6. `deferred`, at `User VeryLazy`: the features' `at_very_lazy` callbacks.
+  - A phase is `{ name, at?, run }` (`app/init.lua:6-9`). The list is data, so the check reads the order from
+    `M.times()` and asserts it against the six names written out.
+  - Main ran lang and tools first, then options, then the keys and features (`init.lua` at 2d1adef). Options first
+    puts mapleader and ui2 before anything else, as the proposal has it. Nothing in lang or tools read an option or
+    showed a message at setup: lang's problems are reported in `vim.schedule` (`lang/init.lua:371-373`).
+  - Registries before tools moves three groups' listeners later within their events. Each pair is independent:
+    - FileType: `lang`, `tools` and `tools.ux` now follow `format.plans`, `linting.plans` and `keys.language`, and
+      the pattern listeners of `features.editing` (mail; gitcommit, markdown and the other prose types; terraform and
+      hcl, `features/editing.lua:438-464`) and `features.windows` (help, qf and the other `q` types,
+      `features/windows.lua:73`). lang sets buffer options only for lua (`lang/lua.lua:7`), which none of those
+      patterns covers and the others don't read; tools starts mise queries, which call back later; tools.ux runs its
+      check in `vim.schedule` (`tools/ux.lua:899-900`).
+    - BufEnter: `tools.ux` now follows `features.editing`, which only removes `formatoptions` flags
+      (`features/editing.lua:424-427`).
+    - BufWipeout: `tools.ux` now follows `format.plans`, `linting.plans` and `features.git`. Each drops its own cache
+      for the buffer.
+  - Rejected: options, tools, registries, which kept main's order of those listeners. The proposal orders tools after
+    the registries because the tool phase reads them, and nothing observed depends on the old order.
+- *The servers phase calls `lsp.setup()`;* nvim-lspconfig's spec lost its `config` (`lsp/init.lua:302-309`). lazy
+  loads the startup plugins inside `lazy.setup` (`Loader.startup()`, `lazy/init.lua:112`), so nvim-lspconfig's `lsp/*.lua` are on
+  the runtimepath when phase 5 runs.
+  - `lsp`'s FileType and VimLeavePre listeners are now made after every startup plugin's, not in the middle of
+    lazy's load order, so they have a fixed place: last among the listeners made at startup. On main their place
+    varied with that order. FileType's `lsp` still precedes `nvim.lsp.enable`, and VimLeavePre's `vim.lsp: exit handler`
+    still runs first (the dump). `lsp` now follows `nvim.autoread`'s VimLeavePre listener
+    (`runtime/lua/nvim/autoread.lua:167`), which stops autoread's watchers, not servers.
+  - Two edge cases differ. If nvim-lspconfig is missing, each server now warns that nvim-lspconfig has no config for
+    it (`lsp/init.lua:212`); on main lazy skipped the missing plugin's `config`, so servers silently didn't start.
+    `:Lazy reload nvim-lspconfig` no longer runs `lsp.setup()` again.
+- *The deferred phase is one listener.* It replaces the `features.very_lazy` group's one listener per callback.
+  - `app.start()` makes it after the startup phases, so after lazy's own VeryLazy listener, as `features.after_lazy()`
+    did. The plugins that load at VeryLazy are loaded before the callbacks run.
+  - `features.very_lazy()` runs the callbacks in order, each in `xpcall`, so one that fails is reported and the rest
+    still run, as with separate listeners (`features/init.lua:59-70`). `at_very_lazy(fn)` after the phase ran runs fn
+    at once; before, a listener made after VeryLazy never ran. Nothing calls it that late today.
+  - Its time counts from the event's first listener, which `app.start()` makes before any other, so it includes what
+    lazy loads at VeryLazy. In 6b app loads those itself.
+  - Rejected: keeping `after_lazy()`'s listeners and a deferred phase that only marks time. The phase would not run
+    anything, and "ran once" would check a timestamp.
+- *`vim.loader.enable()` stays first in `init.lua`,* before `require("app")`, so every module, app's included, loads
+  byte-compiled. Step 5 measured why it must precede the requires: without it the features parse from source, 97.5 ms
+  against 83.8 ms ("Step 5", Cost).
+  - Rejected: calling it inside `app.start()`. `app/init.lua` would then parse from source on every start, and the
+    call would sit after the first require.
+- *`options.lua` holds editor-wide options only.*
+  - `ui2.enable()` and `ui.messages.setup()` moved to the options phase. They are startup steps, not options, and
+    the proposal puts ui2 in phase 1.
+  - `vim.g.lazydev_enabled = true` moved to `features/lua_dev.lua`, which owns lazydev. It is also lazydev's default
+    when unset (`lazydev/config.lua:25`).
+  - The tsconfig rule (`["[jt]sconfig.*.json"] = "jsonc"`) is dropped. Neovim names those files jsonc itself
+    (`runtime/lua/vim/filetype.lua:2847`, `['^[jt]sconfig.*%.json$'] = 'jsonc'`), and a user pattern is anchored the
+    same way (`filetype.lua:3085`). `vim.filetype.match` gives jsonc for `tsconfig.base.json` and `jsconfig.json` on
+    both main and this branch. The two patterns differ only on names with no dot before `json`.
+  - The dotenv rules moved to the tools phase, before `lang.setup()`. No language file declares dotenv, and Neovim
+    names these files `env` (`filetype.lua:495,1704,2785`), with its own syntax and ftplugin.
+  - Rejected: a language-level `match` field in `lang.Spec` and a `lang/dotenv.lua`. dotenv has no tools, but
+    `lang.of("dotenv")` would start answering, and the facts, `:Tools`, `:Status` and the format and lint modules read
+    that answer. `views.filetypes` would also need an `extension` table, which changes the views the unit tier checks
+    (`tests/unit/lang_test.lua:128`). That is too much for one rule.
+  - Found: the `.env.*` pattern (`["%.env%.[%w_.-]+"] = "dotenv"`) has no effect on main either. `.env.local` is `env`
+    on both, the runtime's `^%.env%.` winning. It is kept as is; whether the dotenv rules should go in favour of
+    the runtime's `env` is the user's call.
+- *`app.start()` runs once per session.* Re-sourcing `init.lua` does nothing; restart with `ZR` (`:restart`)
+  instead. A second run would make every phase's state, autocmds and plugin setups again, and lazy would notify that
+  re-sourcing is not supported (`lazy/init.lua:41-47`).
+- *Timing is on all the time.* Each phase costs two `vim.uv.hrtime()` calls and one table insert. Warm, in the regress
+  sandbox, headless, from the default fixture, six runs: options 0.3 ms, registries 13 ms, tools 4 ms, plugins 45 ms,
+  servers 8 ms, deferred 17 to 23 ms (after the first warm-up run). Read them with `:lua =require("app").times()`.
+
+**Checks.** `checks/app_phases.lua` is new. It reads the timing record: each phase is recorded once, in order, each
+with a time; firing VeryLazy again records nothing; and a headless nvim with no harness (which never gets VeryLazy) has
+recorded the five startup phases and not the deferred one. A phase whose run() is called twice but recorded once would
+pass: the check reads the record, not the calls. Five sibling wrong versions of `app/init.lua` each fail it:
+`times()` returning nothing, registries and tools swapped, the deferred phase run inline, its listener without
+`once`, and a phase recorded twice (`~/.cache/nvim-config/rearch/app/wrong/run.sh`). No existing check was edited.
+
+**Cost.** Startup in the regress sandbox, headless, no file, cwd the default fixture, `--startuptime`, 5 interleaved
+rounds of 3 runs per side (`~/.cache/nvim-config/rearch/app/bench/startup.sh`). One-off class, one call per felt
+moment. The question was whether 6a moves startup by 3 ms or more, or past ~100 ms.
+
+| Config | Pooled median | Rounds faster |
+| --- | --- | --- |
+| main | 78.3 ms | |
+| this branch | 77.8 ms | 3 of 5 |
+
+The rounds disagree on the direction (-3.7 to +7.8 ms per round), so there is no real difference, and both are under
+the budget.
