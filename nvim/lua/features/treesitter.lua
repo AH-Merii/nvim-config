@@ -48,24 +48,8 @@ local specs = {
     version = "main",
     -- before the first file's FileType; its setup uses Snacks.toggle, and snacks loads before it (ui/snacks.lua)
     phase = "startup",
-    build = function(path)
-      -- master compiled parsers into the plugin dir; main installs them under stdpath("data")/site
-      vim.fn.delete(path .. "/parser", "rf")
-      vim.fn.delete(path .. "/parser-info", "rf")
-      -- Each parser's queries are a link into a checkout's runtime/queries (install.lua do_link_queries). update()
-      -- leaves a parser whose revision is unchanged alone (install.lua needs_update), so links into another
-      -- checkout, as lazy.nvim's was, are pointed at this one here
-      local queries = require("nvim-treesitter.config").get_install_dir("queries")
-      for lang, kind in vim.fs.dir(queries) do
-        local link, src = vim.fs.joinpath(queries, lang), vim.fs.joinpath(path, "runtime", "queries", lang)
-        if kind == "link" and vim.uv.fs_readlink(link) ~= src and vim.uv.fs_stat(src) then
-          vim.uv.fs_unlink(link)
-          vim.uv.fs_symlink(src, link)
-        end
-      end
-      -- :TSUpdate, which nvim-treesitter's plugin/ file defines after this runs at startup
-      require("nvim-treesitter").update(nil, { summary = true })
-    end,
+    -- :TSUpdate, which nvim-treesitter's plugin/ file defines after this runs at startup
+    build = function() require("nvim-treesitter").update(nil, { summary = true }) end,
     setup = function()
       local ts = require("nvim-treesitter")
       local keys = require("keys")

@@ -35,8 +35,9 @@ NVIM_APPNAME=nvimn nvim
 ```
 
 The first start clones the plugins, at the revisions `nvim/nvim-pack-lock.json` pins, with Neovim's own plugin
-manager (vim.pack). A config that used lazy.nvim before leaves its plugins in `~/.local/share/<appname>/lazy`; nothing
-reads or deletes them now, so remove that directory when you no longer need it. The leader key is `<space>`.
+manager (vim.pack). Coming from a lazy.nvim-era install, start from an empty data directory: move
+`~/.local/share/<appname>` aside first. Its lazy.nvim plugins aren't read, and its treesitter queries link into
+lazy's checkout, so they aren't reused either. The leader key is `<space>`.
 
 ## Commands
 
