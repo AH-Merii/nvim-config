@@ -3,6 +3,8 @@
 Living record of the decisions for reorganising the config by its domain (languages, keys, tools and
 features) instead of by plugin. Newest status first in each section. Dates are when the decision was made.
 
+**Status (2026-10-18):** complete, and released as 1.0.0. The debugger (D60) is left for after it.
+
 ## Goal
 
 Declare each fact once, in data, and turn it into behaviour in a few deep modules. Each plugin lives inside
