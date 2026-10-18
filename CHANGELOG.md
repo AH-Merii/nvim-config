@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/AH-Merii/nvim-config/compare/v0.11.0...v0.12.0) (2026-10-18)
+
+
+### Bug Fixes
+
+* **lsp:** no process a server started outlives the server or Neovim ([#55](https://github.com/AH-Merii/nvim-config/issues/55)) ([00411e7](https://github.com/AH-Merii/nvim-config/commit/00411e799f139be97a765a875069ef2a9fdb49f5))
+
 ## [0.11.0](https://github.com/AH-Merii/nvim-config/compare/v0.10.0...v0.11.0) (2026-10-18)
 
 
