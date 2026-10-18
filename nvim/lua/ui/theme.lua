@@ -41,9 +41,10 @@ end
 
 M.plugins = {
   {
-    "navarasu/onedark.nvim",
-    priority = 1000,
-    config = function()
+    src = "navarasu/onedark.nvim",
+    -- first, so the plugins after it find their colours
+    phase = "startup",
+    setup = function()
       require("onedark").setup({
         -- Default theme style. Choose between 'dark', 'darker', 'cool', 'deep', 'warm', 'warmer' and 'light'
         style = "deep",

@@ -30,10 +30,11 @@ setup tells you if yours doesn't.
    `lua/features/init.lua`: its rows, needs, autocmds and options
 3. `tools` - The languages' variant filetypes and buffer options (`lang.setup()`), the tool
    resolver, install prompts and `:Tools` (before any plugin looks a tool up)
-4. `plugins` - `lua/app/lazy.lua`: bootstrap lazy.nvim and give it every module's `plugins`
-   (`require("features").plugins()`); lazy loads the startup plugins here
+4. `plugins` - `lua/app/plugins.lua`: vim.pack installs what every module's `plugins` names
+   (`require("features").plugins()`) and the disk lacks, then the startup plugins load
 5. `servers` - `lsp.setup()`: one `vim.lsp.config` per server a language names, then `vim.lsp.enable`
-6. `deferred` - At `VeryLazy`, after the plugins lazy loads then: the callbacks given to
+6. `buffer` - At the first `BufReadPre` or `BufNewFile`: the plugins that serve files (nvim-lint, origami)
+7. `deferred` - At `VeryLazy`, after the first screen: the deferred plugins, then the callbacks given to
    `require("features").at_very_lazy(fn)`
 
 Each phase is timed: `:lua =require("app").times()` lists the phases that ran and their milliseconds.
@@ -48,7 +49,7 @@ for a `<leader>` row added without it).
 nvim/
 ├── init.lua                  # Entry point: vim.loader, then the startup phases (lua/app/)
 ├── lua/
-│   ├── app/                 # Startup phases (init.lua); lazy.nvim bootstrap, given every module's plugins (lazy.lua)
+│   ├── app/                 # Startup phases (init.lua); vim.pack installs every module's plugins (plugins.lua)
 │   ├── options.lua          # Editor-wide options
 │   ├── lang/                # One data file per language, and the registry that reads them (init.lua)
 │   ├── tools/               # Tool resolver (mise), catalog, prompts and :Tools
@@ -158,49 +159,44 @@ catalog's args.
 
 ## Plugin Management
 
-### Lazy.nvim Loading Strategies
+### Plugin specs
 
-**Event-based** (load on buffer events):
+vim.pack (`:h vim.pack`) installs the plugins; `lua/app/plugins.lua` loads each in its phase. A spec is a table
+(`app.Plugin` in that file):
+
 ```lua
-{ "plugin/name", event = { "BufReadPost", "BufNewFile" } }
+{
+  src = "author/notes.nvim", -- on GitHub, or any URL git clones
+  version = "main", -- a branch, tag or commit, or vim.version.range("1.*"); default the default branch
+  -- "startup", "buffer" (the first file), "deferred" (after the first screen, the default) or "on_demand" (only
+  -- at one of its `cmd`)
+  phase = "buffer",
+  cmd = { "Notes" }, -- commands that load it if used before its phase, as `nvim +Notes` does
+  init = function() end, -- before any plugin loads
+  setup = function() require("notes").setup({}) end, -- once it is on the runtimepath
+  build = function(path) end, -- after vim.pack installs or updates it
+  dev = true, -- with $NVIM_PLUGIN_DEV naming a directory that holds notes.nvim, load that checkout instead
+}
 ```
 
-**Command-based** (load when command invoked):
-```lua
-{ "plugin/name", cmd = "CommandName" }
-```
-
-**Key-based** (load when keymap triggered):
-```lua
-{ "plugin/name", keys = { { "<leader>x", ":Command<CR>" } } }
-```
-
-**Filetype-based** (load for specific filetypes):
-```lua
-{ "plugin/name", ft = "lua" }
-```
-
-**Priority loading** (load immediately):
-```lua
-{ "plugin/name", priority = 1000, lazy = false }
-```
+A plugin's module that is required before its phase loads it then (a picker action that requires trouble), so a
+plugin another one needs early has no `dependencies` to declare. Each phase loads its plugins in list order:
+`M.adapters` first, then `M.features` (`lua/features/init.lua`).
 
 ### Adding a New Plugin
 
-1. Add its lazy.nvim spec to the `plugins` list of the feature it serves (`lua/features/<feature>.lua`), or of the
-   adapter or ui module that wraps it
-2. Use a loading strategy from above, and `dependencies` for the plugins it needs
-3. Add its keys as rows (see "Adding a key"), in the spec's `config` or `init` when they need the plugin; use lazy's
-   `keys` table only for a key that should load the plugin
-4. Add a `config` function for setup
+1. Add its spec to the `plugins` list of the feature it serves (`lua/features/<feature>.lua`), or of the adapter or
+   ui module that wraps it
+2. Leave it deferred unless something before the first screen needs it (`startup`), it sets up the buffers it
+   finds when it loads (`buffer`), or loading it changes something before it is used, such as global maps
+   (`on_demand`, with the `cmd` that loads it). Give a deferred plugin `cmd` for commands used from the command line
+   at launch
+3. Add its keys as rows (see "Adding a key"). A row whose action requires the plugin loads it on the first press
+4. Start Neovim: vim.pack clones it and adds it to `nvim/nvim-pack-lock.json`; commit that file with the spec
 
-Don't add a directory of spec modules: lazy runs those again after an install or update
-(`lazy/core/plugin.lua:184`), so the state they make would split. A new module that brings plugins is listed in
-`M.adapters` or `M.features` in `lua/features/init.lua`.
-
-lazy doesn't reload a spec you edit, since the specs are a table rather than modules it imports. Restart with `ZR`
-(`:restart`), which saves and restores the session (`:h ZR`; lazy's `change_detection` only watches imported
-modules, `lazy/manage/reloader.lua:18`).
+To remove a plugin, delete its spec, then `:packdel <name>` (or `:lua vim.pack.del({ "<name>" })`), which removes
+it from the disk and the lockfile. Edits to a spec take effect after a restart: `ZR` (`:restart`) saves and
+restores the session (`:h ZR`).
 
 ### Adding a feature
 
@@ -210,7 +206,7 @@ A feature is `lua/features/<name>.lua`, listed in `M.features` in `lua/features/
 -- A sketch of lua/features/notes.lua
 local M = {}
 
-M.plugins = { { "author/notes.nvim", cmd = "Notes", opts = {} } } -- lazy.nvim specs
+M.plugins = { { src = "author/notes.nvim", setup = function() require("notes").setup({}) end } } -- app.Plugin
 
 function M.setup() -- runs once at startup, before any plugin loads
   local group = vim.api.nvim_create_augroup("features.notes", { clear = true })
@@ -373,7 +369,7 @@ After modifying configuration:
 
 1. Source the file: `<space>%` or `:source %`
 2. Restart Neovim to test full initialization flow
-3. Check plugin status: `:Lazy` (press `U` to update, `X` to clean)
+3. Check plugin status: `:checkhealth vim.pack`; `<leader>sp` lists the plugin specs; `:packupdate` updates
 4. Check LSP status: `:LspStatus` or `:Status`
 5. Check for errors: `:messages`
 

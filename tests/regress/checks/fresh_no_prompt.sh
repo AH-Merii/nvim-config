@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# @desc     a first start that installs a plugin and the parsers raises no hit-enter prompt, even when init-time work outlasts lazy's last redraw
+# @desc     a first start that installs a plugin and the parsers raises no hit-enter prompt, even when init-time work runs the event loop past the install
 # @areas    startup installer treesitter ui
 # @budget   90
 # @fresh
-# @network  lazy clones nvim-treesitter and ts.install downloads the parsers (~30 tarballs, ~10s); every other plugin comes pre-seeded
+# @network  vim.pack clones nvim-treesitter and ts.install downloads the parsers (~30 tarballs, ~10s); every other plugin comes pre-seeded
 #
 # The prompt only exists with a real UI, so nvim runs as a TUI in a private tmux server (killed on exit); the
 # screen is polled for "Press ENTER" and "-- More --". The data dir is seeded from the version's data/ except nvim-treesitter
-# and the parsers, so lazy still runs its install wait (build and config inside it) and parsers still install.
+# and the parsers, so vim.pack still installs during init (its build and setup run then too) and parsers still install.
 # A site/plugin file runs the event loop for 3s during init without a redraw: an echo from async init work
-# then lands after lazy's last redraw, which makes the first-start prompt race deterministic.
+# then lands before the first screen, which makes the first-start prompt race deterministic.
 set -u
 unset TMUX
 D=$FIX/.nvr
@@ -23,12 +23,13 @@ trap cleanup EXIT
 trap 'exit 143' TERM INT
 mkdir -p "$D"
 
-if ! [ -d "$SRC/lazy/lazy.nvim" ]; then
-  say "FAIL seed  -- no lazy under $SRC (run suite.sh --refresh)"; say DONE; exit 0
+PACK=site/pack/core/opt
+if ! [ -d "$SRC/$PACK/snacks.nvim" ]; then
+  say "FAIL seed  -- no plugins under $SRC/$PACK (run suite.sh --refresh)"; say DONE; exit 0
 fi
-mkdir -p "$DST/lazy" "$DST/site/plugin"
-for p in "$SRC"/lazy/*; do
-  [ "${p##*/}" = nvim-treesitter ] || cp -a --reflink=auto "$p" "$DST/lazy/"
+mkdir -p "$DST/$PACK" "$DST/site/plugin"
+for p in "$SRC/$PACK"/*; do
+  [ "${p##*/}" = nvim-treesitter ] || cp -a --reflink=auto "$p" "$DST/$PACK/"
 done
 echo 'vim.wait(3000)' >"$DST/site/plugin/zz_nvr_init_wait.lua"
 
@@ -79,12 +80,11 @@ local function ts_state()
   return started, errs, pending
 end
 
-local function lazy_missing()
+local function plugins_missing()
   local out = {}
-  for name, p in pairs(require("lazy.core.config").plugins) do
-    if not p._.installed then table.insert(out, name) end
+  for _, p in ipairs(require("app.plugins").list()) do
+    if not vim.uv.fs_stat(p.path) then table.insert(out, p.name) end
   end
-  table.sort(out)
   return out
 end
 
@@ -133,8 +133,8 @@ local function report()
   rec(#pending == 0 and #errlist == 0 and #unloadable == 0, "parsers installed at first start load, no install errors",
     string.format("%d installed; pending [%s]; errors [%s]; not loadable [%s]", n, join(pending), join(errlist, 2), join(unloadable)))
 
-  local lm = lazy_missing()
-  rec(#lm == 0, "every lazy plugin installed", #lm > 0 and ("missing " .. join(lm)) or nil)
+  local pm = plugins_missing()
+  rec(#pm == 0, "every plugin installed", #pm > 0 and ("missing " .. join(pm)) or nil)
 
   local attach_name = "file opened at launch gets its servers from the suite's tools"
   if MODE == "bootstrap" and not (buf0 and vim.api.nvim_buf_is_valid(buf0)) then
@@ -199,7 +199,7 @@ vim.api.nvim_create_autocmd("VimEnter", {
   once = true,
   callback = function()
     t_enter = now()
-    -- by argv, not the current buffer: on a first start lazy's install window has focus
+    -- by argv, not the current buffer, which a check's own window could take
     local b = vim.fn.argc() > 0 and vim.fn.bufnr(vim.fn.fnamemodify(vim.fn.argv(0), ":p")) or -1
     buf0 = b > 0 and b or nil
     timer:start(250, 250, vim.schedule_wrap(function()

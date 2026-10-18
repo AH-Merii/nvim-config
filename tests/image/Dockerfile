@@ -10,7 +10,7 @@
 #   nvim     builds the pinned nightly
 #   needs    the @needs of every check, alone, so adding a check with no new tool keeps the tools layer
 #   tools    the suite's mise and rustup installs, keyed on the catalog and the needs only
-#   plugins  lazy plugins at the lockfile, the tool check through the config's resolver, parsers: keyed on the config
+#   plugins  plugins at the lockfile (vim.pack), the tool check through the config's resolver, parsers: keyed on the config
 #   test     runtime plus the installs; layers from least to most often changed
 
 ARG BASE=docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
@@ -26,13 +26,13 @@ ARG TREE_SITTER_VERSION=0.27.0
 ARG TREE_SITTER_SHA256=20a1f39ec1c45f2211492dcb8881c802b643b554bb196869a29ac3778277fa77
 ARG RUSTUP_VERSION=1.29.1
 ARG RUSTUP_SHA256=dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71
-# git: lazy and the git checks; tmux: pending_keys.sh; procps (pgrep), gawk (suite.sh's report): the runner;
+# git: vim.pack and the git checks; tmux: pending_keys.sh; procps (pgrep), gawk (suite.sh's report): the runner;
 # curl, gcc, libc6-dev: a first start's parser downloads and builds (fresh_bootstrap.sh); python3: the interpreter
 # the suite's pypi tools were installed against, as on the host; libicu76: marksman (.NET) exits without it;
-# lua5.1, luarocks: `:checkhealth lazy` (startup.lua) wants them; tini: PID 1 reaps the checks' orphans
+# tini: PID 1 reaps the checks' orphans
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl gawk gcc git libc6-dev libicu76 lua5.1 luarocks \
-    procps python3 tini tmux \
+  && apt-get install -y --no-install-recommends ca-certificates curl gawk gcc git libc6-dev libicu76 procps python3 \
+    tini tmux \
   && rm -rf /var/lib/apt/lists/*
 RUN curl -fsSLo /usr/local/bin/mise "https://github.com/jdx/mise/releases/download/v${MISE_VERSION}/mise-v${MISE_VERSION}-linux-x64" \
   && echo "${MISE_SHA256}  /usr/local/bin/mise" | sha256sum -c --quiet \
@@ -108,12 +108,12 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000 \
     tests/regress/data/mise/data/downloads tests/regress/data/mise/data/cache \
   && du -sh tests/regress/data/*
 
-# ---- plugins: lazy, the tool check, parsers -------------------------------------------------------------------
+# ---- plugins: vim.pack, the tool check, parsers ----------------------------------------------------------------
 FROM tools AS plugins
 RUN rm -rf stub tests/regress/checks
 COPY --chown=nvr:nvr nvim nvim
 COPY --chown=nvr:nvr tests/regress tests/regress
-RUN { NVR_REFRESH_STEPS="lazy resolve parsers" tests/regress/suite.sh --refresh-only \
+RUN { NVR_REFRESH_STEPS="plugins resolve parsers" tests/regress/suite.sh --refresh-only \
     || { cat tests/regress/last/refresh.log; exit 1; }; } \
   && rm -rf tests/regress/shared-cache tests/regress/last \
   && find nvim -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1 >/work/.image-config.sum \

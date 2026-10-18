@@ -34,9 +34,10 @@ end
 
 local specs = {
   {
-    "lewis6991/gitsigns.nvim",
-    lazy = false,
-    config = function()
+    src = "lewis6991/gitsigns.nvim",
+    -- before the first file opens, so it attaches to it
+    phase = "startup",
+    setup = function()
       local gs = require("gitsigns")
       local gsc = require("gitsigns.config")
       -- stage_hunk() stages an unstaged hunk under the cursor and unstages a staged one
@@ -128,18 +129,17 @@ local specs = {
     end,
   },
 
-  {
-    "sindrets/diffview.nvim",
-    event = "VeryLazy",
-    cmd = { "DiffviewOpen", "DiffviewClose", "DiffviewToggleFiles", "DiffviewFocusFiles" },
-  },
+  -- `nvim +DiffviewOpen` runs before VeryLazy; its plugin/ file defines the real commands (plugin/diffview.lua:23,27)
+  { src = "sindrets/diffview.nvim", cmd = { "DiffviewOpen", "DiffviewFileHistory" } },
 }
 table.insert(specs, {
-  "AH-Merii/github-pr-reviewer.nvim",
+  src = "AH-Merii/github-pr-reviewer.nvim",
+  -- Not at VeryLazy: its setup maps <C-h>, <C-l> and <C-e> globally, outside review mode falling back to Neovim's
+  -- own keys (github-pr-reviewer/init.lua:1397-1424, called from setup at :5023), which would replace the window
+  -- keys (features/windows.lua). The two commands the <leader>p rows run load it, as before
+  phase = "on_demand",
   cmd = { "PRReviewMenu", "PRSuggestChange" },
-  opts = {
-    pr_list_limit = 250,
-  },
+  setup = function() require("github-pr-reviewer").setup({ pr_list_limit = 250 }) end,
 })
 M.plugins = specs
 

@@ -166,9 +166,10 @@ end
 -- Loads nvim-lint for linting/, and adds the <leader>ll and <leader>li rows
 M.plugins = {
   {
-    "mfussenegger/nvim-lint",
-    event = { "BufReadPre", "BufNewFile" },
-    config = function()
+    src = "mfussenegger/nvim-lint",
+    -- before the first file's FileType, so linting.setup()'s BufEnter lints it
+    phase = "buffer",
+    setup = function()
       local linting = require("linting")
       linting.setup()
 

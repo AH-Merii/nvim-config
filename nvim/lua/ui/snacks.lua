@@ -1,79 +1,86 @@
 -- snacks.nvim: the picker, the notifier, and the rest of snacks the config uses (indent guides, scrolling, the
 -- status column, words, profiler, scratch, zen). The features declare the keys that call it.
-local spec = {
-  "folke/snacks.nvim",
-  priority = 1000,
-  lazy = false,
+local M = {}
 
-  ---@type snacks.Config
-  opts = {
-    bigfile = { enabled = true },
-    profiler = { enabled = true },
-    dashboard = { enabled = false }, --
-    explorer = { enabled = false }, --
-    indent = {
-      enabled = true,
-      -- The scope grows out from the cursor in 150 ms rather than snacks' 500 (20 ms a line): a jump settled sooner
-      -- and redrew for half as long (docs/profiling-scrolling.md)
-      animate = { duration = { step = 10, total = 150 } },
-    },
-    input = { enabled = true },
-    picker = {
-      enabled = true,
-      win = {
-        input = {
-          keys = {
-            -- Navigation
-            ["<C-h>"] = { "focus_list", mode = { "n", "i" } },
-            ["<C-l>"] = { "focus_preview", mode = { "n", "i" } },
-            ["<C-k>"] = { "focus_list", mode = { "n", "i" } },
-            ["<C-j>"] = { "focus_preview", mode = { "n", "i" } },
-          },
-        },
-        list = {
-          keys = {
-            -- Navigation
-            ["<C-h>"] = { "focus_input", mode = { "n" } },
-            ["<C-l>"] = { "focus_preview", mode = { "n" } },
-            ["<C-k>"] = { "focus_input", mode = { "n" } },
-            ["<C-j>"] = { "focus_preview", mode = { "n" } },
-          },
-        },
-        preview = {
-          keys = {
-            -- Only map "go back to picker" keys; C-l/C-j are no-op (already at destination)
-            ["<C-h>"] = { "focus_list", mode = { "n" } },
-            ["<C-k>"] = { "focus_list", mode = { "n" } },
-          },
-        },
-      },
-    },
-    notifier = {
-      enabled = true,
-      -- Errors stay until dismissed (<leader>N), like ui2 message errors, except the routine ones
-      -- ui/messages/messages.lua marks (a search that found nothing); the rest is snacks' default keep
-      -- (snacks/notifier.lua:131-133).
-      keep = function(n) return n.level == "error" and not n.routine or vim.fn.getcmdpos() > 0 end,
-    },
-    quickfile = { enabled = true },
-    scope = { enabled = true },
-    scroll = {
-      enabled = true,
-      -- Front-loaded, so C-d/C-u cover half the distance in about 20 ms, and done in about 80 ms; snacks' default
-      -- is linear over 200 ms, halfway at about 85 ms (docs/profiling-scrolling.md)
-      animate = { duration = { step = 10, total = 120 }, easing = "outCubic" },
-    },
-    statuscolumn = {
-      enabled = true,
-      folds = {
-        open = true, -- show open fold icons
-        git_hl = false, -- use Git Signs hl for fold icons
-      },
-    },
-    words = { enabled = true },
+---@type snacks.Config
+local opts = {
+  bigfile = { enabled = true },
+  profiler = { enabled = true },
+  dashboard = { enabled = false }, --
+  explorer = { enabled = false }, --
+  indent = {
+    enabled = true,
+    -- The scope grows out from the cursor in 150 ms rather than snacks' 500 (20 ms a line): a jump settled sooner
+    -- and redrew for half as long (docs/profiling-scrolling.md)
+    animate = { duration = { step = 10, total = 150 } },
   },
+  input = { enabled = true },
+  picker = {
+    enabled = true,
+    win = {
+      input = {
+        keys = {
+          -- Navigation
+          ["<C-h>"] = { "focus_list", mode = { "n", "i" } },
+          ["<C-l>"] = { "focus_preview", mode = { "n", "i" } },
+          ["<C-k>"] = { "focus_list", mode = { "n", "i" } },
+          ["<C-j>"] = { "focus_preview", mode = { "n", "i" } },
+        },
+      },
+      list = {
+        keys = {
+          -- Navigation
+          ["<C-h>"] = { "focus_input", mode = { "n" } },
+          ["<C-l>"] = { "focus_preview", mode = { "n" } },
+          ["<C-k>"] = { "focus_input", mode = { "n" } },
+          ["<C-j>"] = { "focus_preview", mode = { "n" } },
+        },
+      },
+      preview = {
+        keys = {
+          -- Only map "go back to picker" keys; C-l/C-j are no-op (already at destination)
+          ["<C-h>"] = { "focus_list", mode = { "n" } },
+          ["<C-k>"] = { "focus_list", mode = { "n" } },
+        },
+      },
+    },
+  },
+  notifier = {
+    enabled = true,
+    -- Errors stay until dismissed (<leader>N), like ui2 message errors, except the routine ones
+    -- ui/messages/messages.lua marks (a search that found nothing); the rest is snacks' default keep
+    -- (snacks/notifier.lua:131-133).
+    keep = function(n) return n.level == "error" and not n.routine or vim.fn.getcmdpos() > 0 end,
+  },
+  quickfile = { enabled = true },
+  scope = { enabled = true },
+  scroll = {
+    enabled = true,
+    -- Front-loaded, so C-d/C-u cover half the distance in about 20 ms, and done in about 80 ms; snacks' default
+    -- is linear over 200 ms, halfway at about 85 ms (docs/profiling-scrolling.md)
+    animate = { duration = { step = 10, total = 120 }, easing = "outCubic" },
+  },
+  statuscolumn = {
+    enabled = true,
+    folds = {
+      open = true, -- show open fold icons
+      git_hl = false, -- use Git Signs hl for fold icons
+    },
+  },
+  words = { enabled = true },
+}
 
-  config = function(_, opts)
+--- Merges more of snacks' options over these, before snacks loads: the features' own (trouble's picker actions,
+--- features/diagnostics.lua)
+---@param more snacks.Config
+function M.extend(more) opts = vim.tbl_deep_extend("force", opts, more) end
+
+local spec = {
+  src = "folke/snacks.nvim",
+  -- right after the theme: the startup plugins after it use Snacks (the treesitter toggle)
+  phase = "startup",
+
+  setup = function()
     require("snacks").setup(opts)
 
     -- Nightly names its built-in modules "@vim/loader", without ".lua", and the profiler reads that path as a file
@@ -161,4 +168,6 @@ local spec = {
   end,
 }
 
-return { plugins = { spec } }
+M.plugins = { spec }
+
+return M

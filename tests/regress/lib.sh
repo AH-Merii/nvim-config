@@ -15,7 +15,6 @@ make_home() {
   ln -s "$HOME/.config/git" "$h/config/git"
   # mise's config dir stays empty: the global config is the suite's own (see mise_env)
   mkdir -p "$h/config/mise"
-  seed_state "$h/state"
 }
 
 # sandbox_env <home>: Go and npm ignore XDG; their download caches are shared by every run (both lock)
@@ -41,12 +40,6 @@ mise_env() {
   if [ -d "$SUITE_RUSTUP" ]; then export RUSTUP_HOME=$SUITE_RUSTUP; fi
 }
 
-# seed_state <dir>: lazy's checker would git-fetch every plugin when state has no recent check
-seed_state() {
-  mkdir -p "$1/lazy"
-  printf '{"checker":{"last_check":%s}}' "$(date +%s)" >"$1/lazy/state.json"
-}
-
 # header <file> <key>: value of a "-- @key value" / "# @key value" line
 header() { sed -n -E "s/^(--|#) @$2( +(.*))?$/\3/p" "$1" | head -1; }
 has_header() { grep -q -E "^(--|#) @$2( |$)" "$1"; }
@@ -70,7 +63,7 @@ kill_pids() { local sig=$1; shift; [ $# -gt 0 ] && kill "-$sig" "$@" 2>/dev/null
 inotify_holders() { find /proc/[0-9]*/fd -lname 'anon_inode:inotify' 2>/dev/null | cut -d/ -f3; }
 
 # Copied trees keep absolute paths to their old install: tool shebangs and venvs, and
-# nvim-treesitter's query symlinks into lazy/. Any live nvim dir or old sandbox counts.
+# nvim-treesitter's query symlinks into its checkout. Any live nvim dir or old sandbox counts.
 FOREIGN_RE="$HOME/(\\.local/(share|state)/nvim|\\.config/nvim|\\.cache/nvim|\\.cache/nvim-sbx[^/]*)(/|\$)|/tmp/nvim-sbx"
 # the old data dirs that map onto $S/data/nvim/
 REPOINT_RE="$HOME/(\\.local/share/nvim|\\.cache/nvim-sbx[^/]*/data/nvim)/"

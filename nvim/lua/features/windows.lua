@@ -3,22 +3,15 @@
 local M = {}
 
 M.plugins = {
-  {
-    "christoomey/vim-tmux-navigator",
-    cmd = {
-      "TmuxNavigateLeft",
-      "TmuxNavigateDown",
-      "TmuxNavigateUp",
-      "TmuxNavigateRight",
-      "TmuxNavigatePrevious",
-      "TmuxNavigatorProcessList",
-    },
-  },
+  -- its commands, after the first screen; the keys below are ours
+  { src = "christoomey/vim-tmux-navigator" },
 }
 
 function M.setup()
   local group = vim.api.nvim_create_augroup("features.windows", { clear = true })
   vim.g.tmux_navigator_no_wrap = 1
+  -- The plugin's own maps would replace the ones below once it loads (plugin/tmux_navigator.vim:17-40)
+  vim.g.tmux_navigator_no_mappings = 1
 
   -- Reusable function to register keymaps in different contexts
   local function set_keymaps()

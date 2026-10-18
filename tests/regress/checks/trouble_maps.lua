@@ -34,8 +34,8 @@ end, 20000)
 check("precondition: lua_ls returns document symbols", has_symbols)
 check("precondition: main.lua has diagnostics", #wait_diagnostics(buf, nil, 15000) > 0)
 
--- lazy swaps its key stubs for the real rhs once the plugin loads
-require("lazy").load({ plugins = { "trouble.nvim" } })
+-- trouble loads in the deferred phase; this makes sure it has before its maps are read
+require("app.plugins").load("trouble.nvim")
 local ran = false
 vim.schedule(function() ran = true end)
 wait_until(function() return ran end, 1000)

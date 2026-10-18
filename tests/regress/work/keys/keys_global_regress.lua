@@ -1,7 +1,9 @@
--- @desc     with no git, no LSP and the cwd outside git, every lazy key declared without ft is a global map with its desc and callback, the global find/search maps run and open pickers, every globally mapped Snacks toggle flips and flips back, and the PR review commands exist once the plugin loads
+-- @desc     with no git, no LSP and the cwd outside git, the global find/search maps run and open pickers, and every globally mapped Snacks toggle flips and flips back
 -- @areas    keys which-key ui git
 -- @budget   20
--- Ported from nvim-sbx-keys/checks2/regress.lua. Guards the global keys while context-gated keys come and go.
+-- Ported from nvim-sbx-keys/checks2/regress.lua. Guards the global keys while context-gated keys come and go. Its
+-- lazy.nvim parts went with lazy.nvim (step 6b): plugin keys are key rows now (keys_map_desc), and app_on_demand
+-- covers the PR review commands.
 
 local cur, n, bad
 local function done()
@@ -38,31 +40,12 @@ local function close_floats()
   end
 end
 
-local Config = require("lazy.core.config")
-local Plugin = require("lazy.core.plugin")
-local Keys = require("lazy.core.handler.keys")
 local NOGIT = vim.fn.fnamemodify(vim.fn.tempname(), ":h") .. "/nogit"
 vim.fn.mkdir(NOGIT, "p")
 vim.fn.writefile({ "plain text" }, NOGIT .. "/plain.txt")
 vim.cmd.edit(NOGIT .. "/plain.txt")
 vim.cmd.cd(NOGIT)
 flush()
-
-section("lazy keys without ft are global")
-local declared = 0
-for name, plugin in pairs(Config.plugins) do
-  for _, parsed in pairs(Keys.resolve(Plugin.values(plugin, "keys", true))) do
-    if not parsed.ft then
-      declared = declared + 1
-      local m = global_map(parsed.mode == "v" and "x" or parsed.mode, parsed.lhs)
-      expect(m ~= nil and m.desc == parsed.desc, "%s %s %s (%s) is global with its desc", name, parsed.mode, parsed.lhs, parsed.desc or "")
-      if m and plugin._.loaded and type(parsed.rhs) == "function" then
-        expect(m.callback == parsed.rhs, "%s %s runs its declared function", name, parsed.lhs)
-      end
-    end
-  end
-end
-expect(declared > 0, "lazy declares global keys (%d)", declared)
 
 section("global find and search maps open pickers")
 local leader = vim.g.mapleader or "\\"
@@ -105,17 +88,5 @@ for id, toggle in pairs(Snacks.toggle.toggles) do
 end
 expect(toggled > 0, "global toggles exist (%d)", toggled)
 
-section("PR review commands exist after loading")
-local pr = Config.plugins["github-pr-reviewer.nvim"]
-if not pr then
-  info("github-pr-reviewer.nvim is not in the config; PR part skipped")
-else
-  require("lazy").load({ plugins = { pr.name } })
-  local cmds = pr.cmd or {}
-  cmds = type(cmds) == "string" and { cmds } or cmds
-  for _, cmd in ipairs(cmds) do
-    expect(vim.fn.exists(":" .. cmd) == 2, "command %s exists after loading", cmd)
-  end
-end
 vim.cmd.cd(FIX)
 done()

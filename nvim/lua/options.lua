@@ -52,8 +52,7 @@ vim.o.showcmdloc = "statusline" -- partial commands in the statusline; ui.messag
 
 -- Floats that set no border of their own (LSP hover and signature help, diagnostic floats, ui2's
 -- message window) get a rounded one. blink, gitsigns and snacks also fall back to it where this
--- config sets no border (blink's signature window). lazy.nvim's backdrop float would get
--- one too, but it only opens when Normal has a background, and onedark is transparent here.
+-- config sets no border (blink's signature window).
 vim.o.winborder = "rounded"
 
 -- 󰞷 Editing & Indentation

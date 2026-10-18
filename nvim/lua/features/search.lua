@@ -2,34 +2,53 @@
 local M = {}
 
 local spec = {
-  "folke/flash.nvim",
-  event = "VeryLazy",
-  opts = {
-    modes = {
-      search = { enabled = true, search = { multi_window = false } },
-      char = {
-        -- enables cycling between next and previous
-        -- if you want to override the default behaviour of f,F,t,T
-        -- then we add them to the keys below
-        -- I manually have custom keymaps below instead
-        keys = { ";", "," },
-        jump_labels = true,
+  src = "folke/flash.nvim",
+  setup = function()
+    require("flash").setup({
+      modes = {
+        search = { enabled = true, search = { multi_window = false } },
+        char = {
+          -- enables cycling between next and previous
+          -- if you want to override the default behaviour of f,F,t,T
+          -- then we add them to the keys below
+          -- I manually have custom keymaps below instead
+          keys = { ";", "," },
+          jump_labels = true,
+        },
       },
-    },
-  },
-  keys = {
-    {
-      "f",
-      mode = { "n", "x", "o" },
-      function() require("flash").jump() end,
-      desc = "Flash jump",
-    },
+    })
+  end,
+}
+M.plugins = { spec }
 
-    { "<c-s>", mode = { "c" }, function() require("flash").toggle() end, desc = "Toggle Flash Search" },
+-- Every plugin spec line in the config's modules (src = "owner/repo", lua/app/plugins.lua), as Snacks.picker.lazy()
+-- listed lazy.nvim's (snacks/picker/source/lazy.lua)
+local function plugin_specs()
+  local items = {} ---@type snacks.picker.finder.Item[]
+  local root = vim.fn.stdpath("config") .. "/lua"
+  for name, kind in vim.fs.dir(root, { depth = math.huge }) do
+    if kind == "file" and name:match("%.lua$") then
+      local file = root .. "/" .. name
+      for l, line in ipairs(vim.fn.readfile(file)) do
+        local from, to = line:find('src = "[^"]+"')
+        if from and not line:match("^%s*%-%-") then
+          items[#items + 1] = { file = file, line = line, text = line, pos = { l, from - 1 }, end_pos = { l, to } }
+        end
+      end
+    end
+  end
+  return items
+end
+
+function M.setup()
+  local function icon(glyph, color) return { icon = glyph, color = color } end
+  -- flash's keys; a press before flash loads loads it (lua/app/plugins.lua)
+  require("keys").feature("search")({
+    { "f", function() require("flash").jump() end, "Flash jump", mode = { "n", "x", "o" } },
+    { "<c-s>", function() require("flash").toggle() end, "Toggle Flash Search", mode = "c" },
     -- treesitter incremental selection
     {
       "<bs>",
-      mode = { "n", "x", "o" },
       function()
         require("flash").treesitter({
           actions = {
@@ -50,14 +69,10 @@ local spec = {
           },
         })
       end,
-      desc = "Treesitter selection",
+      "Treesitter selection",
+      mode = { "n", "x", "o" },
     },
-  },
-}
-M.plugins = { spec }
-
-function M.setup()
-  local function icon(glyph, color) return { icon = glyph, color = color } end
+  })
   require("keys").feature("search")({
     { "<leader>f", group = "Find", icon = icon("󰈞", "blue") },
     { "<leader>s", group = "Search", mode = { "n", "x" }, icon = icon("󰞷", "cyan") },
@@ -88,7 +103,12 @@ function M.setup()
     { "<leader>sl", function() Snacks.picker.loclist() end, "Location List", icon = icon("", "yellow") },
     { "<leader>sm", function() Snacks.picker.marks() end, "Marks", icon = icon("󰈿", "red") },
     { "<leader>sM", function() Snacks.picker.man() end, "Man Pages", icon = icon("󰮳", "grey") },
-    { "<leader>sp", function() Snacks.picker.lazy() end, "Plugins (Lazy)", icon = icon("󰏖", "purple") },
+    {
+      "<leader>sp",
+      function() Snacks.picker.pick({ source = "plugins", title = "Plugins", finder = plugin_specs }) end,
+      "Plugins",
+      icon = icon("󰏖", "purple"),
+    },
     { "<leader>sq", function() Snacks.picker.qflist() end, "Quickfix List", icon = icon("", "yellow") },
     { "<leader>sR", function() Snacks.picker.resume() end, "Resume", icon = icon("󰑖", "orange") },
     { "<leader>su", function() Snacks.picker.undo() end, "Undo History", icon = icon("󰕍", "yellow") },

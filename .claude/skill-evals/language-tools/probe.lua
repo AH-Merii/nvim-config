@@ -8,7 +8,6 @@
 --   fmtdef    <name> builtin=<yes|no> cmd=<cmd> dup=<built-in formatters running the same command>
 --   lspft     <server> <filetype,...>
 --   PROBE DONE
-require("lazy").load({ plugins = { "conform.nvim", "nvim-lint", "nvim-lspconfig" } })
 local lang, catalog = require("lang"), require("tools.catalog")
 local conform, lint = require("conform"), require("lint")
 local enabled = require("lsp").servers

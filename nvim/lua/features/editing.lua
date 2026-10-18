@@ -234,17 +234,17 @@ end
 
 local specs = {
   {
-    "windwp/nvim-autopairs",
-    event = "InsertEnter",
-    opts = {
-      check_ts = true,
-      fast_wrap = {},
-      disable_filetype = { "trouble", "oil" },
-    },
-    config = function(_, opts)
+    src = "windwp/nvim-autopairs",
+    -- after the first screen; its setup attaches to the current buffer, and to the others as they are entered
+    -- (nvim-autopairs.lua:57-64)
+    setup = function()
       local npairs = require("nvim-autopairs")
       local ts_conds = require("nvim-autopairs.ts-conds")
-      npairs.setup(opts)
+      npairs.setup({
+        check_ts = true,
+        fast_wrap = {},
+        disable_filetype = { "trouble", "oil" },
+      })
 
       --- Disable builtin nvim-autopairs rules for specific chars *only inside*
       --- certain Treesitter nodes for a given filetype or group of filetypes.
@@ -308,10 +308,12 @@ local specs = {
     end,
   },
 }
+-- todo-comments highlights the comments of the first file too; it needs plenary
+table.insert(specs, { src = "nvim-lua/plenary.nvim", phase = "startup" })
 table.insert(specs, {
-  "folke/todo-comments.nvim",
-  dependencies = { "nvim-lua/plenary.nvim" },
-  opts = {},
+  src = "folke/todo-comments.nvim",
+  phase = "startup",
+  setup = function() require("todo-comments").setup({}) end,
 })
 
 local M = { plugins = specs }

@@ -32,7 +32,9 @@ ln -s ~/Projects/nvim-config/nvim ~/.config/nvimn
 NVIM_APPNAME=nvimn nvim
 ```
 
-Plugins install on the first start. The leader key is `<space>`.
+The first start clones the plugins, at the revisions `nvim/nvim-pack-lock.json` pins, with Neovim's own plugin
+manager (vim.pack). A config that used lazy.nvim before leaves its plugins in `~/.local/share/<appname>/lazy`; nothing
+reads or deletes them now, so remove that directory when you no longer need it. The leader key is `<space>`.
 
 ## Commands
 
@@ -46,7 +48,8 @@ Plugins install on the first start. The leader key is `<space>`.
 
 ## Common tasks
 
-- **Update plugins:** `:Lazy update`.
+- **Update plugins:** `:packupdate`, then `:write` in the list of changes to apply them (`:quit` to cancel).
+  `:packupdate ++lockfile` puts every plugin back at the lockfile's revision.
 - **Install a missing tool:** open a file it works on and accept the offer, or `:Tools install`. Update tools with
   `mise upgrade`.
 - **Format and lint:** automatic, on save (conform.nvim) and on edits (nvim-lint).

@@ -2,11 +2,9 @@
 local M = {}
 
 M.plugins = {
-  {
-    "folke/lazydev.nvim",
-    ft = "lua",
-    opts = {},
-  },
+  -- after the first screen; it attaches to the Lua servers already running (lazydev/buf.lua:45-50), and blink's
+  -- lazydev source loads it earlier when it is required first (lua/app/plugins.lua)
+  { src = "folke/lazydev.nvim", setup = function() require("lazydev").setup({}) end },
 }
 
 function M.setup()
