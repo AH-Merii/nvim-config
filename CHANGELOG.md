@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/AH-Merii/nvim-config/compare/v0.9.0...v0.10.0) (2026-10-18)
+
+
+### Features
+
+* **app:** install and load plugins with vim.pack, not lazy.nvim ([#50](https://github.com/AH-Merii/nvim-config/issues/50)) ([a275fe7](https://github.com/AH-Merii/nvim-config/commit/a275fe780897047c450e134fde81f40019ae059b))
+
 ## [0.9.0](https://github.com/AH-Merii/nvim-config/compare/v0.8.0...v0.9.0) (2026-10-18)
 
 
