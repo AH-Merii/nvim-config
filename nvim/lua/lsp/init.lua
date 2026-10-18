@@ -67,6 +67,9 @@ local function sweep(pid)
   end
 end
 
+-- For the unit tests
+M._groups, M._sweep = groups, sweep
+
 local warned = false
 --- vim.lsp.rpc.start(...), and the pid of the process it spawned, which its client does not expose: the one vim.system
 --- call it makes is watched. Warns once when that stops holding, since the sweep then misses the server.
