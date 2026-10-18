@@ -1,4 +1,4 @@
--- Every LSP server, formatter and linter binary, keyed by the binary's name; replaces Mason's package tables.
+-- Every LSP server, formatter and linter binary, keyed by the binary's name: how to install it.
 -- Which filetypes use a tool, and a server's settings, are in the language files (lua/lang/).
 
 ---@class tools.Entry

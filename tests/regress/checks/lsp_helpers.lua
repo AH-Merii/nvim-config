@@ -1,4 +1,4 @@
--- @desc     the helpers.lua user commands run; :LspInfo names the client and log; :LspLog opens the log in a tab; no deprecated LSP calls
+-- @desc     the LSP status commands (features/lsp_status.lua) run; :LspInfo names the client and log; :LspLog opens the log in a tab; no deprecated LSP calls
 -- @areas    lsp
 -- @budget   30
 -- @needs    lua-language-server

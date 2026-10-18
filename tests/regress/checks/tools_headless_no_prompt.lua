@@ -82,7 +82,7 @@ if check(":Tools exists", vim.fn.exists(":Tools") == 2) then
   vim.notify = function(msg) table.insert(said, msg) end
   local function says_off() return vim.iter(said):any(function(m) return m:find("installs are off") ~= nil end) end
   pcall(vim.cmd, "Tools install")
-  -- Wait for that message, not the first one: noice warns here when it finds vim.notify replaced
+  -- Wait for that message itself, not for the first notification
   wait_until(says_off, 5000)
   vim.notify = notify
   check(":Tools install says installs are off", says_off(), vim.inspect(said))
