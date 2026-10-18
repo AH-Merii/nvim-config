@@ -253,10 +253,18 @@ local function install_text(inst, subject, names)
     return ("Install %sglobally with mise"):format(it)
   elseif inst.kind == "component" then
     return ("Install %swith rustup%s"):format(it, inst.toolchain and (" (toolchain %s)"):format(inst.toolchain) or "")
+  elseif inst.kind == "pinned" and inst.scope == "global" then
+    -- A channel pin (lts, latest, stable) names no version
+    if not inst.version:match("^%d") then
+      return ("Install the %s version your global %s pins"):format(inst.version, inst.config)
+    end
+    return ("Install %s, the version your global %s pins"):format(inst.version, inst.config)
   elseif inst.kind == "pinned" then
     return ("Install %s for this project with mise"):format(inst.version)
   elseif inst.kind == "project" then
     return ("Install %sfor this project with mise (trusts %s)"):format(it, inst.config or "mise.toml")
+  elseif inst.kind == "local" then
+    return ("Install %sfor this project only"):format(it)
   end
   return ""
 end
@@ -431,7 +439,7 @@ local function offer_key(install, root)
   elseif install.kind == "component" then
     return "component:" .. install.component
   elseif install.kind == "pinned" then
-    return "pinned:" .. install.spec
+    return (install.scope == "global" and "global-pin:" or "pinned:") .. install.spec
   end
   return "project:" .. root
 end
@@ -474,6 +482,8 @@ local function group_of(inst)
     return "rust"
   elseif inst.kind == "global" then
     return "global"
+  elseif inst.kind == "pinned" and inst.scope == "global" then
+    return "global-pin"
   end
   return inst.kind
 end
@@ -494,6 +504,11 @@ local function offer_group(ft, offers, root, done)
   if first.kind == "global" and first.runtime and not first.spec and not first.component then
     prompt = ("%s needs %s to run %s"):format(ft, first.runtime, join(names))
     table.insert(options, { items = items, text = install_text(first) })
+  elseif first.kind == "pinned" and first.scope == "global" then
+    -- No "latest" alternative: the global config's pin would still win over it
+    local pinned = vim.tbl_map(function(r) return ("%s %s"):format(r.name, r.install.version) end, results)
+    prompt = ("%s needs %s (pinned by your global %s)"):format(ft, join(pinned), first.config)
+    table.insert(options, { items = items, text = #results == 1 and install_text(first) or ("Install the versions your global %s pins"):format(first.config) })
   elseif first.kind == "pinned" then
     local pinned = vim.tbl_map(function(r) return ("%s %s"):format(r.name, r.install.version) end, results)
     prompt = ("%s needs %s (pinned by %s)"):format(ft, join(pinned), first.config)
@@ -513,6 +528,11 @@ local function offer_group(ft, offers, root, done)
       text = ("Install %s and %s globally with mise"):format(subject, join(runtimes))
     end
     table.insert(options, { items = items, text = text })
+  end
+  -- D100: in a project, the same tools for this project alone (mise.local.toml), which outranks a global pin too
+  if vim.iter(results):all(function(r) return r.install.project_only ~= nil end) then
+    local here = vim.tbl_map(function(r) return { name = r.name, install = r.install.project_only } end, results)
+    table.insert(options, { items = here, text = install_text(first.project_only, subject) })
   end
   table.insert(options, { text = not_now })
   local keys = vim.tbl_map(function(o) return o.key end, offers)
@@ -817,6 +837,9 @@ function M.actions(result, buf, servers, version)
     offer(inst, install_text(inst))
     if inst.kind == "pinned" and inst.global then
       offer(inst.global, "Install globally with mise (latest)")
+    end
+    if inst.project_only then
+      offer(inst.project_only, install_text(inst.project_only))
     end
   end
   for _, extra in ipairs(result.offers or {}) do

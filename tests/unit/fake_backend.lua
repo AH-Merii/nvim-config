@@ -1,13 +1,17 @@
 -- A fake tool backend (tools.Backend) for unit tests: mise's answers come from a table, and each tool it holds is a
 -- real executable in a throwaway install dir whose `--version` prints its version. It supports only what the unit
--- tests use: global tools, a project's pins, and global installs; the other installs raise.
+-- tests use: global tools, a project's pins, the global config's pins, global installs, installs of a pinned
+-- version and project-only installs (into the root's mise.local.toml); the other installs raise.
 --
 --   local backend = fake({
 --     global = { ruff = "0.17.0", node = "22.0.0" },            -- catalog binary (or runtime binary) -> version
 --     projects = { [root] = { ruff = "0.15.0", tsc = { version = "7.0.2", installed = false } } },
+--     global_pins = { shfmt = "3.10.0" },                       -- pinned by the global config.toml, not installed
 --   })
 --   tools.setup({ backend = backend })
 --   backend.calls                                               -- { { "use_global", { "ruff@latest" } }, ... }
+--   backend.untrusted[root] = "mise.toml"                       -- mise refuses calls in root over that config
+--   backend.during_use_local = function(root) ... end           -- runs inside a project-only install
 
 local catalog = require("tools.catalog")
 local h = require("helper")
@@ -15,12 +19,14 @@ local h = require("helper")
 ---@class fake.Pin
 ---@field version string
 ---@field installed? boolean default true
+---@field config? string the project config's file name, default "mise.toml"
 
----@param opts { global?: table<string, string>, projects?: table<string, table<string, string|fake.Pin>>, latest?: string }
+---@param opts { global?: table<string, string>, projects?: table<string, table<string, string|fake.Pin>>, global_pins?: table<string, string>, latest?: string }
 return function(opts)
   local dir = h.tmpdir()
   local global = vim.deepcopy(opts.global or {}) ---@type table<string, string>
-  local B = { calls = {} } ---@type tools.Backend|{ calls: { [1]: string, [2]: any }[] }
+  local global_pins = vim.deepcopy(opts.global_pins or {}) ---@type table<string, string>
+  local B = { calls = {}, untrusted = {} } ---@type tools.Backend|{ calls: { [1]: string, [2]: any }[], untrusted: table<string, string>, during_use_local?: fun(root: string) }
 
   ---@param bin string
   ---@param version string
@@ -71,25 +77,42 @@ return function(opts)
 
   function B.scan_project(root, cb)
     local scan = { configs = {}, pins = {}, dirs = {}, all = {} } ---@type tools.ProjectScan
+    if B.untrusted[root] then
+      scan.untrusted = root .. "/" .. B.untrusted[root]
+      scan.configs = { scan.untrusted }
+      return vim.schedule(function() cb(scan) end)
+    end
     local pins = (opts.projects or {})[root]
     if pins then
-      local config = root .. "/mise.toml"
-      local lines = { "[tools]" }
+      local files = {} ---@type table<string, string[]> config -> its lines
       for bin, pin in vim.spairs(pins) do
         pin = type(pin) == "string" and { version = pin } or pin
+        local config = root .. "/" .. (pin.config or "mise.toml")
         local installed = pin.installed ~= false
         local bindir = ("%s/installs/%s/%s/bin"):format(dir, bin, pin.version)
         scan.pins[tool_of(bin)] = { version = pin.version, installed = installed, source = config, dir = vim.fs.dirname(bindir) }
         if installed then
           table.insert(scan.dirs, install(bin, pin.version))
         end
-        table.insert(lines, ('"%s" = "%s"'):format(tool_of(bin), pin.version))
+        files[config] = files[config] or { "[tools]" }
+        table.insert(files[config], ('"%s" = "%s"'):format(tool_of(bin), pin.version))
       end
-      h.write(config, lines)
-      scan.configs = { config }
+      for config, lines in vim.spairs(files) do
+        h.write(config, lines)
+        table.insert(scan.configs, config)
+      end
       scan.all = vim.list_extend(vim.list_slice(scan.dirs), global_dirs())
     end
     vim.schedule(function() cb(scan) end)
+  end
+
+  --- The global config.toml's pins that are not installed yet (installing one puts it in global).
+  function B.global_pins(cb)
+    local pins = {}
+    for bin, version in pairs(global_pins) do
+      pins[tool_of(bin)] = { version = version, installed = global[bin] == version, source = dir .. "/config/config.toml" }
+    end
+    vim.schedule(function() cb(pins) end)
   end
 
   function B.env(_, dirs, cb)
@@ -119,7 +142,36 @@ return function(opts)
     vim.schedule(function() cb(true) end)
   end
 
-  for _, op in ipairs({ "install", "trust", "install_project" }) do
+  --- Installs each spec's binaries globally at its version, e.g. "shfmt@3.10.0".
+  function B.install(specs, cb)
+    table.insert(B.calls, { "install", specs })
+    for _, spec in ipairs(specs) do
+      local tool, version = spec:match("^(.*)@([^@]*)$")
+      for _, bin in ipairs(bins_of(tool)) do
+        global[bin] = version
+      end
+    end
+    vim.schedule(function() cb(true) end)
+  end
+
+  --- Pins each spec's binaries in the root's mise.local.toml, installed, at opts.latest (default "1.0.0") for "latest".
+  function B.use_local(root, specs, cb)
+    table.insert(B.calls, { "use_local", root, specs })
+    if B.during_use_local then
+      B.during_use_local(root)
+    end
+    opts.projects = opts.projects or {}
+    opts.projects[root] = opts.projects[root] or {}
+    for _, spec in ipairs(specs) do
+      local tool, version = spec:match("^(.*)@([^@]*)$")
+      for _, bin in ipairs(bins_of(tool)) do
+        opts.projects[root][bin] = { version = version == "latest" and (opts.latest or "1.0.0") or version, config = "mise.local.toml" }
+      end
+    end
+    vim.schedule(function() cb(true) end)
+  end
+
+  for _, op in ipairs({ "trust", "install_project" }) do
     B[op] = function() error("fake backend: " .. op .. " is not supported") end
   end
 

@@ -253,7 +253,7 @@ gui.sh down                        # release the lease (powers the VM off)
 ```
 
 The scenes: first start (plugin and parser install, no hit-enter prompt), the
-missing-tool prompt on `main.lua` (answered Install; `mise use -g` in the guest), which-key for `<leader>` with lua_ls attached,
+missing-tool prompt on `main.lua` (answered Install; `mise use --path` in the guest, D91), which-key for `<leader>` with lua_ls attached,
 the completion menu, pending keys (`"a2d`), and `:Gitsigns diffthis` with `]c`. In the guest, the
 config replaces `~/.config/nvim` (the home-manager one is kept as `nvim.hm`), the build is
 `~/nvr/builds/<ver>`, nvim listens on `/tmp/nvr.sock` and is driven with `--remote-send` and
