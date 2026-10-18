@@ -7,8 +7,11 @@
 set -u
 U=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd "$U/../.." && pwd)
-NIGHTLY=${NVR_NVIM:-$HOME/.local/share/mise/installs/neovim/nightly/bin/nvim}
-if [ -z "${NVIM:-}" ]; then [ -x "$NIGHTLY" ] && NVIM=$NIGHTLY || NVIM=nvim; fi
+if [ -z "${NVIM:-}" ]; then
+  NIGHTLY=${NVR_NVIM:-}
+  [ -n "$NIGHTLY" ] || NIGHTLY=$(. "$ROOT/tests/regress/lib.sh" && nvim_build nightly 2>/dev/null)/bin/nvim || NIGHTLY=
+  [ -x "$NIGHTLY" ] && NVIM=$NIGHTLY || NVIM=nvim
+fi
 # nothing reaches the user's clipboard: wl-copy/xclip need a display, the tmux provider the user's tmux
 unset WAYLAND_DISPLAY DISPLAY TMUX
 

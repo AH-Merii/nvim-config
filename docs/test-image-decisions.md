@@ -97,6 +97,14 @@ Why: Neovim keeps one nightly release, replaced every night, so a URL with a che
 commit is content-addressed and rebuilds the same way. The pin is the host's nightly of 2026-10-16
 (`v0.13.0-dev-1868+gbe5167e21c`).
 
+**The host's nightly (2026-10-18).** The user's mise nightly is now `github:neovim/neovim@nightly`, not the bare
+`neovim`, whose first registry backend is a vfox plugin (`mise registry neovim` prints `vfox:jdx/vfox-neovim
+aqua:neovim/neovim`). `nv.sh`, `gui.sh` and `tests/unit/run.sh` ask mise for its dir (`nvim_build` in
+`tests/regress/lib.sh`, `mise where`) instead of hard-coding `installs/neovim/nightly`, and `nv.sh` names the
+install command when it is missing. The lookup costs about 19 ms per `nv.sh` start (pooled medians 33.0 ms with
+`NVR_NVIM` set, 51.7 ms without; 5 interleaved rounds of 3 runs, all 5 agree): real, but one-off and unfelt (about
+2 s over a full suite's 89 checks), so it is not cached.
+
 To bump: set `NVIM_COMMIT` to a newer master commit, e.g. the one the latest nightly's `nvim --version` names,
 and rebuild; only the `nvim` stage and the layers after it rebuild.
 

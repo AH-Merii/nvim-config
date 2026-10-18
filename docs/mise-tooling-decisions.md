@@ -223,7 +223,7 @@ Details the build needs that the decisions above don't spell out.
 
 - **Test slot mechanics** (copy what `nvimt` does): a git worktree (e.g. `~/Projects/nvim-config-t2`), a
   symlink `~/.config/nvimt2 -> <worktree>/nvim`, and a launcher `~/.local/bin/nvimt2` running
-  `NVIM_APPNAME=nvimt2 exec ~/.local/share/mise/installs/neovim/nightly/bin/nvim "$@"`.
+  `NVIM_APPNAME=nvimt2 exec "$(mise where github:neovim/neovim@nightly)/bin/nvim" "$@"`.
   GitButler only manages the main checkout; worktrees use plain git.
 - **LSP wiring**:
   - Capture each server's merged config once, then override it with `vim.lsp.config(name, {...})`, which

@@ -6,13 +6,12 @@
 #        gui.sh start <ver> [file]     empty data, state and cache, ghostty + nvim in the VM; then keys/expr/shot/stop
 #        gui.sh keys <keys> | expr <expr> | shot <out.png> | stop
 #        gui.sh down                   release the lease (powers the VM off)
-# <ver>: a build in ~/.local/share/mise/installs/neovim/<ver>, e.g. nightly. `up` pushes nightly.
+# <ver>: a Neovim build in the user's mise, github:neovim/neovim@<ver>, e.g. nightly. `up` pushes nightly.
 S=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 export S
 # shellcheck source=lib.sh
 . "$S/lib.sh"
 VMS=$HOME/VMs VM=cachyos SNAP=after-pr140
-BUILDS=$HOME/.local/share/mise/installs/neovim
 usage() { sed -n '3,9p' "$0"; exit 2; }
 vssh() { ssh -F "$VMS/ssh_config" -o ConnectTimeout=20 "testing@$VM" "$@"; }
 # guest <script>: bash in the guest with the niri session's socket exported
@@ -29,7 +28,7 @@ ping() { "$VMS/lease.sh" ping >/dev/null 2>&1; }
 ver_of() {
   case "$1" in
     "") usage ;;
-    *) [ -x "$BUILDS/$1/bin/nvim" ] || { echo "no build $BUILDS/$1" >&2; exit 2; }; echo "$1" ;;
+    *) nvim_build "$1" >/dev/null || exit 2; echo "$1" ;;
   esac
 }
 # wait_for <secs> <expr>: poll the expression until it evaluates to 1
@@ -55,9 +54,9 @@ up() {
 }
 
 push() {
-  local e="ssh -F $VMS/ssh_config" v
+  local e="ssh -F $VMS/ssh_config" v b
   vssh mkdir -p nvr/builds nvr/src .local/bin
-  for v in nightly; do rsync -a --delete -e "$e" "$BUILDS/$v/" "testing@$VM:nvr/builds/$v/"; done
+  for v in nightly; do b=$(nvim_build "$v") || exit 2; rsync -a --delete -e "$e" "$b/" "testing@$VM:nvr/builds/$v/"; done
   rsync -a --delete -e "$e" "$CFG/" "testing@$VM:nvr/src/nvim/"
   rsync -a --delete -e "$e" "$S/fixtures/default/" "testing@$VM:nvr/src/fix/"
   # the config gets the tree-sitter CLI from mise, which the snapshot has not installed
