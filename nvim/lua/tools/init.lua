@@ -47,6 +47,7 @@ M.event = "ToolsChanged"
 ---@class tools.Project
 ---@field root string
 ---@field configs string[] project mise config files read in root, nearest first; empty when there is none or they pin no tools
+---@field files string[] every project mise config file read in root, pinning tools or not (the untrusted one when mise refuses)
 ---@field untrusted? string an untrusted config that makes mise refuse every call in root; resolution uses global only
 ---@field choice? tools.Choice the remembered answer; nil when not asked yet or the configs changed since
 ---@field pins table<string, { version: string, installed: boolean, source: string }> mise tool name -> project pin
@@ -138,9 +139,10 @@ local project_markers = {
 --- and / never are: a ~/.venv makes HOME a root, and a mise.local.toml there would apply to every dir below it.
 ---@param root string
 local function is_project(root)
-  -- Real paths: HOME may be a link to the dir the root names
-  local real = vim.uv.fs_realpath(root)
-  if real == "/" or real == vim.uv.fs_realpath(vim.uv.os_homedir() or "") then
+  -- Real paths: HOME may be a link to the dir the root names. HOME or a dir above it would put the file over every
+  -- project below; an empty or unresolvable HOME can't be told apart from any root
+  local real, home = vim.uv.fs_realpath(root), vim.uv.fs_realpath(vim.uv.os_homedir() or "")
+  if not real or not home or real == "/" or real == home or vim.startswith(home, real .. "/") then
     return false
   end
   for _, marker in ipairs(vim.iter(project_markers):flatten():totable()) do
@@ -184,7 +186,8 @@ local function scan(root, cb)
       -- unless it is untrusted: then mise refuses every call in root until it is trusted
       local configs = (s.untrusted or next(s.pins)) and s.configs or {}
       local choice = #configs > 0 and state.get(configs) or nil
-      local project = { root = root, configs = configs, untrusted = s.untrusted, choice = choice, pins = {}, missing = {}, dirs = s.dirs, all = s.all }
+      local project =
+        { root = root, configs = configs, files = s.configs, untrusted = s.untrusted, choice = choice, pins = {}, missing = {}, dirs = s.dirs, all = s.all }
       for tool, pin in pairs(s.pins) do
         project.pins[tool] = { version = pin.version, installed = pin.installed, source = pin.source }
         if not pin.installed then
@@ -421,8 +424,8 @@ local function compute(name, root, done)
                 and not project.untrusted
                 and (#project.configs == 0 or project.active)
                 and is_project(root)
-                -- `mise config set` reads a dot as a key separator (tools.mise.use_local)
-                and not entry.spec:find(".", 1, true)
+                -- `mise config set` can't write a key with a dot or a bracket (tools.mise.use_local)
+                and not entry.spec:find("[.%[]")
                 and { kind = "local", spec = entry.spec .. "@latest" }
               or nil
             local global = entry.spec and { kind = "global", spec = entry.spec .. "@latest", runtime = runtime, project_only = project_only } or nil
@@ -907,10 +910,12 @@ local function ignore_local(root, cb)
           if out.code ~= 0 then
             return cb(nil)
           end
-          -- core.worktree can put the work tree outside the checkout that holds root
+          -- core.worktree can put the work tree outside the checkout that holds root, and a dotfiles repo checked out
+          -- in HOME holds every project below it that has no repo of its own
           local top = vim.fs.normalize(vim.trim(out.stdout))
           local real = vim.uv.fs_realpath(root) or root
-          if not ((real == top or vim.startswith(real, top .. "/")) and vim.uv.fs_stat(top .. "/.git")) then
+          local in_top = (real == top or vim.startswith(real, top .. "/")) and vim.uv.fs_stat(top .. "/.git")
+          if not in_top or vim.uv.fs_realpath(top) == vim.uv.fs_realpath(vim.uv.os_homedir() or "") then
             local text = ("Not adding %s to .gitignore: git's top level %s is not this project's checkout"):format(name, vim.fn.fnamemodify(top, ":~"))
             return cb({ text, vim.log.levels.WARN })
           end
@@ -922,9 +927,10 @@ local function ignore_local(root, cb)
 end
 
 --- Tools for root's project only (D100): installed, then added to root's mise.local.toml (tools.mise.use_local, which
---- trusts nothing), then refresh. The answer to the project prompt carries over to the project's configs with the new
---- file ("installed" when there was none), so the tools are used at once; in a git repo the file goes into the repo's
---- .gitignore (ignore_local), with a toast.
+--- trusts nothing), then refresh. The answer to the project prompt carries over so the tools are used at once ("installed"
+--- when there was no config), but only when the configs are the ones a fresh scan saw before the install, unchanged, plus
+--- mise.local.toml: one a terminal `git pull` added or changed meanwhile is asked about. In a git repo the file goes into
+--- the repo's .gitignore (ignore_local), with a toast.
 ---@param specs string[]
 ---@param root string
 ---@param cb? fun(ok: boolean, err?: string)
@@ -935,6 +941,13 @@ function M.install_local(specs, root, cb)
   if missing then
     return report(false, missing)
   end
+  ---@param files string[]
+  local function key(files)
+    local real = vim.tbl_map(function(path) return vim.uv.fs_realpath(path) or path end, files)
+    table.sort(real)
+    return table.concat(vim.fn.uniq(real), "\0")
+  end
+  projects[root] = nil
   scan(root, function(before)
     install_run(function(done) backend.use_local(root, specs, done) end, function(ok, err)
       if not ok then
@@ -942,8 +955,15 @@ function M.install_local(specs, root, cb)
       end
       projects[root] = nil
       scan(root, function(project)
-        if #project.configs > 0 then
-          state.set(project.configs, before.active and before.choice or "installed")
+        local same = not before.untrusted
+          and not project.untrusted
+          and key(project.files) == key(vim.list_extend({ vim.fs.joinpath(root, "mise.local.toml") }, before.files))
+        if same and #project.configs > 0 then
+          if #before.configs == 0 then
+            state.set(project.configs, "installed")
+          elseif before.active and state.get(before.configs) == before.choice then
+            state.set(project.configs, before.choice)
+          end
         end
         ignore_local(root, function(note)
           if note then

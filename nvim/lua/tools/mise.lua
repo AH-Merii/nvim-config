@@ -218,7 +218,9 @@ end
 --- tools.<tool> <version>` for each, creating the file when there is none (config set edits existing files only).
 --- Every call runs from /, and neither writer trusts anything: `mise use --path` would trust the whole root, and with
 --- MISE_YES in the root's dir mise trusts and reads (exec templates included) a mise.toml a `git pull` just brought.
---- A tool-only file needs no trust. A mise name with a dot can't be written ("tools.a.b" is a nested key).
+--- A tool-only file needs no trust. A mise name with a dot or a bracket can't be written. A mise.local.toml that is a
+--- link is refused (a repo could point it outside), and a file created here is removed when mise refuses to write it
+--- (paranoid mode refuses untrusted files), so no empty config is left behind.
 ---@param root string
 ---@param specs string[]
 ---@param cb fun(ok: boolean, err?: string)
@@ -227,6 +229,10 @@ function M.use_local(root, specs, cb)
   proc.install({ M.bin(), "install", unpack(specs) }, { cwd = "/", env = { MISE_YES = "1" } }, function(ok, err)
     if not ok then
       return cb(false, err)
+    end
+    local stat = vim.uv.fs_lstat(file)
+    if stat and stat.type == "link" then
+      return cb(false, ("not writing %s: it is a link to %s"):format(file, vim.uv.fs_readlink(file)))
     end
     local handle, open_err = io.open(file, "a")
     if not handle then
@@ -241,6 +247,9 @@ function M.use_local(root, specs, cb)
       local tool, version = spec:match("^(.*)@([^@]*)$")
       proc.install({ M.bin(), "config", "set", "--file", file, "tools." .. tool, version }, { cwd = "/" }, function(set_ok, set_err)
         if not set_ok then
+          if not stat then
+            os.remove(file)
+          end
           return cb(false, set_err)
         end
         set(i + 1)
