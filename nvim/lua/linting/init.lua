@@ -151,7 +151,8 @@ function M.buffer(buf, names)
   end
 end
 
---- Sets nvim-lint up with the resolved binaries; lints a buffer on entering it, writing it and leaving insert mode;
+--- Sets nvim-lint up with the resolved binaries; lints a buffer on writing or reloading it, and on entering it or leaving
+--- insert mode when something changed since its last lint;
 --- drops a linter's findings when its server attaches; and lints the loaded buffers of a root again when ToolsChanged
 --- says one of their linters was found, installed or went missing. Run from nvim-lint's plugin spec.
 function M.setup()
@@ -172,7 +173,35 @@ function M.setup()
     end,
   })
 
-  vim.api.nvim_create_autocmd({ "BufEnter", "BufWritePost", "InsertLeave" }, { group = group, callback = function(ev) M.buffer(ev.buf) end })
+  -- Entering a buffer or leaving insert mode lints only when the buffer changed or files may have, since its last lint
+  -- here: a linter that reads a whole package or module (golangci-lint, tflint) can find new things in an unchanged
+  -- buffer when another file changes. Files may have changed on a write, a reload, a shell command (:!git checkout) or
+  -- coming back to Neovim from elsewhere (FocusGained). A write or a reload always lints. A buffer's state goes with
+  -- it, and when what runs on it changes (its filetype, a covering server leaving), so its next entry lints
+  local writes, linted = 0, {} ---@type integer, table<integer, { tick: integer, writes: integer }>
+  local function lint_now(buf)
+    linted[buf] = { tick = vim.api.nvim_buf_get_changedtick(buf), writes = writes }
+    M.buffer(buf)
+  end
+  -- :checktime and autoread reload with FileChangedShellPost, not BufEnter
+  vim.api.nvim_create_autocmd({ "BufWritePost", "FileChangedShellPost" }, {
+    group = group,
+    callback = function(ev)
+      writes = writes + 1
+      lint_now(ev.buf)
+    end,
+  })
+  vim.api.nvim_create_autocmd({ "FocusGained", "ShellCmdPost" }, { group = group, callback = function() writes = writes + 1 end })
+  vim.api.nvim_create_autocmd({ "BufEnter", "InsertLeave" }, {
+    group = group,
+    callback = function(ev)
+      local last = linted[ev.buf]
+      if not last or last.writes ~= writes or last.tick ~= vim.api.nvim_buf_get_changedtick(ev.buf) then
+        lint_now(ev.buf)
+      end
+    end,
+  })
+  vim.api.nvim_create_autocmd({ "BufWipeout", "FileType", "LspDetach" }, { group = group, callback = function(ev) linted[ev.buf] = nil end })
 
   vim.api.nvim_create_autocmd("User", {
     group = group,

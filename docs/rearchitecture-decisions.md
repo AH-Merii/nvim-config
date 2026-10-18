@@ -31,6 +31,7 @@ The full proposal, with its measurements and sources, was written outside the re
 - Built: step 6b, vim.pack replaces lazy.nvim (D45; "Step 6b: vim.pack" below).
 - Built: D73, `docs/languages.md` generated from `lang/` by `mise run docs` ("D73: the per-language tool tables are
   generated" below).
+- Decided and built (2026-10-18): D72, linting skips a BufEnter that can't find anything new (below).
 
 ## Target layout
 
@@ -573,7 +574,7 @@ Interfaces:
   the answers today's gates give (`checks/keys_format_gate.lua`, `checks/keys_diag_gate.lua` pass unchanged), and
   `core/lsp.lua`'s rows now call them.
 - `linting.buffer(buf?, names?)` lints with the resolved binaries; the module lints on BufEnter, BufWritePost and
-  InsertLeave as before (the BufEnter question stays open, Part 9), drops a covered linter's findings when its server
+  InsertLeave as before (the BufEnter question stays open, Part 9; D72 below answers it), drops a covered linter's findings when its server
   attaches, and lints a root's buffers again on ToolsChanged with the linters that changed.
 
 **Decisions.**
@@ -1464,3 +1465,52 @@ tool catalog, and replaces both tables:
 - The generator in `nvim/lua/`: `lang/init.lua` loads every file in `lang/` as a language (`nvim/lua/lang/init.lua:402`),
   and nothing at run time needs it. It sits beside the file it writes instead.
 - Show the tables only in Neovim (`:Tools`): they are read on GitHub and by agents that don't start the editor.
+
+## D72: linting skips a BufEnter that can't find anything new (2026-10-18)
+
+**Context.** `linting/` linted on every BufEnter, BufWritePost and InsertLeave (`linting/init.lua:175` on ee67afa),
+so switching buffers started every linter again with nothing changed: slow ones (golangci-lint, tflint) cost CPU, and
+their diagnostics could flicker. The proposal left this open (Part 9; Step 2 above). A reload from disk fires
+BufReadPre, BufRead, BufReadPost, FileType and FileChangedShellPost, and no BufEnter, while `b:changedtick` goes up
+(a `:checktime` probe on nightly 0.13.0-dev-1868 with `--clean`,
+`~/.cache/nvim-config/lint-skip/probe/reload-events.lua`), so main did not lint a reloaded buffer until its next
+BufEnter (`checks/lint_bufenter_skip.lua`'s reload case fails on main).
+
+**Decision.** The user approved the first point up front, and the reload, FileType and LspDetach points after seeing
+them (D74); FocusGained and ShellCmdPost close the gap a `git checkout` left (D75):
+
+- BufEnter lints only when the buffer's `b:changedtick` moved, or any buffer was written, since its last lint. A
+  linter that reads a whole package or module (golangci-lint, tflint) can find new things in `b.go` when `a.go` is
+  written. A first entry always lints, and BufWritePost always lints (`linting/init.lua:187-204`).
+- InsertLeave gets the same skip. Leaving insert mode without typing changes neither the buffer nor any file, so a
+  lint then sees what the last one saw; after typing, the changedtick moved and it lints.
+- A reload from disk (`:checktime`, autoread) lints on FileChangedShellPost, and counts as a write for the other
+  buffers: a file changed on disk, as with a write.
+- Coming back to Neovim (FocusGained, "Nvim got focus", `:h FocusGained`) and a shell command (ShellCmdPost, "After
+  executing a shell command with :!cmd, :make and :grep. Can be used to check for any changed files", `:h
+  ShellCmdPost`) count as writes too (`linting/init.lua:194`): a checkout or a generator most likely ran there or
+  then. Neither lints by itself; the next entry does.
+- A buffer's state is dropped on BufWipeout, and when what runs on it changes, so its next entry lints: FileType (other
+  linters) and LspDetach (a covered linter runs again).
+
+`checks/lint_bufenter_skip.lua` observes runs of a probe linter: an unchanged buffer entered again does not lint;
+an edit, another buffer's write or reload, regained focus, a shell command, a filetype change or its covering server
+leaving makes the next entry lint; a write and a reload always lint; InsertLeave lints only after typing. Nine
+sibling wrong versions, each one bug off this code, each fail it: no skip, a skip ignoring writes, one ignoring the
+changedtick, reloads not linted, InsertLeave always linting, state kept over LspDetach, state kept over FileType,
+FocusGained not counted, ShellCmdPost not counted
+(`~/.cache/nvim-config/lint-skip/wrong/run.sh`, results in `result.txt` there). `lint_compound_ft.lua` did not catch
+the FileType one: its enter lint comes from the ToolsChanged relint once `sh` resolves, so the new check resolves `sh`
+first.
+
+**Cost.** Per event (D61 class, ~100 ms budget), one per BufEnter or InsertLeave: a table lookup and
+`nvim_buf_get_changedtick`, against a linter spawn it saves. Not benchmarked.
+
+**Known limit.** A file that no buffer shows, changed while Neovim keeps focus and runs no shell command (a
+background job, `vim.system`, a terminal buffer), counts as no write, so a package-wide linter's findings for an open,
+unchanged buffer wait for its next change, a write, a reload, a shell command or regained focus; before, the next
+BufEnter caught them.
+
+**Rejected.** Linting on every BufEnter (before). A skip on the changedtick alone: it misses package-wide findings
+after another file's write. Linting only on read, write and InsertLeave (the proposal's option): entering a buffer
+after another file's write would show stale package findings.
