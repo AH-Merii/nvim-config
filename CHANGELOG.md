@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/AH-Merii/nvim-config/compare/v0.13.0...v0.14.0) (2026-10-18)
+
+
+### Bug Fixes
+
+* **linting:** no linter run outlives Neovim ([#61](https://github.com/AH-Merii/nvim-config/issues/61)) ([4024169](https://github.com/AH-Merii/nvim-config/commit/40241693b4d9552cb9b0a6ab2d40d115f48d6c5c))
+
 ## [0.13.0](https://github.com/AH-Merii/nvim-config/compare/v0.12.0...v0.13.0) (2026-10-18)
 
 
