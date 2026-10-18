@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/AH-Merii/nvim-config/compare/v0.14.0...v0.15.0) (2026-10-18)
+
+
+### Features
+
+* **tools:** installs never write your global mise config, and can target one project ([#66](https://github.com/AH-Merii/nvim-config/issues/66)) ([c3f5887](https://github.com/AH-Merii/nvim-config/commit/c3f5887b708dfd463acb30ec479fb4ad882b721f))
+
 ## [0.14.0](https://github.com/AH-Merii/nvim-config/compare/v0.13.0...v0.14.0) (2026-10-18)
 
 
