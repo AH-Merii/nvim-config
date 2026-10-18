@@ -1586,6 +1586,12 @@ The suite now prints each leaked process's pid, parent pid, age and command line
 them as `LEAK` lines in `last/`, which CI uploads, so a leak names its process without a rerun; `selftest/leak.lua`
 checks it.
 
+**Upstream.** Neovim already kills a job's process tree in `jobstop()` (`os_proc_tree_kill`), but `vim.system`, which
+`vim.lsp.rpc.start` uses, doesn't. justinmk wants `vim.system` to join the job layer, not the LSP code to kill groups by
+hand ([neovim/neovim#42440 comment](https://github.com/neovim/neovim/issues/42440#issuecomment-6250843286),
+neovim/neovim#39552). Once `vim.system` processes stop through `jobstop()`, the `vim.system` wrap and the server
+groups go (#64).
+
 ## D78: messages and the command line come from neoblocks' messages module (2026-10-18)
 
 **Context.** `nvim/lua/ui/messages/` gave ui2 noice's look: `:` in a popup, messages as snacks.notifier toasts, long
@@ -1796,3 +1802,9 @@ quit now passes: the leader's exit then kills its group. It is no longer a wrong
 `tests/unit/linting_test.lua` checks that a raising nvim-lint call leaves `vim.uv.spawn` as it was; a version without
 the `pcall` fails it (`variants/result-unit.txt`). `lsp_exit_children` and `tests/unit/lsp_test.lua` pass unchanged
 after the move to `tools.proc`.
+
+**Upstream.** nvim-lint starts linters with `vim.uv.spawn` (nvim-lint `lua/lint.lua:9,413`), so neovim/neovim#39552 alone
+doesn't cover them: the `vim.uv.spawn` watch can go once nvim-lint stops its runs through Neovim's job layer too (#64).
+
+**Evidence.** The `~/.cache/nvim-config/lint-quit/` and `lint-quit-review/` files cited in this section were deleted
+on 2026-10-18 after #61 merged. The results quoted here are what remains of them.
