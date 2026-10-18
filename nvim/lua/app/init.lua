@@ -42,12 +42,6 @@ M.phases = {
     -- plugins: conform (BufWritePre) and nvim-lint (BufReadPre) look tools up through it
     name = "tools",
     run = function()
-      -- .env files are dotenv, which no language file declares; the runtime would name them env
-      vim.filetype.add({
-        extension = { env = "dotenv" },
-        filename = { [".env"] = "dotenv", ["env"] = "dotenv" },
-        pattern = { ["%.env%.[%w_.-]+"] = "dotenv" },
-      })
       require("lang").setup()
       require("tools").setup()
       -- prompts need a UI and vim.g.install_tools ~= "off"
