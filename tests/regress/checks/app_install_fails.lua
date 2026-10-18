@@ -1,4 +1,4 @@
--- @desc     a plugin that fails to install (gitsigns, from an unreachable source) stops nothing else: every later phase runs, the other plugins load, the servers are enabled, the failure is reported, and the committed lockfile keeps its pin
+-- @desc     a plugin that fails to install (gitsigns, from an unreachable source) or a phase that raises (options) stops nothing else: every phase runs, the other plugins load, the servers are enabled, both failures are reported, and the committed lockfile keeps the plugin's pin
 -- @areas    startup installer lsp
 -- @budget   60
 -- A child nvim on its own home and data dir: the suite's plugins and parsers less gitsigns.nvim, and a config whose
@@ -30,6 +30,8 @@ local src = table.concat(vim.fn.readfile(spec_file), "\n")
 local moved, n = src:gsub('"lewis6991/gitsigns%.nvim"', ('"%s"'):format(nowhere))
 if not check("precondition: the gitsigns spec's source was replaced", n == 1) then return end
 vim.fn.writefile(vim.split(moved, "\n"), spec_file)
+-- and the options phase raises, after setting every option (lua/options.lua is the phase's first step)
+vim.fn.writefile({ 'error("nvr: injected options failure")' }, cfg .. "/lua/options.lua", "a")
 
 local out, probe = root .. "/out.json", root .. "/probe.lua"
 vim.fn.writefile({
@@ -65,6 +67,8 @@ local failed = vim.iter(got.plugins):find(function(p) return p.name == NAME end)
 check(NAME .. " is reported not loaded", failed ~= nil and failed.loaded == false, vim.inspect(failed))
 check("the servers are enabled", got.servers > 0, got.servers .. " enabled")
 check("the failure is reported, naming the plugin", got.messages:find(NAME, 1, true) ~= nil, got.messages)
+check("the options phase's error is reported", got.messages:find("options phase failed", 1, true) ~= nil
+  and got.messages:find("nvr: injected options failure", 1, true) ~= nil, got.messages)
 local after = vim.json.decode(table.concat(vim.fn.readfile(lockfile), "\n"))
 check("the lockfile keeps " .. NAME .. "'s pin", (after.plugins[NAME] or {}).rev == pin, vim.inspect(after.plugins[NAME]))
 vim.fn.delete(root, "rf")

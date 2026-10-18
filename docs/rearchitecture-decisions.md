@@ -1364,7 +1364,9 @@ listed under Decisions; nothing else.
   - `load()` skips a plugin that is not on disk, so `list()` reports it not loaded and its setup never runs;
   - vim.pack drops the failed plugin from the lockfile and writes it before raising (`pack.lua:899-902`,
     `:1211-1213`), so each pin the file had before is put back, and the next start installs the plugin at its
-    revision;
+    revision. vim.pack keeps the lockfile in memory (`pack.lua:1125-1127`) and its next write in the same session,
+    such as `:packupdate`, drops the restored pins again; it has no way to reload it, so the notification says to
+    restart Neovim before `:packupdate` (found in re-review);
   - `app.start()` runs each phase in `xpcall`: a phase that raises is reported, and the later phases still run.
   This is what users hit when a clone fails on the first start after this change, or on a new machine offline.
 - *Plugin hooks report their errors* as `<name>: setup failed:` (also `init`, `build`), through `vim.notify`, and the
@@ -1381,15 +1383,19 @@ listed under Decisions; nothing else.
   `:2,3PRSuggestChange` loads it and runs its own command with the range 2,3. In a headless nvim that never gets
   VeryLazy, `:Trouble qflist open` opens the quickfix list in trouble: the stub passed the arguments on.
 - `app_require_loads.lua`: before VeryLazy, each of the four cross-plugin requires loads its plugin and returns the
-  module asked for, with the member its caller uses (`new` for lazydev's blink source, `actions` for trouble's snacks
-  source).
+  module asked for, with the member its caller uses and its type (`new` for lazydev's blink source, the `actions`
+  table for trouble's snacks source; trouble's top module answers any key with a function, `trouble/api.lua:196-202`).
 - `app_install_fails.lua`: on a data dir without gitsigns and with gitsigns' source unreachable (the lockfile's and the
   spec's), every phase runs, every other plugin loads, the servers are enabled, the failure is reported naming the
-  plugin, and the lockfile keeps gitsigns' pin. Against the code before the fix it failed: phases
-  `options,registries,tools`, 0 servers, the pin gone.
+  plugin, and the lockfile keeps gitsigns' pin. Its config copy also makes the options phase raise, and that error is
+  reported while every later phase still runs. Against the code before the fix it failed: phases
+  `options,registries,tools`, 0 servers, the pin gone. It can't tell restoring only the dropped pins from writing the
+  whole old file back: that would also drop a plugin first installed in the same failed start, a case the check doesn't
+  build (it needs a second source).
 - Sibling wrong versions of `app/`, each with one bug, fail their check: the stub command dropping the arguments or
   the range, no stubs, on-demand plugins loaded at VeryLazy, no loader, a loader returning the top module, the buffer
-  phase run twice, `vim.pack.add` uncaught, no pin restore, `load()` without the disk check
+  phase run twice, `vim.pack.add` uncaught, no pin restore, `load()` without the disk check, phases run without
+  `xpcall`
   (`~/.cache/nvim-config/rearch/vimpack6b/wrong/run.sh`, results in `result.txt` there).
 - `startup.lua` checks every plugin the config names is installed and `:checkhealth vim.pack` has no ERROR or
   WARNING; `trouble_maps.lua` loads trouble through `app.plugins.load()`. Neither changed what it asserts beyond the

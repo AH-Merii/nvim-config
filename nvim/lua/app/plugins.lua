@@ -224,7 +224,11 @@ function M.setup(plugins)
   end
   local ok, err = pcall(vim.pack.add, specs, { load = function() end, confirm = false })
   if not ok then
-    vim.notify(("vim.pack could not install every plugin; the others load:\n%s"):format(err), vim.log.levels.ERROR, {
+    -- vim.pack keeps the lockfile in memory (runtime/lua/vim/pack.lua:1125-1127): its next write this session, an
+    -- update, drops the restored pins again
+    local msg = "vim.pack could not install every plugin; the others load. Restart Neovim before :packupdate, which"
+      .. " would drop the failed plugins from the lockfile:\n%s"
+    vim.notify(msg:format(err), vim.log.levels.ERROR, {
       title = "app.plugins",
     })
     restore_pins(lockfile, pinned)
