@@ -290,6 +290,9 @@ mechanism:
   `keys_git_unstage`, `keys_source_file`, `keys_gr_typed.sh`. Left in `work/keys`: `keys_textobjects` and
   `keys_diff_jump`, rewritten too, which repeat `tobj_moves` (diff-mode `]c`, `]f` per language and in
   fences), `tobj_labels` and `tobj_select`.
+  - Later (2026-10-18, before 1.0.0), `work/` was emptied: `keys_textobjects` moved to `checks/`, since of the checks
+    in its areas only it fails when the `<leader>TT` toggle loses its treesitter need; `keys_diff_jump` was dropped
+    (`tobj_moves.lua:194-198`, `:138-139`).
 
 **Deviation.** `keys_lsp_gate` lost its "modifier-key lhs" case: it pushed a row into `core.lsp.keys` to test
 how the sync matches `<C-x>` maps, which step 3 deletes along with the sync.
@@ -1624,7 +1627,7 @@ neoblocks is set up, and neoblocks loaded at `deferred` (step 6b), after the fir
 - `tests/regress/checks/showcmd_pending.lua` is gone: neoblocks' `tests/messages_spec.lua` ("pending() leaves out a
   lone key whose command runs at once...", :677) has its 25 cases, fed through ui2's `msg_showcmd` with a UI attached,
   plus one for the 10-character cut. `checks/pending_keys.sh` still checks the keys in the config's statusline in a
-  TUI. `work/ui2-noice/ui2_noice.sh` probes `neoblocks.messages.cmdline`.
+  TUI. `work/ui2-noice/ui2_noice.sh` (now `checks/ui2_noice.sh`) probes `neoblocks.messages.cmdline`.
 
 **Where it differs from the old code, on purpose.**
 

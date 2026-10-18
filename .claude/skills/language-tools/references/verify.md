@@ -13,7 +13,7 @@ R=<repo root>; SK=$R/.claude/skills/language-tools/scripts
 - It refuses a relative dir, and any dir inside the user's own mise dirs.
 - It unsets the shell's `MISE_*` and `__MISE_*` variables, and points `MISE_DATA_DIR`, `MISE_CACHE_DIR`, `MISE_STATE_DIR`, `MISE_CONFIG_DIR`, `MISE_GLOBAL_CONFIG_FILE` and `TMPDIR` into `<dir>`.
 - It sets `MISE_CEILING_PATHS=$HOME`; without that, mise reads `~/.config/mise/config.toml` as a project config.
-- It removes the user's mise installs, mise shims and the old Mason bin from PATH. A bare `command -v stylua` in a normal shell finds a stale Mason copy, so don't trust PATH lookups outside the script.
+- It removes the user's mise installs, mise shims and any Mason bin dir from PATH. A bare `command -v stylua` in a normal shell finds the user's own mise copy, so don't trust PATH lookups outside the script.
 - It exports `NVIM_BIN`, the nightly nvim, by absolute path, and runs the command with `<dir>` as the cwd, so pass absolute paths.
 
 Make one dir on disk (`/tmp` is RAM-backed here) and reuse it for the whole task:

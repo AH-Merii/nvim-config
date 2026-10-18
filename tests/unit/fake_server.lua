@@ -1,5 +1,5 @@
 -- An in-process language server for unit tests, started through the real vim.lsp with cmd as a Lua function
--- (:h vim.lsp.ClientConfig), as tests/regress/work/keys/keys_lsp_gate.lua does. The test controls its capabilities,
+-- (:h vim.lsp.ClientConfig), as tests/regress/checks/keys_lsp_gate.lua does. The test controls its capabilities,
 -- registers capabilities later (client/registerCapability) and reads the requests it received.
 --
 --   local srv = require("fake_server").start({ buf = buf, methods = { "textDocument/hover" } })

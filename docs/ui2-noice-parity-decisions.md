@@ -14,8 +14,8 @@ was made.
   `history()` is `history.lua`).
 - Decided: every behaviour below (2026-10-12).
 - Built (2026-10-12) in `nvim/lua/config/ui2/` (now `nvim/lua/ui/messages/`). Full suite 40/40 PASS on nightly.
-  The new tmux check `tests/regress/work/ui2-noice/ui2_noice.sh` passes, and fails when the hooks are off. One
-  niri-screen-lab pass covered all six behaviours.
+  The new tmux check `tests/regress/work/ui2-noice/ui2_noice.sh` (now `checks/ui2_noice.sh`) passes, and fails
+  when the hooks are off. One niri-screen-lab pass covered all six behaviours.
 - Follow-ups (2026-10-12): routine errors time out; the split measures a typed command's output as a whole and
   other messages one at a time. The tmux check covers both.
 

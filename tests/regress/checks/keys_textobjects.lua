@@ -1,7 +1,7 @@
 -- @desc     pressed in each fixture buffer, ]f reaches the file's first function where a language in the buffer has textobjects and is the built-in where none has, a ]/[ key's which-key label differs from its built-in label exactly where the key acts unlike the built-in, a filetype change re-derives both, a markdown code block brings its language's selects and moves until it goes, and the treesitter toggle is listed and flips highlighting iff a parser is active
 -- @areas    keys treesitter which-key
 -- @budget   40
--- Replaces work/keys/keys_textobjects.lua: judged by pressing the keys, not by which maps exist.
+-- Judged by pressing the keys and reading the popup, not by which maps exist.
 
 local cur, n, bad
 local function done()
@@ -32,7 +32,7 @@ local loaded = wait_until(function()
   local c = package.loaded["which-key.config"]
   return c ~= nil and rawget(c, "loaded") == true
 end, 5000)
-if not check("which-key loaded its spec", loaded, "which-key.config never reached loaded") then return end
+if not check("which-key loaded its spec", loaded, not loaded and "which-key.config never reached loaded" or nil) then return end
 local Buf, Util = require("which-key.buf"), require("which-key.util")
 local MOVES = { "]f", "[f", "]F", "[F", "]c", "[c", "]p", "[p", "]b", "[b", "]B", "[B", "]i", "[i", "]l", "[l", "]a", "[a", "]r", "[r" }
 -- the treesitter highlight toggle, from the config's key list

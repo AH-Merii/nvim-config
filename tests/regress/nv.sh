@@ -16,8 +16,8 @@ case "$1" in
 esac
 shift
 
-# Live nvim dirs on the login PATH (an old Mason bin among them) would hide sandbox tools, and mise shims
-# would answer from the sandbox's mise config, so both go. Tools reach Neovim through the resolver
+# Live nvim dirs on PATH (and a Mason bin dir, which a Neovim running Mason puts on its children's PATH) would
+# hide sandbox tools, and mise shims would answer from the sandbox's mise config, so both go. Tools reach Neovim through the resolver
 # (lua/tools), which ignores PATH entries inside mise installs anyway; those stay, as in the user's own nvim.
 PATH=$(printf %s "$PATH" | tr ':' '\n' | grep -v -E "^$HOME/(\.local/share/nvim|\.local/state/nvim|\.config/nvim|\.cache/nvim)(/|$)|/mason/bin/?$|/mise/shims/?$" | paste -sd:)
 # nvim-treesitter builds parsers with the tree-sitter CLI
