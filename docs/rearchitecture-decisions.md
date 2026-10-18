@@ -27,8 +27,8 @@ The full proposal, with its measurements and sources, was written outside the re
 - Built: step 4b, neoblocks.nvim's statusline replaces lualine ("Step 4b: neoblocks statusline" below).
 - Built: step 3, `keys/`, with D49 ("Step 3: keys/" below).
 - Built: step 5, `features/`, with `lsp/`, `textobjects/` and the rest of `ui/` ("Step 5: features/" below).
-- Built: step 6a, `app/` runs startup as named, timed phases, still on lazy.nvim ("Step 6a: app/" below). Next: 6b,
-  vim.pack (D45).
+- Built: step 6a, `app/` runs startup as named, timed phases, still on lazy.nvim ("Step 6a: app/" below).
+- Built: step 6b, vim.pack replaces lazy.nvim (D45; "Step 6b: vim.pack" below).
 
 ## Target layout
 
@@ -1252,3 +1252,169 @@ moment. The question was whether 6a moves startup by 3 ms or more, or past ~100 
 
 The rounds disagree on the direction (-3.7 to +7.8 ms per round), so there is no real difference, and both are under
 the budget.
+
+## Step 6b: vim.pack (2026-10-18)
+
+Built on `rearch/vimpack`, stacked on `rearch/app` (6a). vim.pack replaces lazy.nvim (D45): `lua/app/plugins.lua`
+installs every module's plugins with `vim.pack.add` and loads each in its phase. A dump of the sandbox's state after
+VeryLazy, taken with 6a's config and with this branch's on the same plugin revisions (the 6a dump script, its lazy
+lines swapped for `app.plugins.list()`; `~/.cache/nvim-config/rearch/vimpack6b/tmp/dump.lua`), differs in the ways
+listed under Decisions; nothing else.
+
+**Built.**
+
+- `lua/app/plugins.lua`: the plugin shape (`app.Plugin`), `setup()` for the plugins phase, `load()`, `load_phase()`,
+  `list()`, `command()` and a package loader.
+- `lua/app/init.lua`: two evented phases, `buffer` and `deferred`, and `User VeryLazy`, which `app.start()` now fires
+  itself. `lua/app/lazy.lua` is gone.
+- `nvim/nvim-pack-lock.json` pins the 24 plugins at the commits `nvim/lazy-lock.json` had; `lazy-lock.json` is gone.
+- Every spec is in the new shape. Spec `keys` with an action are key rows (flash in `features/search.lua`, trouble in
+  `features/diagnostics.lua`), and trouble's picker actions reach snacks through `require("ui.snacks").extend()`.
+- `<leader>sp` lists the config's plugin spec lines, as `Snacks.picker.lazy()` listed lazy's
+  (`snacks/picker/source/lazy.lua`).
+- The suite: `refresh.lua`'s first step is `plugins`; `startup.lua` reads `:checkhealth vim.pack`; the fresh checks
+  seed `site/pack/core/opt`; `keys_spec_reload.lua` is gone (nothing runs a spec module again). New:
+  `app_on_demand.lua` and `app_require_loads.lua`; `app_phases.lua` covers the buffer phase.
+- The test image's plugins stage runs the `plugins` step; lua5.1 and luarocks, there for `:checkhealth lazy`, are gone.
+
+**Decisions.**
+
+- *The plugin shape is this config's own, small:* `{ src, name?, version?, phase?, cmd?, init?, setup?, build?, dev? }`
+  (`app/plugins.lua:13-23`). `src` is `owner/repo` on GitHub or a URL, `version` is vim.pack's (`:h vim.pack.Spec`),
+  `setup` is a plain function and `build(path)` runs on install and update.
+  - Rejected: porting lazy's spec language (`opts`, `config`, `dependencies`, `priority`, `event`, `ft`, `keys`).
+    Each is a second way to say what the phases, the list order, the key rows and plain setup calls already say.
+  - Rejected: keeping `opts` functions and fragment merging. The one fragment merge, trouble's actions into snacks'
+    picker, is an explicit `ui.snacks.extend()` (`ui/snacks.lua`), called in the registries phase, before snacks
+    loads.
+  - Rejected: a trigger per plugin (event, filetype, key). The phases plus the loader below cover every plugin;
+    commands are the one trigger kept (`cmd`, below).
+- *Four phases.* The plugins phase loads the startup plugins; `buffer` loads at the first `BufReadPre` or
+  `BufNewFile`; `deferred` at `User VeryLazy`, after the first screen; `on_demand` plugins at their commands. Each
+  phase loads its plugins in list order, adapters first (`features/init.lua` `M.adapters`), which replaces lazy's
+  `priority` and `dependencies`.
+  - Startup: onedark, snacks, nvim-lspconfig, plenary, todo-comments, gitsigns, friendly-snippets, blink.cmp,
+    nvim-treesitter-textobjects, nvim-treesitter. They were lazy's non-lazy plugins.
+  - Buffer: nvim-lint and nvim-origami. lazy loaded origami at `BufReadPre` or `BufWinEnter`, so with no file it was
+    loaded at the first screen; now a session that reads no file never loads it. Its maps (`h`, `l`, `^`, `$`) and
+    fold options arrive with the first file (the dump with a file matches; with none, they are absent).
+  - Deferred, the default: mini.icons, neoblocks, conform, which-key, flash, diffview, tiny-inline-diagnostic,
+    trouble, nvim-autopairs, lazydev, vim-tmux-navigator. lazy loaded autopairs at InsertEnter, lazydev at
+    `FileType lua`, and trouble, diffview and tmux-navigator at their commands or keys; now they load after the first
+    screen. Loading them earlier only makes their listeners earlier: autopairs' `<CR>` map and buffer listeners,
+    trouble's window and colorscheme listeners, lazydev's LspAttach listener (which acts on lua_ls only) and
+    tmux-navigator's commands (the dump).
+  - On demand: github-pr-reviewer, at `:PRReviewMenu` or `:PRSuggestChange`, the two commands the `<leader>p` rows
+    run. Its setup maps `<C-h>`, `<C-l>` and `<C-e>` globally, falling back to Neovim's own keys outside review mode
+    (`github-pr-reviewer/init.lua:1397-1424`, called at `:5023`), which would replace the window keys
+    (`features/windows.lua:18-21`). `app.plugins.command()` defines each command until the plugin loads; the first
+    use loads it and runs the plugin's own command with the same range, bang, arguments and modifiers.
+  - A deferred plugin's command would not exist before VeryLazy, so `nvim +DiffviewOpen` or `nvim +Trouble` would
+    fail with E492 where lazy's stubs ran it. trouble (`cmd = { "Trouble" }`) and diffview
+    (`cmd = { "DiffviewOpen", "DiffviewFileHistory" }`) get the same stubs, which load the plugin first when used
+    before VeryLazy; at VeryLazy the plugins' own commands replace them (`trouble/config/init.lua:242`,
+    `diffview/plugin/diffview.lua:23,27`). Coordinator decision D67, from review.
+- *A module of a plugin not loaded yet loads it* (`app/plugins.lua`, the loader, last in `package.loaders`), as
+  lazy loaded a plugin on require. This covers the four cross-plugin requires before VeryLazy: snacks to which-key and
+  conform, blink to lazydev (`lazydev.integrations.blink`) and the picker to trouble (`trouble.sources.snacks`), and
+  any row whose action requires its plugin. At startup nothing goes through it: a headless start with a file has
+  loaded only the startup and buffer plugins.
+- *The startup plugins' `plugin/` files run after `init.lua`.* During init `load()` uses `:packadd!`, which only adds
+  the directory to the runtimepath (`:h :packadd`, `vimscript.txt:90-122`); Neovim's load-plugins step, after
+  `init.lua`, sources them (`:h load-plugins`). A plain `:packadd` would source them then and again in that step.
+  After init, `:packadd` sources them before `setup` runs. So a startup plugin's `setup` runs before its `plugin/`
+  file: gitsigns' calls `setup()` with no options, which keeps the config's (it does not rebuild the config);
+  blink's sets the `'*'` capabilities after `lsp.setup()` (`lsp_capabilities.lua` passes).
+- *The runtimepath and packpath lazy set are kept* (`lazy/core/config.lua:295-313`): the config, `site`, the runtime,
+  its `lib` and the config's `after/`. `/usr/share/nvim/site` (from `$XDG_DATA_DIRS`) stays off, as it holds
+  ghostty's ftdetect and syntax files.
+  - lazy's `disabled_plugins` become the runtime plugins' own guards: `g:loaded_gzip`, `g:loaded_tarPlugin`,
+    `g:loaded_tutor_mode_plugin` and `g:loaded_zipPlugin` (`gzip.vim:10`, `tarPlugin.vim:15`, `tutor.vim:7`,
+    `zipPlugin.vim:24`). Nightly's zip plugin is `zip.lua`, with another guard; lazy left it loaded too.
+  - With Neovim's own load-plugins step, `plugin/*.vim` files run before `plugin/*.lua` ones, so the runtime's
+    `dir.lua` now runs after netrw and clears netrw's `FileExplorer` group (`plugin/dir.lua:54`), as in
+    `nvim --clean`. A directory now opens in Neovim's directory buffer (`nvim.dir`), not netrw. lazy sourced `dir.lua`
+    first, so netrw kept its group. The user accepted `nvim.dir` in place of netrw (D66).
+  - Filetype detection is now set up after the startup plugins, so on `BufReadPost` and `BufNewFile` gitsigns'
+    attach listener runs before `filetypedetect` (the dump). gitsigns attaches asynchronously; `gitsigns.lua` passes.
+- *The lockfile is vim.pack's,* committed. On the first `vim.pack` call it installs every plugin in the lockfile that
+  the disk lacks, at the lockfile's revision (`runtime/lua/vim/pack.lua:1026-1122`, and `:882-883` for "Prefer
+  revision from the lockfile"). It was written from `lazy-lock.json` in vim.pack's format and checked by the refresh:
+  every plugin vim.pack installed is at the lockfile's revision ("plugins: 24 at the lockfile"), and a start leaves the
+  file unchanged (its mtime after a start is the copy's).
+  - `confirm = false`: the first start installs without asking, as lazy's `install.missing` did. The first start
+    therefore clones the 24 plugins; with lazy it cloned lazy.nvim and then them.
+  - A config that ran on lazy keeps its old checkouts in `~/.local/share/<appname>/lazy`; nothing reads or deletes
+    them (README, Install). vim.pack's are in `site/pack/core/opt`.
+  - Updates: `:packupdate` shows the changes in a buffer, `:write` applies them; `:packupdate ++lockfile` restores
+    the lockfile's revisions (`:h :packupdate`). lazy's checker (it fetched in the background, with `notify = false`)
+    has no counterpart; nothing checks for updates on its own.
+- *nvim-treesitter's build is a `PackChanged` hook,* made before `vim.pack.add` so the first install's event reaches
+  it (`:h vim.pack-events`). A build waits until its plugin has loaded. It runs `update()`, as `:TSUpdate` did, and
+  first points each parser's query link in `site/queries` at this checkout: `update()` leaves a parser whose revision
+  is unchanged alone (`nvim-treesitter/install.lua` `needs_update`), so the links would keep pointing into lazy's old
+  checkout.
+- *neoblocks' dev checkout* is `dev = true`: with `$NVIM_PLUGIN_DEV` naming a directory that holds
+  `neoblocks.nvim`, that directory is prepended to the runtimepath instead of vim.pack's copy (vim.pack copies a
+  local source rather than linking it, D45).
+- *A plugin that fails to install stops nothing else.* `vim.pack.add` adds every plugin that is on disk, then raises
+  if any install failed (`runtime/lua/vim/pack.lua:1217-1234`). Uncaught, that ended `init.lua` after the tools
+  phase: no plugins, no servers (found in review). Now:
+  - `app.plugins.setup()` catches it, reports it through `vim.notify` and goes on;
+  - `load()` skips a plugin that is not on disk, so `list()` reports it not loaded and its setup never runs;
+  - vim.pack drops the failed plugin from the lockfile and writes it before raising (`pack.lua:899-902`,
+    `:1211-1213`), so each pin the file had before is put back, and the next start installs the plugin at its
+    revision;
+  - `app.start()` runs each phase in `xpcall`: a phase that raises is reported, and the later phases still run.
+  This is what users hit when a clone fails on the first start after this change, or on a new machine offline.
+- *Plugin hooks report their errors* as `<name>: setup failed:` (also `init`, `build`), through `vim.notify`, and the
+  rest still load. The fresh checks look for that text where they looked for lazy's "Failed to run".
+- *An evented phase runs once across its events.* `once` holds per event, so `buffer` (two events) would run at a
+  `BufReadPre` and again at a later `BufNewFile`; `app.start()` keeps a set of the phases that ran
+  (`app_phases.lua` caught it).
+
+**Checks.**
+
+- `app_phases.lua`: the buffer phase is recorded once, after the others, at the first file read; a file given at
+  launch records it after the startup phases.
+- `app_on_demand.lua`: github-pr-reviewer is not loaded after VeryLazy and none of its global maps exist; the first
+  `:2,3PRSuggestChange` loads it and runs its own command with the range 2,3. In a headless nvim that never gets
+  VeryLazy, `:Trouble qflist open` opens the quickfix list in trouble: the stub passed the arguments on.
+- `app_require_loads.lua`: before VeryLazy, each of the four cross-plugin requires loads its plugin and returns the
+  module asked for, with the member its caller uses (`new` for lazydev's blink source, `actions` for trouble's snacks
+  source).
+- `app_install_fails.lua`: on a data dir without gitsigns and with gitsigns' source unreachable (the lockfile's and the
+  spec's), every phase runs, every other plugin loads, the servers are enabled, the failure is reported naming the
+  plugin, and the lockfile keeps gitsigns' pin. Against the code before the fix it failed: phases
+  `options,registries,tools`, 0 servers, the pin gone.
+- Sibling wrong versions of `app/`, each with one bug, fail their check: the stub command dropping the arguments or
+  the range, no stubs, on-demand plugins loaded at VeryLazy, no loader, a loader returning the top module, the buffer
+  phase run twice, `vim.pack.add` uncaught, no pin restore, `load()` without the disk check
+  (`~/.cache/nvim-config/rearch/vimpack6b/wrong/run.sh`, results in `result.txt` there).
+- `startup.lua` checks every plugin the config names is installed and `:checkhealth vim.pack` has no ERROR or
+  WARNING; `trouble_maps.lua` loads trouble through `app.plugins.load()`. Neither changed what it asserts beyond the
+  manager it reads.
+- The language-tools skill's audit (`scripts/tool-audit.lua`) and eval probe no longer call `require("lazy")`; the
+  plugins they need load through the loader (`AUDIT OK`, `PROBE DONE` by hand). Its references name
+  `site/pack/core/opt`.
+- `work/keys/keys_global_regress.lua` (not in the plain suite) lost its lazy parts: lazy's keys are key rows now
+  (`keys_map_desc.lua`), and `app_on_demand.lua` covers the PR commands.
+
+**Network.** `suite.sh --refresh-only` with `NVR_REFRESH_STEPS="plugins resolve parsers"` ran once with network: it
+cloned the 24 plugins from GitHub into the suite's `data/`, downloaded blink's prebuilt library (v1.10.2) and deleted
+lazy's checkouts there. The fresh checks clone from GitHub as before.
+
+**Cost.** One-off class, one call per felt moment. The question was whether 6b moves startup by 3 ms or more, or past
+~100 ms. `--startuptime`'s last line, 5 interleaved rounds of 3 runs per side, cwd the default fixture. Before is 6a's
+config on lazy.nvim, on a data dir with the same plugin revisions under `lazy/` (and lazy.nvim at the old lockfile's
+306a055); branch is this branch (`~/.cache/nvim-config/rearch/vimpack6b/bench/startup.sh`, `startup-tui.sh`).
+
+| Run | Before | Branch | Rounds branch faster |
+| --- | --- | --- | --- |
+| headless, no file | 85.5 ms | 80.4 ms | 4 of 5 |
+| headless, `main.lua` | 119.5 ms | 106.3 ms | 5 of 5 |
+| Ghostty TUI, no file (niri-screen-lab), quit 300 ms after VeryLazy | 93.6 ms | 85.6 ms | 5 of 5 |
+
+The TUI and the file runs are faster in every round (by 6 to 15 ms); the headless no-file run is not, by D61's rule.
+No run is slower, and the TUI start, the real one, is under the ~100 ms budget on both sides.
+Where the time went was not measured.
