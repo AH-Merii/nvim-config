@@ -35,40 +35,12 @@ local wrapped = {} ---@type table<string, function> server -> the root_dir set b
 local rootless = {} ---@type table<string, string> server -> resolver root of its client without a root_dir, which all such buffers share
 local running = {} ---@type table<string, string> server .. "\0" .. root -> binary its client was started with
 local processes = setmetatable({}, { __mode = "k" }) ---@type table<vim.lsp.rpc.PublicClient, true> every server process started
--- The process group of each server started here whose children may still run: its leader's pid (vim.lsp.rpc.start
--- runs a server detached, vim/net/_transport.lua, so the pid is also the id of the group its children are born in) ->
--- the leader's start time, which tells the group from a later one given the same id
-local groups = {} ---@type table<integer, string>
-
---- A process's start time, field 22 of /proc/<pid>/stat; nil without one (no procfs, or no such process).
----@param pid integer
----@return string?
-local function started(pid)
-  local f = io.open(("/proc/%d/stat"):format(pid))
-  if not f then
-    return nil
-  end
-  local stat = f:read("*a") or ""
-  f:close()
-  -- After the command name, in parentheses and maybe with spaces, the fields from the third on
-  return vim.split(stat:match(".*%) (.*)") or "", " ")[20]
-end
-
---- Kills what is left of a server's process group: children the server didn't stop, and the server if it still runs.
---- Skipped when the id names another group: one whose processes are all gone frees it, and a new process with that pid
---- can lead a group of its own. Callable in a fast event.
----@param pid integer
-local function sweep(pid)
-  local start = groups[pid]
-  groups[pid] = nil
-  local now = start and started(pid)
-  if start and (now == nil or now == start) then
-    vim.uv.kill(-pid, "sigkill")
-  end
-end
+-- The process group of each server started here whose children may still run (vim.lsp.rpc.start runs a server
+-- detached, vim/net/_transport.lua)
+local groups = require("tools.proc").groups()
 
 -- For the unit tests
-M._groups, M._sweep = groups, sweep
+M._groups, M._sweep = groups.leaders, function(pid) groups:kill(pid) end
 
 local warned = false
 --- vim.lsp.rpc.start(...), and the pid of the process it spawned, which its client does not expose: the one vim.system
@@ -162,7 +134,7 @@ local function wiring(name, bin, base)
       dispatchers = vim.tbl_extend("force", dispatchers, {
         on_exit = function(...)
           if pid then
-            sweep(pid)
+            groups:kill(pid)
           end
           if on_exit then
             return on_exit(...)
@@ -173,7 +145,7 @@ local function wiring(name, bin, base)
       rpc, pid = rpc_start({ result.path, unpack(catalog.server_args(name) or {}) }, dispatchers, { cwd = root, env = result.env })
       processes[rpc] = true
       if pid then
-        groups[pid] = started(pid)
+        groups:add(pid)
       end
       return rpc
     end,
@@ -340,9 +312,7 @@ function M.setup()
         rpc.terminate()
       end
       vim.wait(quit_wait, function() return closed(left) end, 5)
-      for pid in pairs(groups) do
-        sweep(pid)
-      end
+      groups:kill_all()
     end,
   })
 

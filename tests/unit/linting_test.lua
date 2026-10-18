@@ -222,4 +222,15 @@ h.case("ToolsChanged lints the root's buffers again with the linter that appeare
   h.eq(runs, { { buf = buf, ran = { { name = "yamllint", cmd = system .. "/yamllint", cwd = root } }, linters = runs[1] and runs[1].linters } })
 end)
 
+h.case("a lint whose nvim-lint call raises passes the error on and leaves vim.uv.spawn as it was", function()
+  local buf, root = setup({ ruff = "1.0.0" }, "fixone")
+  resolved(root)
+  local spawn, try = vim.uv.spawn, lint.try_lint
+  lint.try_lint = function() error("nvim-lint failed") end
+  local ok, err = pcall(linting.buffer, buf)
+  lint.try_lint = try
+  h.ok(not ok and tostring(err):find("nvim-lint failed", 1, true) ~= nil, "the error: " .. tostring(err))
+  h.ok(rawequal(vim.uv.spawn, spawn), "vim.uv.spawn is still replaced")
+end)
+
 h.finish()

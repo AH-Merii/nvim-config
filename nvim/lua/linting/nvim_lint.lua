@@ -41,8 +41,48 @@ local definitions = {
 -- Linters whose parser matches file names relative to Neovim's cwd, so they keep running there
 local keep_cwd = { tflint = true }
 
+-- The process group of each linter run started here that may still be going. nvim-lint runs each linter detached
+-- (lint.lua, M.lint), so the run's pid is also the id of the group its children are born in
+local runs = require("tools.proc").groups()
+
+--- Runs fn, recording the group of each process it spawns detached, and killing what is left of that group once the
+--- process exits: nothing reads a child that outlives its run. nvim-lint cancels a run with SIGINT and SIGKILLs only its
+--- pid 10 s later (lint.lua, LintProc:cancel), which leaves its children. nvim-lint doesn't expose a run's pid, so the
+--- vim.uv.spawn calls its try_lint makes are watched.
+---@param fn fun()
+local function watching_spawns(fn)
+  local spawn = vim.uv.spawn
+  vim.uv.spawn = function(cmd, opts, on_exit)
+    local pid
+    local handle, pid_or_err = spawn(cmd, opts, function(...)
+      if pid then
+        runs:kill(pid)
+      end
+      if on_exit then
+        return on_exit(...)
+      end
+    end)
+    if handle and opts and opts.detached then
+      pid = pid_or_err
+      runs:add(pid)
+    end
+    return handle, pid_or_err
+  end
+  local ok, err = pcall(fn)
+  vim.uv.spawn = spawn
+  if not ok then
+    error(err, 0)
+  end
+end
+
 function M.setup()
   local lint = require("lint")
+  -- A run still going when Neovim exits has nobody to report to, and nvim-lint leaves it running: kill what is left of
+  -- each, its children included
+  vim.api.nvim_create_autocmd("VimLeavePre", {
+    group = vim.api.nvim_create_augroup("linting.nvim_lint", { clear = true }),
+    callback = function() runs:kill_all() end,
+  })
   -- Every filetype a language declares, variants included, each with its whole list (lua/lang/). Runs name their
   -- linters from lang.of, so nvim-lint's union of a dotted filetype's parts decides nothing
   lint.linters_by_ft = vim.deepcopy(require("lang").views().lint)
@@ -160,7 +200,9 @@ function M.lint(names, run)
       return linter
     end,
   }
-  keeping_dirs(function() require("lint").try_lint(names, opts) end)
+  watching_spawns(function()
+    keeping_dirs(function() require("lint").try_lint(names, opts) end)
+  end)
 end
 
 -- Loads nvim-lint for linting/, and adds the <leader>ll and <leader>li rows

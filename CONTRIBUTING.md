@@ -358,9 +358,9 @@ their `setup()`, and each module's adapter file is the only one that knows its p
   now, cached per buffer; `format.has(buf, range?)` is the key gates' need, a named formatter or a formatting server
 - `lua/linting/` (`linting/nvim_lint.lua` the adapter; not `lint/`, which is nvim-lint's own module): it lints on
   writing or reloading a buffer, and on entering it or leaving insert mode when it or any file changed since its
-  last lint (D72), drops a linter's findings when its covering server attaches, and
-  lints again when ToolsChanged finds a linter; `linting.plan(buf)` (`.run` is what `ui.facts` lists) and
-  `linting.has(buf)` as for format
+  last lint (D72), drops a linter's findings when its covering server attaches, lints again when ToolsChanged finds
+  a linter, and kills the runs still going when Neovim exits (D95); `linting.plan(buf)` (`.run` is what `ui.facts`
+  lists) and `linting.has(buf)` as for format
 
 ### Utilities
 

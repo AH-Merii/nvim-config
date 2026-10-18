@@ -269,7 +269,8 @@ local function main()
   local ok, err = true, nil
   if needs_resolve() then ok, err = xpcall(dofile, debug.traceback, CHECK) end
   if not ok then check("check script ran", false, err) end
-  -- nvim-lint does not stop its linters on exit; let in-flight runs finish so only real leaks remain
+  -- The quit kills nvim-lint's runs still going (linting/nvim_lint.lua); let them finish first, so an error one reports
+  -- late still reaches the MSG and NOTIFY lines below
   local lint = package.loaded["lint"]
   if lint and lint.get_running then
     if not wait_until(function() return #lint.get_running() == 0 end, 15000) then

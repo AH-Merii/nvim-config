@@ -1,6 +1,7 @@
--- The lsp module's sweep of a server's process group (lsp/init.lua): it kills the group it recorded, and leaves alone a
--- group whose leader's pid now runs with another start time, a reused id. Real processes stand in for a server: a
--- detached sleep leads its own group, as vim.lsp.rpc.start's servers do. Linux only (/proc):
+-- The sweep of a server's process group (tools.proc's groups(), through lsp/init.lua's _groups and _sweep): it kills
+-- the group it recorded, and leaves alone a group whose leader's pid now runs with another start time, a reused id.
+-- Real processes stand in for a server: a detached sleep leads its own group, as vim.lsp.rpc.start's servers do. Linux
+-- only (/proc):
 -- nvim --clean --headless -l tests/unit/lsp_test.lua
 local here = vim.fs.dirname(vim.fs.abspath(debug.getinfo(1, "S").source:sub(2)))
 package.path = table.concat({ here .. "/../../nvim/lua/?.lua", here .. "/../../nvim/lua/?/init.lua", here .. "/?.lua", package.path }, ";")
