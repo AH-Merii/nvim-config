@@ -1,4 +1,4 @@
-# @desc     typed one key at a time, fast and slow, once which-key's triggers are attached, every gr* key the runtime or the config maps sends its LSP request exactly once (normal mode, and visual for x maps), in a buffer with a server that serves them all: no shorter gr map swallows them
+# @desc     typed one key at a time, fast, slow and fast with a pause before the last key, once which-key's triggers are attached, every gr* key the runtime or the config maps sends its LSP request exactly once (normal mode, and visual for x maps), in a buffer with a server that serves them all: no gr map of its own, global, buffer-local or nowait, runs instead
 # @areas    keys lsp which-key
 # @budget   90
 # Ported from nvim-sbx-keys/checks2/interactive_gr.sh and spy_gr.lua. Keys go through --remote-send one at a
@@ -137,27 +137,33 @@ vim.wait(5000, function() return WK_READY() == "1" end, 20)
 vim.g.spy_ready = WK_READY()
 EOF
 
-# a key left pending (r after a gr that ran on its own) blocks --remote-expr until the next key
-R() { timeout 5 "$NV" "$V" --clean --headless --server "$sock" "$@" </dev/null 2>/dev/null; }
+# The client that drives it: the binary nv.sh runs, called straight, as nv.sh's setup on every call (a mise lookup when
+# NVR_NVIM is unset) costs more than the call; in the check's own XDG dirs, as nv.sh would run it. A key left pending
+# (r after a gr that ran on its own) blocks --remote-expr until the next key
+BIN=$("$NV" "$V" --clean --headless --cmd 'lua io.stdout:write(vim.v.progpath)' --cmd 'qa!' </dev/null 2>/dev/null)
+R() {
+  XDG_CONFIG_HOME=$NVR_HOME/config XDG_DATA_HOME=$NVR_DATA XDG_STATE_HOME=$NVR_STATE XDG_CACHE_HOME=$NVR_HOME/cache \
+    timeout 5 "$BIN" --clean --headless --server "$sock" "$@" </dev/null 2>/dev/null
+}
 "$NV" "$V" --headless --listen "$sock" \
   -c "autocmd VimEnter * ++once lua vim.schedule(function() dofile('$spy') end)" </dev/null >/dev/null 2>&1 &
 pid=$!
 finish() {
   [ -S "$sock" ] && R --remote-send '<C-\><C-n>:qa!<CR>' >/dev/null
-  for _ in $(seq 30); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+  for _ in $(seq 150); do kill -0 "$pid" 2>/dev/null || break; sleep 0.02; done
   kill "$pid" 2>/dev/null
   rm -f "$sock" "$spy"
   out DONE
 }
 
 ready=0
-for _ in $(seq 250); do
+for _ in $(seq 1250); do
   kill -0 "$pid" 2>/dev/null || break
   if [ -S "$sock" ]; then
     ready=$(R --remote-expr 'get(g:, "spy_ready", 0)')
     [ "$ready" != 0 ] && break
   fi
-  sleep 0.1
+  sleep 0.02
 done
 if [ "$ready" != 1 ]; then
   out "FAIL fake server and which-key ready  -- ${ready:-nvim exited}"
@@ -175,49 +181,61 @@ if [ "${#plan[@]}" -eq 0 ] || [ -z "${plan[0]}" ]; then
   exit 0
 fi
 
-hits() { local h; h=$(R --remote-expr 'luaeval("table.concat(HITS, \",\")")'); printf '%s' "${h//$'\n'/}"; }
-seq_check() { # $1 keys, $2 gap between keys (the typing speed under test), $3 expected hits
-  local got="" k why=""
-  for _ in $(seq 50); do
+# fails while a key is left pending (the r of grr after a gr map ran on its own), which blocks --remote-expr
+hits() { local h; h=$(R --remote-expr 'luaeval("table.concat(HITS, \",\")")') || return; printf '%s' "${h//$'\n'/}"; }
+seq_check() { # $1 keys, $2 the gap before each key after the first (the typing rhythm under test), $3 expected hits
+  local got="" why="" idle i typed gaps label
+  read -ra typed <<<"$1"
+  read -ra gaps <<<"$2"
+  label="[$1] with gaps ${2// /s }s"
+  for _ in $(seq 250); do
     why=$(R --remote-expr 'luaeval("WK_READY()")')
     [ "$why" = 1 ] && break
-    sleep 0.1
+    sleep 0.02
   done
   if [ "$why" != 1 ]; then
-    out "FAIL which-key ready before [$1] with ${2}s gaps  -- ${why:-no answer}"
+    out "FAIL which-key ready before $label  -- ${why:-no answer}"
     return
   fi
   R --remote-expr 'luaeval("(function() HITS = {} return 0 end)()")' >/dev/null
-  for k in $1; do
-    R --remote-send "$k"
-    sleep "$2"
+  # the gaps are the rhythm under test, so they go between keys only; after the last one the wait is for its hit
+  for i in "${!typed[@]}"; do
+    [ "$i" -gt 0 ] && sleep "${gaps[i - 1]}"
+    R --remote-send "${typed[i]}"
   done
-  for _ in $(seq 30); do
+  for _ in $(seq 150); do
     got=$(hits) || break
     [ -n "$got" ] && break
-    sleep 0.1
+    sleep 0.02
   done
   # past the first hit: wait until which-key has finished the sequence, then take every hit it caused
   if [ -n "$got" ]; then
-    for _ in $(seq 20); do [ "$(R --remote-expr 'luaeval("WK_IDLE()")')" = 1 ] && break; sleep 0.1; done
+    for _ in $(seq 100); do idle=$(R --remote-expr 'luaeval("WK_IDLE()")') || break; [ "$idle" = 1 ] && break; sleep 0.02; done
   fi
   R --remote-send '<Esc><C-\><C-n>'
   got=$(hits)
-  for _ in $(seq 20); do [ "$(R --remote-expr 'mode()')" = n ] && break; sleep 0.1; done
+  for _ in $(seq 100); do [ "$(R --remote-expr 'mode()')" = n ] && break; sleep 0.02; done
   if [ "$got" = "$3" ]; then
-    out "PASS typed [$1] with ${2}s gaps runs $3"
+    out "PASS typed $label runs $3"
   else
-    out "FAIL typed [$1] with ${2}s gaps runs $3 once  -- got '${got:-nothing}'"
+    out "FAIL typed $label runs $3 once  -- got '${got:-nothing}'"
   fi
 }
-for gap in 0.05 0.7; do
-  for line in "${plan[@]}"; do
-    read -r mode lhs target <<<"$line"
-    keys=$(printf '%s' "$lhs" | sed 's/./& /g')
+# Rhythms: every key fast, every key slow, and fast with a pause before the last key. A fast gap is well under
+# timeoutlen (500 ms) and a pause well over it. The pause is what catches a gr map of its own: which-key hands a "gr" typed
+# within timeoutlen of the g to Neovim, which waits timeoutlen for a longer map and then runs the gr map, before the last
+# key; typed slower, which-key keeps the sequence and waits for the last key itself
+FAST=0.05 SLOW=0.7
+for line in "${plan[@]}"; do
+  read -r mode lhs target <<<"$line"
+  read -ra typed <<<"$(printf '%s' "$lhs" | sed 's/./& /g')"
+  fast=$(printf "$FAST %.0s" "${typed[@]:2}")
+  rhythms=("${fast}$FAST" "$(printf "$SLOW %.0s" "${typed[@]:2}")$SLOW" "${fast}$SLOW")
+  for r in "${rhythms[@]}"; do
     if [ "$mode" = x ]; then
-      seq_check "v $keys" "$gap" "$target:v"
+      seq_check "v ${typed[*]}" "$FAST $r" "$target:v"
     else
-      seq_check "$keys" "$gap" "$target:n"
+      seq_check "${typed[*]}" "$r" "$target:n"
     fi
   done
 done

@@ -1472,7 +1472,7 @@ tool catalog, and replaces both tables:
 - `tests/unit/languages_doc_test.lua` fails while the committed file differs from the render, naming the first
   differing line and saying to run `mise run docs`. It also checks the render names every filetype and every server,
   formatter and linter a language uses, and, on a fixture language, a covered linter's server and a variant's own
-  files and tools. CI runs the unit tier (`.github/workflows/test.yml:58`), so a stale doc fails a pull request.
+  files and tools. CI runs the unit tier (`.github/workflows/test.yml:76`), so a stale doc fails a pull request.
 - The two tables in `docs/mise-tooling-decisions.md` became dated notes that point at `docs/languages.md` and keep
   what the per-language table recorded as changes from Mason. Its "Install specs" table stays: its Verified column is
   evidence from the install runs, which the code can't give.
@@ -1798,14 +1798,16 @@ says "linters still running at exit" (`grep -c` gives 0 in `~/.cache/nvim-config
 `lint_quit_kill` drives its own nvim over a socket, so the wait can't hide an orphan there.
 
 **Checks.** `lint_quit_kill.sh`: a stand-in yamllint ignores SIGTERM and SIGINT; on one buffer it sleeps in a child,
-on another it reports a finding after 2 s.
+on another it reports a finding once the check has seen the `:wq` done.
 
 - `:wq` with two runs going (the one opening the file started and the one the write started) exits within 5 s, and
   none of their processes is alive 3 s later.
 - While Neovim runs, nothing but the quit kills a run: `:wq` that closes one window of three, `:bunload` and
   `:bdelete` each leave the buffer's newest run going, and the other buffer's lint, running at the `:wq`, still
   reports its finding.
-- Two writes cancel two runs; once nvim-lint has SIGKILLed their own pids, the quit leaves none of their processes.
+- Two writes cancel two runs; once their own pids have ended, the quit leaves none of their processes. On that
+  buffer the stand-in ends on nvim-lint's SIGINT and leaves its child, as a run that ignores it does when nvim-lint
+  SIGKILLs it 10 s later; the check doesn't wait the 10 s.
 
 On main (c7db37e) the quit cases fail, with the runs' yamllint and sleep alive. Sibling wrong versions each fail
 it: no kill; the kill on BufDelete instead of at the quit; the kill on WinClosed; the kill at the quit plus on

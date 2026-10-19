@@ -11,6 +11,10 @@ local definitions = {
   shfmt = { prepend_args = { "-i", "2", "-kp" } },
   -- The resolved fish runs its builtin fish_indent (fish >= 4.1, tools/catalog.lua): mise's fish is a single binary
   fish_indent = { args = { "-c", "builtin fish_indent" } },
+  -- Offline: a save never waits on a schema download. Online, tombi fetches the SchemaStore catalog when its cache is
+  -- missing or a day old, for up to 5s, past conform's 1s timeout. Offline it formats with its built-in schemas and the
+  -- cache, which the tombi language server keeps fresh in the background
+  tombi = { args = { "format", "--offline", "--stdin-filename", "$FILENAME", "-" } },
 }
 
 function M.setup()

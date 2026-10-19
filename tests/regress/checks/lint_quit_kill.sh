@@ -3,8 +3,8 @@
 # @areas    lint
 # @budget   60
 # A stand-in yamllint in the project's .venv/bin ignores SIGTERM and SIGINT, as a linter busy in a child may. On a
-# buffer holding "slow" it logs its pid and its child's and sleeps; on any other it logs its start and reports one
-# finding after 2 s.
+# buffer holding "slow" it logs its pid and its child's and sleeps; on one holding "cancel" too, but nvim-lint's SIGINT
+# ends it and leaves its child; on any other it logs its start and reports one finding once the check says so.
 # nvim runs headless and is driven over its socket, not through the harness: the harness waits up to 15 s for
 # nvim-lint's runs before it quits (harness.lua), so a run would end before the quit and no orphan would show.
 set -u
@@ -12,18 +12,18 @@ out() { printf '%s\n' "$*" >>"$CHECK_OUT"; }
 pass() { out "PASS $1"; }
 fail() { out "FAIL $1  -- $2"; }
 
-now_ms() { echo $(($(date +%s%N) / 1000000)); }
-# wait_for <ms> <command...>: poll the command every 50ms until it succeeds or the time is up
+now_ms() { local t=${EPOCHREALTIME/./}; echo $((t / 1000)); }
+# wait_for <ms> <command...>: poll the command every 20ms until it succeeds or the time is up
 wait_for() {
   local deadline=$(($(now_ms) + $1))
   shift
   until "$@"; do
     [ "$(now_ms)" -ge "$deadline" ] && return 1
-    sleep 0.05
+    sleep 0.02
   done
 }
 
-LOG=$FIX/standin-pids.log FASTLOG=$FIX/standin-fast.log
+LOG=$FIX/standin-pids.log FASTLOG=$FIX/standin-fast.log RELEASE=$FIX/standin-release
 mkdir -p "$FIX/.venv/bin"
 cat >"$FIX/.venv/bin/yamllint" <<EOF
 #!/bin/sh
@@ -31,28 +31,46 @@ trap '' TERM INT
 input=\$(cat)
 case "\$input" in
   *slow*) echo \$\$ >>'$LOG'; sleep 600 & echo \$! >>'$LOG'; wait ;;
-  *) echo \$\$ >>'$FASTLOG'; sleep 2; echo 'stdin:1:1: [error] stand-in finding (standin)' ;;
+  *cancel*) trap 'exit 0' INT; echo \$\$ >>'$LOG'; sleep 600 & echo \$! >>'$LOG'; wait ;;
+  *)
+    echo \$\$ >>'$FASTLOG'
+    i=0
+    until [ -e '$RELEASE' ] || [ \$i -ge 1000 ]; do i=\$((i + 1)); sleep 0.01; done
+    echo 'stdin:1:1: [error] stand-in finding (standin)' ;;
 esac
 EOF
 chmod +x "$FIX/.venv/bin/yamllint"
 printf 'slow: 1\n' >"$FIX/slow.yaml"
 printf 'fast: 1\n' >"$FIX/fast.yaml"
+printf 'cancel: 1\n' >"$FIX/cancel.yaml"
 
 SOCK=$FIX/.nvim.sock
 [ ${#SOCK} -gt 100 ] && SOCK=${TMPDIR:-/tmp}/nvr-lint-quit-$$.sock
-R() { timeout 5 "$NV" "$V" --clean --headless --server "$SOCK" "$@" </dev/null 2>/dev/null; }
+# The client that drives it: the binary nv.sh runs, called straight, as nv.sh's setup on every call (a mise lookup when
+# NVR_NVIM is unset) costs more than the call; in the check's own XDG dirs, as nv.sh would run it
+BIN=$("$NV" "$V" --clean --headless --cmd 'lua io.stdout:write(vim.v.progpath)' --cmd 'qa!' </dev/null 2>/dev/null)
+R() {
+  XDG_CONFIG_HOME=$NVR_HOME/config XDG_DATA_HOME=$NVR_DATA XDG_STATE_HOME=$NVR_STATE XDG_CACHE_HOME=$NVR_HOME/cache \
+    timeout 5 "$BIN" --clean --headless --server "$SOCK" "$@" </dev/null 2>/dev/null
+}
+# settled: what the last command scheduled has run, two rounds deep (a callback may schedule another), so a kill it
+# set off has been sent
+settled() {
+  [ "$(R --remote-expr 'luaeval("(function() for _ = 1, 2 do local ran = false vim.schedule(function() ran = true end) vim.wait(1000, function() return ran end) end return 1 end)()")')" = 1 ]
+}
 pids() { cat "$LOG" 2>/dev/null; }
 alive() { local s; s=$(cut -d' ' -f3 "/proc/$1/stat" 2>/dev/null) && [ "$s" != Z ]; }
 none_alive() { local p; for p in $(pids); do alive "$p" && return 1; done; return 0; }
 # the newest run's pids (a run logs its own and its child's): the one not cancelled, which nvim-lint leaves running
 latest() { pids | tail -n 2; }
-latest_alive() { local p; for p in $(latest); do alive "$p" || return 1; done; return 0; }
-latest_dead() { ! latest_alive; }
+# alive, with no signal waiting to be acted on: a kill sent a moment ago may not have ended it yet
+untouched() { alive "$1" && awk '/^(SigPnd|ShdPnd):/ && $2 !~ /^0+$/ { exit 1 }' "/proc/$1/status" 2>/dev/null; }
+latest_untouched() { local p; for p in $(latest); do untouched "$p" || return 1; done; return 0; }
 dead() { ! alive "$1"; }
 logged() { [ "$(pids | wc -l)" -ge "$1" ]; }
 started=
 start() { # start <file>: nvim on file, its socket up
-  rm -f "$SOCK" "$LOG" "$FASTLOG"
+  rm -f "$SOCK" "$LOG" "$FASTLOG" "$RELEASE"
   "$NV" "$V" --headless --listen "$SOCK" "$1" </dev/null >/dev/null 2>&1 &
   started=$!
   wait_for 15000 test -S "$SOCK"
@@ -91,15 +109,16 @@ finish
 reap
 
 # 2. While Neovim runs, nothing but the quit kills a run. Three windows: :wq closes slow.yaml's while fast.yaml's lint
-# runs. The cursor goes to an empty window, not fast.yaml's: entering that one after a write would lint it again (D72),
-# cancelling the run. Then slow.yaml, whose newest run still goes, is unloaded and deleted
+# runs, which reports only once the :wq is done. The cursor goes to an empty window, not fast.yaml's: entering that one
+# after a write would lint it again (D72), cancelling the run. Then slow.yaml, whose newest run still goes, is unloaded
+# and deleted. A run is judged once what each of these events set off has run
 if ! start slow.yaml; then
   fail "nvim listens on its socket (two windows)" "no socket within 15s"
 elif ! wait_for 15000 logged 2; then
   fail "precondition: the stand-in runs on opening slow.yaml (two windows)" "pids logged: $(pids | tr '\n' ' ')"
 else
   # fast.yaml opens and lints in a split, and an empty window splits slow.yaml's, to take its space; while fast.yaml's
-  # run sleeps, slow.yaml's window is written and closed
+  # run waits, slow.yaml's window is written and closed
   R --remote-send ":vsplit fast.yaml<CR>:call win_gotoid(bufwinid('slow.yaml'))<CR>:new<CR>:call win_gotoid(bufwinid('slow.yaml'))<CR>:wq<CR>"
   diags='vim.diagnostic.get(vim.fn.bufnr(\"fast.yaml\"), { namespace = require(\"lint\").get_namespace(\"yamllint\") })'
   findings() { [ "$(R --remote-expr "luaeval(\"#$diags\")")" = 1 ]; }
@@ -109,6 +128,7 @@ else
   else
     fail ":wq closed slow.yaml's window and left fast.yaml's" "windows: $(R --remote-expr 'winnr("$")'), current: $(R --remote-expr 'bufname()')"
   fi
+  touch "$RELEASE"
   if wait_for 10000 findings; then
     if [ "$(wc -l <"$FASTLOG")" = 1 ]; then
       pass "fast.yaml's lint, running at the :wq, still reports its finding"
@@ -121,8 +141,7 @@ else
   if ! wait_for 5000 logged 4; then
     fail "precondition: the write started a run of slow.yaml" "pids logged: $(pids | tr '\n' ' ')"
   else
-    # a kill reaches the run within ms of the event; a second is plenty to see one
-    if latest_alive && ! wait_for 1000 latest_dead; then
+    if settled && latest_untouched; then
       pass "closing a window kills no run"
     else
       fail "closing a window kills no run" "slow.yaml's newest run, $(latest | tr '\n' ' '), is gone"
@@ -131,7 +150,7 @@ else
     unloaded() { [ "$(R --remote-expr 'bufloaded("slow.yaml")')" = 0 ]; }
     if ! wait_for 5000 unloaded; then
       fail "precondition: :bunload unloads slow.yaml" "still loaded"
-    elif latest_alive && ! wait_for 1000 latest_dead; then
+    elif settled && latest_untouched; then
       pass "unloading a buffer kills no run"
     else
       fail "unloading a buffer kills no run" "slow.yaml's newest run, $(latest | tr '\n' ' '), is gone"
@@ -140,7 +159,7 @@ else
     unlisted() { [ "$(R --remote-expr 'buflisted("slow.yaml")')" = 0 ]; }
     if ! wait_for 5000 unlisted; then
       fail "precondition: :bdelete deletes slow.yaml" "still listed"
-    elif latest_alive && ! wait_for 1000 latest_dead; then
+    elif settled && latest_untouched; then
       pass "deleting a buffer kills no run"
     else
       fail "deleting a buffer kills no run" "slow.yaml's newest run, $(latest | tr '\n' ' '), is gone"
@@ -150,13 +169,14 @@ fi
 finish
 reap
 
-# 3. Runs nvim-lint cancelled for a newer one: it sends SIGINT, which the stand-in ignores, and SIGKILLs the run's own
-# pid 10 s later (lint.lua, LintProc:cancel), which leaves its child. Two writes cancel the run opening the file started
-# and the first write's; once nvim-lint has killed both, the quit leaves none of the runs
-if ! start slow.yaml; then
+# 3. Runs nvim-lint cancelled for a newer one: it sends the run's own pid SIGINT (lint.lua, LintProc:cancel), which ends
+# this stand-in and leaves its child. Two writes cancel the run opening the file started and the first write's; once
+# both have ended, the quit leaves none of the runs. A run that ignores the SIGINT, nvim-lint SIGKILLs 10 s later, which
+# leaves its child the same way; the stand-in ends on the SIGINT so that the check doesn't wait for it
+if ! start cancel.yaml; then
   fail "nvim listens on its socket (cancelled runs)" "no socket within 15s"
 elif ! wait_for 15000 logged 2; then
-  fail "precondition: the stand-in runs on opening slow.yaml (cancelled runs)" "pids logged: $(pids | tr '\n' ' ')"
+  fail "precondition: the stand-in runs on opening cancel.yaml (cancelled runs)" "pids logged: $(pids | tr '\n' ' ')"
 else
   R --remote-send ':w<CR>'
   wait_for 5000 logged 4
@@ -164,8 +184,8 @@ else
   first=$(pids | sed -n 1p) second=$(pids | sed -n 3p)
   if ! wait_for 5000 logged 6; then
     fail "precondition: each write started a run" "pids logged: $(pids | tr '\n' ' ')"
-  elif ! wait_for 15000 dead "$first" || ! wait_for 5000 dead "$second"; then
-    fail "precondition: nvim-lint killed the cancelled runs' own pids" "pids logged: $(pids | tr '\n' ' ')"
+  elif ! wait_for 5000 dead "$first" || ! wait_for 5000 dead "$second"; then
+    fail "precondition: nvim-lint's cancel ended the cancelled runs' own pids" "pids logged: $(pids | tr '\n' ' ')"
   else
     R --remote-send ':qa!<CR>'
     wait_for 5000 gone
