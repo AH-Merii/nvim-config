@@ -51,6 +51,8 @@ The full proposal, with its measurements and sources, was written outside the re
   as D132 says.
 - Decided and built (2026-10-19): D137 to D139, the statusline names the tools of the formatters and linters that will
   run, once each, not conform's or nvim-lint's entries ("D137: the statusline names tools, not entries" below).
+- Decided and built (2026-10-19): D146, snacks' scope keeps drawing without its keys, which took over `[i` `]i` `ii`
+  `ai` from the conditional textobjects in the TUI ("D146" below).
 
 ## Target layout
 
@@ -2250,3 +2252,20 @@ all caught by the unit tier: a stub returning no tools, no dedupe, sorted, entri
 only multi-entry tools merged (the rejected alternative), the linters left as entries, `formatters` and `linters`
 overwritten with the tools, and each tool at its last entry's place. The spec drawing `formatters` and `linters` is
 caught by `statusline_facts` ("the line names no formatter entry").
+
+## D146: snacks' scope keeps drawing, without its keys (2026-10-19)
+
+**Context.** snacks sets its scope module up on UIEnter (`snacks/init.lua`, `UIEnter = { ..., "scope", ... }`), after
+the textobjects feature mapped its keys, and its defaults map `[i` `]i` (n, x, o) and `ii` `ai` (x, o)
+(`snacks/scope.lua:73-105`). So in the TUI `]i` jumped to the bottom edge of the indent scope while the which-key popup
+labelled it "Next conditional"; headless checks never reached UIEnter and passed. A TUI inventory of every map whose
+callback lives in snacks found only these ten beyond the two the config gives it (`<leader>N`, `<leader>n`).
+
+**Decision (the user's).** `ui/snacks.lua` turns the four scope keys off; the scope still draws. `[i` `]i` `ii` `ai` are
+the conditional textobjects again, and `[b` `]b` `[B` `]B` jump to a block's edges.
+
+**Rejected.** Moving the scope jumps to other keys: the block moves cover them.
+
+**Tests.** `keys_tui_owned` runs nvim in a TUI under tmux and fails when a key the textobjects feature declares
+(`keys.list()`, owner `textobjects`, 100 rows) isn't the textobjects dispatcher, or when snacks maps any key from its
+own modules. On main it fails with both (`taken x ai: full scope`, `snacks n [i: jump to top edge of scope`).
