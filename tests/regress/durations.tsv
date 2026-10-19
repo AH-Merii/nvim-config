@@ -1,6 +1,7 @@
 # name<TAB>seconds: each check's time in CI, the median of 5 runs of the test job (39280271365 39283143185 39286873140
 # 39289495752 39290079036). suite.sh --shard balances shards by it; a check missing here counts as 1s. Stale times
 # only unbalance the shards: a shard never drops a check (shard-cover.sh). durations.sh refreshes it.
+# keys_gr_typed, lint_dedupe, lint_quit_kill and tools_prompts: their time in run 39301477512 (#89), which sped them up.
 app_install_fails	1.7
 app_on_demand	0.8
 app_phases	0.6
@@ -30,7 +31,7 @@ keys_format_gate	1.1
 keys_git_context	2.0
 keys_git_unstage	0.4
 keys_global	0.3
-keys_gr_typed	18.8
+keys_gr_typed	12.3
 keys_lint_gate	0.7
 keys_lsp_gate	1.9
 keys_map_desc	0.3
@@ -40,10 +41,10 @@ lang_options	0.2
 lang_views	0.2
 lint_bufenter_skip	1.9
 lint_compound_ft	3.3
-lint_dedupe	48.2
+lint_dedupe	7.6
 lint_jactionlint	0.5
 lint_manual_installed	0.3
-lint_quit_kill	16.3
+lint_quit_kill	1.0
 lint_tools_relint	3.4
 lsp_attach	5.6
 lsp_capabilities	0.7
@@ -79,7 +80,7 @@ tools_actions	0.4
 tools_choice_state	0.9
 tools_headless_no_prompt	3.0
 tools_indicator	0.6
-tools_prompts	20.7
+tools_prompts	1.1
 tools_resolver_order	1.8
 tools_root_nonfile	0.3
 tools_subfiletypes	0.3
