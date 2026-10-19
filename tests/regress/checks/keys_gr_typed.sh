@@ -37,6 +37,9 @@ for _, method in pairs(SENDS) do
   local path = vim.lsp.protocol._request_name_to_server_capability[method]
   if path[1] ~= "renameProvider" then caps[path[1]] = true end
 end
+-- grx is listed and acts on a line with a code lens (D132): one on the first line, whose command runs here
+local LENS = { { range = { start = { line = 0, character = 0 }, ["end"] = { line = 0, character = 5 } }, command = { title = "run", command = "nvr.gr.lens" } } }
+vim.lsp.commands["nvr.gr.lens"] = function() end
 -- every request after initialize, as "<method>:<mode when it was sent>"
 _G.HITS = {}
 local function cmd(dispatchers)
@@ -50,6 +53,7 @@ local function cmd(dispatchers)
       else
         if method ~= "shutdown" then table.insert(HITS, method .. ":" .. vim.fn.mode()) end
         if method == "shutdown" or method == "textDocument/prepareRename" then result = nil end
+        if method == "textDocument/codeLens" then result = LENS end
       end
       vim.schedule(function() callback(nil, result) end)
       return true, id
@@ -78,7 +82,15 @@ if not (id and vim.lsp.buf_is_attached(buf, id)) then
   vim.g.spy_ready = "the fake server did not attach to " .. vim.api.nvim_buf_get_name(buf)
   return
 end
--- let what the attach scheduled run
+-- let what the attach scheduled run, and the lens arrive (Neovim asks for lenses as it draws)
+flush()
+if not vim.wait(3000, function()
+  vim.cmd.redraw()
+  return #vim.lsp.codelens.get({ bufnr = buf }) == 1
+end, 20) then
+  vim.g.spy_ready = "the fake server's code lens was not drawn"
+  return
+end
 flush()
 _G.HITS = {}
 

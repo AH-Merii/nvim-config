@@ -1,18 +1,26 @@
 -- Every key is a row: ours, a plugin's or Neovim's own. A row with a need acts only where the need holds, and the
--- popup lists it only there (docs/rearchitecture-decisions.md, D48 and D49).
+-- popup lists it only there (docs/rearchitecture-decisions.md, D48, D49, D132 and D133).
 --
 --   local key = require("keys").feature("lsp")          -- an adder for one owner
 --   key({ "gd", function() Snacks.picker.lsp_definitions() end, "Definition", need = "definition" })
---   keys.need("git", function(buf) return vim.b[buf].gitsigns_status_dict ~= nil end)
+--   keys.need("a fold here", function(buf, win) return win ~= nil and … end)
 --   keys.language("python")({ "]]", label = "Next top-level def/class" })
 --   keys.holds("rename", buf)  -- what a press of grn gets now
 --   keys.menu(buf, "n")        -- what the popup lists now
 --   keys.list()                -- every row, its owner and file:line
 --
+-- A need says whether the key would act at the cursor now (D132), so the popup lists only keys that do something
+-- here: a hunk key on a hunk's line, a fold key on a fold. Where the action doesn't depend on the cursor the answer
+-- is a buffer or cwd fact ("formatter", "git cwd"). An LSP method or client need is the closest answer knowable
+-- without asking the server: an attached server supports the method, not that it has something here (D133).
+-- Two kinds of row stay at buffer level by decision, their cursor-level answer being too slow for a popup rebuild:
+-- ]] and [[ (word references) and the treesitter moves (D132).
+--
 -- A row with a need is one global expr map: a press tests the need in the current buffer; where it holds the action
 -- runs, elsewhere the key does what it did before (the map it took over, or Vim's own key). A leader key, or a row
--- with `echo`, says which need failed instead. Only language rows are buffer-local, and a buffer's own map always
--- wins. Needs are read when used, so nothing here runs on attach, FileType or registration.
+-- with `echo`, says which need failed instead. A label-only row with a need lists the key, whoever maps it, only
+-- where the need holds. Only language rows are buffer-local, and a buffer's own map always wins. Needs are read when
+-- used, so nothing here runs on attach, FileType or registration.
 local M = {}
 
 ---@alias keys.Icon string|{ icon: string, color?: string }
@@ -68,7 +76,7 @@ local M = {}
 local entries = {} ---@type keys.Entry[]
 local slots = {} ---@type table<string, keys.Slot>
 local order = {} ---@type keys.Slot[]
-local tests = {} ---@type table<string, fun(buf: integer): boolean>
+local tests = {} ---@type table<string, fun(buf: integer, win?: integer): boolean>
 local watchers = {} ---@type fun(slot: keys.Slot)[]
 
 local KNOWN = { "lhs", "label", "need", "toggle", "icon", "mode", "group", "native", "hidden", "echo", "listed", "remap", "silent", "nowait" }
@@ -95,6 +103,18 @@ end
 
 local warned = {} ---@type table<string, true>
 
+--- The window whose cursor a need reads for buf: the current one when it shows buf, else the first that does.
+---@param buf integer
+---@return integer?
+local function window_of(buf)
+  local win = vim.api.nvim_get_current_win()
+  if vim.api.nvim_win_get_buf(win) == buf then
+    return win
+  end
+  win = vim.fn.bufwinid(buf)
+  return win ~= -1 and win or nil
+end
+
 --- Whether need holds in buf, read now.
 ---@param need string
 ---@param buf integer
@@ -102,7 +122,7 @@ local warned = {} ---@type table<string, true>
 local function test(need, buf)
   local fn = tests[need]
   if fn then
-    local ok, held = pcall(fn, buf)
+    local ok, held = pcall(fn, buf, window_of(buf))
     if not ok and not warned[need] then
       warned[need] = true
       vim.notify(("keys: the need %q failed: %s"):format(need, held), vim.log.levels.ERROR)
@@ -177,10 +197,11 @@ function M.holds(need, buf)
   return test(need, buf)
 end
 
---- Defines a need word. test must be a lookup (it runs on a press and once per popup rebuild); an owner caches
---- anything slow.
+--- Defines a need word: whether a row that names it would act at the cursor now. test gets the buffer and the window
+--- whose cursor to read (the current one when it shows buf; nil where no window does). It must be a lookup (it runs
+--- on a press and once per popup rebuild, D61's frame); an owner caches anything slow.
 ---@param word string
----@param fn fun(buf: integer): boolean
+---@param fn fun(buf: integer, win?: integer): boolean
 function M.need(word, fn)
   assert(not word:match("^client:") and not method_of(word), ("keys: %q is an LSP method or client need"):format(word))
   tests[word] = fn
@@ -661,7 +682,8 @@ end
 
 --- Whether the popup lists a map or spec of slot in the current buffer.
 ---@param slot keys.Slot
----@param kind "spec"|"ours"|"other" our popup spec, our global map, or anyone else's map on the lhs
+---@param kind "spec"|"ours"|"other"|"buffer" our popup spec, our global map, another's global map, or a buffer's
+---   own map on the lhs
 ---@param memo table answers for this rebuild
 function M._lists(slot, kind, memo)
   local buf = vim.api.nvim_get_current_buf()
@@ -675,8 +697,21 @@ function M._lists(slot, kind, memo)
       return false
     end
   end
-  if kind == "other" then
+  if kind == "buffer" then
     return true
+  end
+  if kind == "other" then
+    -- a label-only row with a need (Neovim's ]d and gx) lists the key, whoever maps it, only where the need holds
+    local gated = false
+    for _, e in ipairs(slot.entries) do
+      if not e.action and not e.row.group and not e.ft and #e.needs > 0 then
+        if shows(e, buf, memo) then
+          return true
+        end
+        gated = true
+      end
+    end
+    return not gated
   end
   for _, e in ipairs(slot.entries) do
     if (kind == "spec" or (e.action and not e.ft)) and shows(e, buf, memo) then

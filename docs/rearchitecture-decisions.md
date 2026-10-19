@@ -46,6 +46,9 @@ The full proposal, with its measurements and sources, was written outside the re
   tools seams ("D116: treesitter parsers on demand" below).
 - Decided and built (2026-10-19): D128, python keeps regex syntax beside treesitter for its indent plugin, declared in
   its language file's new `treesitter` field ("D128: python keeps regex syntax beside treesitter" below).
+- Decided and built (2026-10-19): D132, a key's need is "would act at the cursor now", so the popup lists only keys
+  that do something there, and D133, server-only keys keep "a server supports the method" (below). D48's needs read
+  as D132 says.
 - Decided and built (2026-10-19): D137 to D139, the statusline names the tools of the formatters and linters that will
   run, once each, not conform's or nvim-lint's entries ("D137: the statusline names tools, not entries" below).
 
@@ -154,7 +157,8 @@ common caller, Neovim-native).
   buffer-local rows; `keys.need(word, test)`; `keys.holds(need, buf)`; `keys.menu(buf, mode)`;
   `keys.list()`.
 - A need is a word defined with `keys.need`, an LSP method by name, or `client:<name>`. Tests must be
-  lookups; an owner caches anything slow.
+  lookups; an owner caches anything slow. (D132: a need answers whether the key would act at the cursor now; an LSP
+  method need is the closest answer knowable, a server that supports it, D133.)
 - A row with a need is one global expr map. A press tests the need in the current buffer; where it holds
   the action runs, elsewhere the key does what it did before (the map it took over, or Vim's own key).
   A leader key has nothing to fall back to, so it echoes the need. Only language rows are buffer-local,
@@ -2052,6 +2056,127 @@ the indent setting ignored (8), the toggle's start without the syntax setting (a
 left out of `lang.of`'s answer. By `treesitter_lang`: the feature reading no settings, the indent setting ignored, the
 toggle without the syntax setting. By the unit tier: variants not inheriting, the undeclared-dotted fallback dropping
 the settings or keeping the first part's, and no check of names or of booleans.
+
+## D132: a key's need is "would act at the cursor now" (2026-10-19)
+
+**Context.** D48 defined a need as where a key acts, and each owner read it as "could act in this buffer": a hunk key
+needed gitsigns attached, a fold key nothing, `grx` a server with code lenses. The which-key popup then listed keys
+that do nothing where the cursor is: `<leader>Gr` on a line with no hunk, `zo` with no closed fold, `]d` with no
+diagnostic. Every press of a trigger key (`g`, `z`, `]`, `[`, `<leader>`) rebuilds the mode's tree
+(which-key `state.lua:286-288` calls `Buf.get` with `update`, and `buf.lua:117-118` clears the tree), and each need is
+tested once per rebuild (`keys/which_key.lua`'s memo, cleared with the tree; `held` in `keys/init.lua`). So a need's
+cost is paid on each of those presses, inside D61's 8.3 ms frame. The benchmark that framed this decision is in
+`~/.cache/nvim-config/d132/` (`scripts/`, `out/`).
+
+**Decision (the user's).** A need answers whether the key would act at the cursor now, where that answer is cheap:
+
+- The hunk keys read gitsigns' hunks (`features/git.lua`): `]g`, `[g` and `<leader>GR` an unstaged hunk anywhere;
+  `<leader>Gr` an unstaged hunk on the cursor's line; `<leader>gd` and `<leader>Gs` an unstaged or a staged one there
+  (gitsigns' preview and stage take either); `<leader>Gu` a staged one there. `<leader>gb`, `<leader>Gd` and
+  `<leader>TG` act on any line of a buffer gitsigns is attached to, so they keep `git`.
+- `<leader>xX`, `<leader>sd`, `]d` and `[d` need a diagnostic in the buffer (`vim.diagnostic.count(buf)`), not a
+  client or a linter that could produce one.
+- `grx` needs a code lens on the cursor's line, from the lenses Neovim drew (`vim.lsp.codelens.get`). With lenses off
+  in the buffer (`<leader>Tc`) it falls back to a server that has them: `grx` asks the servers afresh
+  (`$VIMRUNTIME/lua/vim/lsp/codelens.lua:419-431`), so it still acts.
+- Neovim's own keys (`keys/neovim.lua`): `za`, `zA`, `]z`, `[z` a fold on the line; `zo`, `zO` a closed one; `zc`,
+  `zC` an open one, or a closed one inside an open one; `zd`, `zD` manual or marker folding and a fold on the line;
+  `zf` (Normal and Visual) manual or marker folding; `]s`, `[s` spell checking on; `z=`, a new row, a misspelled
+  word under the cursor with spell checking on; `gx`, a new Normal-mode row, a path or URL under the cursor.
+- Folds and spelling are the window's, so a need now gets `(buf, win)`: the window whose cursor and options to read,
+  the current one when it shows the buffer, nil where none does.
+- A label-only row with a need over another's global map (Neovim maps `]d`, `[d` and `gx`) hides that map in the popup
+  where the need fails (`keys._lists`); a buffer's own map is listed as before. The key is pressed as before
+  everywhere: those rows map nothing.
+- Every other row's need already answered the question: `formatter`, `linter`, `treesitter` (the action is on the
+  buffer), `git cwd`, `git file`, `git remote`, `github`.
+
+Exceptions, buffer level by decision:
+
+- `]]` and `[[`, the word-reference moves, keep `documentHighlight`: the references of the word under the cursor are
+  extmarks Snacks keeps, and reading them by namespace walks every extmark of the buffer, 2.53 ms a check (p90 2.85)
+  on a 4208-line python file with 3007 diagnostics, 631 hunks and 601 lenses (`out/bench-large.json`, "proto: word
+  refs"). Neovim's own label rows on those keys (`keys/neovim.lua`) have no need and stay as they are.
+- The treesitter moves (`]f`, `[f`, … 22 keys, `textobjects/init.lua`) keep their `listed` (a language of the buffer
+  has the capture): the next or previous capture from the cursor cost up to 0.36 ms a key (median, p90 0.56, "extra:
+  next function (]f)"), times 22 keys.
+- `]s` and `[s`: whether a misspelled word is anywhere takes a spell scan of the buffer; spell checking on is the
+  answer.
+- `<leader>gD` (the repo's diff picker) keeps `git cwd`: whether the repo has changes takes a git process.
+- `<leader>gL` (the line's log) keeps `git file`: the picker runs `git log -L <line>,+1:<file>` (snacks
+  `picker/source/git.lua:137-142`), which counts lines in HEAD's version, so a check on the buffer's line (a hunk
+  there) is no closer to whether it finds a log.
+
+`gx` leaves out the server's document links: Neovim's own `vim.ui._get_urls` asks every server that has them with a
+synchronous `textDocument/documentLink` request (`$VIMRUNTIME/lua/vim/ui.lua:236-271`), 0.31 ms a check on the
+large file ("extra: vim.ui._get_urls"), and a round trip to the server on each rebuild. The need reads what Neovim
+reads besides: a URL extmark at the cursor, a URL the highlights query names (a markdown link's text), and `<cfile>`
+as a URL or an existing path. On a link only a server knows, `gx` is not listed but still opens it.
+
+The hunks come from gitsigns' cache (`gitsigns.cache`), found as gitsigns finds the cursor's hunk
+(`gitsigns.hunks.find_hunk`), both private: the public `get_hunks()` copies every hunk, 0.98 ms a check (p90 6.2)
+against 0.014 ms ("extra: hunk here (public get_hunks)", "proto: hunk here"). Should either module go, the hunk keys
+act wherever gitsigns is attached, as before; should the cache's fields change, `keys_act_here` fails. An update
+clears both fields until its diffs land (gitsigns `manager.lua`'s `update`), so a key pressed then acts as before:
+`<leader>Gu` right after `<leader>Gs` found no staged hunk yet (`gitsigns_unstage`).
+
+**Cost (D61).** Measured with the benchmark's scripts on this branch, the needs of main and of D132 interleaved in one
+session (`~/.cache/nvim-config/d132-impl/scripts-branch/`, `out-branch6/`), median (p90) in ms:
+
+- On the large file, a which-key rebuild in Normal mode went from 2.63 (5.05) to 3.35 (8.55), paired +0.69 (p10-p90
+  -1.96 to +4.50); `keys.menu` from 2.75 (6.33) to 3.54 (10.39). On a 17-line file the rebuild went from 1.95 (4.87)
+  to 2.08 (5.47), paired +0.11. Visual mode moved by under 0.2.
+- In the TUI, a rebuild over every trigger key on the large file was 5.46 (7.40), n=48, against 4.66 (7.13) and 4.29
+  (6.71) for main's needs in the same run. The costliest needs a check: a code lens on this line 0.25 (0.43), a
+  diagnostic in the buffer 0.16 (0.31), a hunk here 0.08 (0.19).
+- `gx`'s first version read the treesitter URL at the cursor in every buffer, 0.54 ms a rebuild in the TUI, and the
+  TUI rebuild was 6.53 (p90 10.10). It now asks treesitter only where a language's highlights query sets a URL
+  (cached per language) and widens `isfname` only on a line with an `@`: 0.03 (0.06) a check.
+
+**Tests.** Unit: `tests/unit/keys_neovim_test.lua` tests each of Neovim's needs over its variants (manual, nested,
+indent and marker folds, another window on the buffer, spell in Normal, Visual and Operator-pending mode, `z=`,
+diagnostics in another buffer, `gx` on a URL, a path, a path with `@`, a missing path, a plain word, a URL extmark and
+a markdown link, `grx` with lenses on and off); `keys_test.lua` that a need reads the cursor of the window showing
+the buffer. Regress: `keys_act_here` moves over a staged, an unstaged and a deleted-line hunk, a lens line and an
+empty line, checks the presses that echo, `]]` and `[[` listed on an empty line, Neovim's `]d`, `[d` and `gx` hidden
+by their need but a buffer's own `]d` listed, and ends with the classification: every row with a need is cursor
+level, buffer level by decision or a server's, server rows need only a method or a client, and no entry is stale.
+`keys_diag_gate`, `keys_git_context` and `keys_lsp_gate` follow the new needs.
+
+Sibling wrong implementations, each one replacement (`~/.cache/nvim-config/d132-impl/wrong/run.sh`), all 17 caught.
+By `keys_act_here`: a hunk on any line, the staged need reading the unstaged hunks, a hunk's range without delete
+hunks, `]]` gated at the cursor, `_lists` not gating others' maps, a buffer's own map gated, an unclassified row,
+`gx` on any word, `grx` on any line (the last two also by the unit tier). By `keys_diag_gate` and the unit tier:
+every buffer's diagnostics counted. By the unit tier only: the fold needs reversed, `zd` on any line, `z=` ignoring
+spell, `gx` without treesitter, `gx` without the `@` in `isfname`, `grx` false with lenses off, and a need given the
+current window whatever buffer it shows.
+
+**Rejected.** Cursor-level needs for `]]`, `[[` and the treesitter moves, for the costs above: with `]]` and `[[` at
+cursor level the TUI rebuild was 9.28 ms (median over every trigger key, p10-p90 7.16-12.45), past the frame
+(`out/tui-presses.json`, the "proto" arm).
+
+## D133: server-only keys keep "a server supports the method" (2026-10-19)
+
+**Context.** D132 leaves the keys whose answer only a server has: code action, rename, definition, references,
+implementation, type definition, declaration, call hierarchy, hover, symbols (the `gr*` keys, `gd`, `gD`, `gI`, `gt`,
+`gC*`, `K`, `<leader>lr`, `<leader>cs`, `<leader>cl`, `<leader>sS`), and the toggles on a server's capability
+(`<leader>Th`, `<leader>Tc`, `<leader>Te`). Whether `gra` would act at the cursor is a `textDocument/codeAction`
+request.
+
+**Decision (the user's).** Their needs stay "an attached server supports the method": the closest answer knowable
+without asking the server. The `keys/init.lua` header says so. Nothing is prefetched.
+
+**Rejected.** Prefetching on CursorHold, so a popup would read answers asked for at the cursor
+(`~/.cache/nvim-config/d132/out/walk-4000.json`, `walk-300.json`, `kind2-*.json`; a 105.7 s scripted walk with 10
+popup opens, pyrefly and ruff on the large python file):
+
+- At Neovim's default `updatetime`, 4000 ms (the config doesn't set it), 3 CursorHolds fired in the walk and none of
+  the 10 popups found a fresh answer: 7 found none, 3 one for another position.
+- At 300 ms all 10 were fresh, but it fired 30 CursorHolds (120 requests) in the walk, and `updatetime` is also when
+  Neovim writes the swap file (`:h 'updatetime'`), so lowering it writes the swap file after every pause of 300 ms.
+- In python the answer changes little: ruff offers code actions at 30 of 30 positions (`source.fixAll.ruff`,
+  `source.organizeImports.ruff`), so `gra` would be listed everywhere anyway; and right after an edit pyrefly's code
+  action answer took 179 ms (median, n=10) on the large file.
 
 ## D137: the statusline names tools, not entries (2026-10-19)
 

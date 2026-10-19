@@ -343,10 +343,18 @@ keys.language("python")({ "]]", label = "Next top-level def/class" })  -- a labe
 - A row is `{ lhs, action, label }` plus `need`, `toggle`, `icon`, `mode`, `group`, `native` (Vim's own key with no
   map), `hidden`, `echo`, `listed`, `remap`, `silent`, `nowait`. An unknown field raises.
 - `need` says where the key acts: a word defined with `keys.need(word, test)`, an LSP method (`"rename"`,
-  `"workspace/symbol"`) or `"client:<name>"`. A test runs on every press and once per popup rebuild, so it must be a
-  lookup; cache anything slow in the owner, filled by the owner's own events (`features/git.lua`'s git needs).
+  `"workspace/symbol"`) or `"client:<name>"`. A word answers whether the key would act at the cursor now (D132): a
+  hunk key needs a hunk on the cursor's line, a fold key a fold there; a key whose action doesn't depend on the cursor
+  needs a buffer or cwd fact. `test(buf, win)` gets the window whose cursor and window options to read (nil where no
+  window shows the buffer). An LSP method need is the closest answer knowable without asking the server: a server
+  supports the method (D133). `]]`, `[[` and the treesitter moves stay at buffer level, by decision.
+- A test runs on every press and once per popup rebuild (each press of `g`, `z`, `]`, `[` or `<leader>`), inside
+  D61's 8.3 ms frame, so it must be a lookup; cache anything slow in the owner, filled by the owner's own events
+  (`features/git.lua`'s git needs). A new row with a need is classified in `keys_act_here`'s table (cursor, buffer
+  by decision, or server), which fails until it is.
 - Where the need fails the key does what it did before: the global map it took over, or Vim's own key. A `<leader>`
-  key, or a row with `echo = true` (Neovim's `gr*` and `gO`), echoes the need it lacks instead.
+  key, or a row with `echo = true` (Neovim's `gr*` and `gO`), echoes the need it lacks instead. A label-only row
+  with a need over another's global map (Neovim's `]d` and `gx`) only hides the key where the need fails.
 - Rows are global maps; only `keys.language(ft)` rows are buffer-local, and a buffer's own map (an ftplugin's) wins.
 - `keys.holds(need, buf)` and `keys.menu(buf, mode)` say where a key acts and what the popup lists; `keys.list()` gives
   every row with its owner and `file:line`. `:map` and the keymaps picker list a gated key in every buffer.

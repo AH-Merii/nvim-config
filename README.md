@@ -13,8 +13,9 @@ through [mise](https://mise.jdx.dev). It supports Go, Rust, Python, Lua, TypeScr
 - **Neovim's own UI for messages and the command line** (ui2), with noice.nvim's look from
   [neoblocks.nvim](https://github.com/AH-Merii/neoblocks.nvim)'s messages module: `:` in a popup near the top,
   messages as toasts, long output in a split and a message history (`<leader>n`).
-- **Keys that act where they work.** which-key lists a key only where it does something; elsewhere a leader key or
-  an LSP gr* key says what is missing, such as the method no server supports.
+- **Keys that act where they work.** which-key lists a key only where it would act at the cursor: a hunk key on a
+  hunk's line, a fold key on a fold, `grx` on a code lens. An LSP key is listed where a server supports its method.
+  Elsewhere a leader key or an LSP gr* key says what is missing.
 - **snacks.nvim** for pickers, notifications, indent guides and smooth scrolling; the statusline from neoblocks.nvim;
   which-key, gitsigns, diffview, trouble, flash and treesitter.
 - **Treesitter parsers on demand.** Nothing installs at startup: opening a file installs its language's parser and

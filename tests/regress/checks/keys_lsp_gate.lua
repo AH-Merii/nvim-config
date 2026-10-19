@@ -59,7 +59,6 @@ local KEYS = {
   { "gra", mode = "x", need = { "textDocument/codeAction" } },
   { "gri", need = { IMPL } },
   { "grt", need = { TYPE } },
-  { "grx", need = { "textDocument/codeLens" } },
   { "gO", need = { "textDocument/documentSymbol" }, fallback = "nothing" },
 }
 local function name(key) return (key.mode or "n") .. " " .. key[1] end
@@ -358,8 +357,9 @@ end
 
 section("every key a server brings is judged")
 -- the keys the popup gains when a server that supports every method attaches: each is one of KEYS, or a key a
--- check of its own judges (the format keys in keys_format_gate, the diagnostics keys in keys_diag_gate)
-local ELSEWHERE = { "n <leader>lf", "x <leader>lf", "n <leader>Tf", "n <leader>xX", "n <leader>sd" }
+-- check of its own judges (the format keys in keys_format_gate, the diagnostics keys in keys_diag_gate, grx, which
+-- needs a code lens on its line, in keys_act_here)
+local ELSEWHERE = { "n <leader>lf", "x <leader>lf", "n <leader>Tf", "n <leader>xX", "n <leader>sd", "n grx" }
 local Util = require("which-key.util")
 local known = {}
 for _, key in ipairs(KEYS) do known[(key.mode or "n") .. " " .. Util.norm(key[1])] = true end
@@ -416,9 +416,10 @@ vim.system({ vim.v.progpath, "--clean", "--headless", "-c",
 local builtins = vim.fn.filereadable(tmp) == 1 and vim.fn.readfile(tmp) or {}
 info("runtime built-ins: " .. table.concat(builtins, ", "))
 expect(#builtins > 0, "the runtime defines gr* maps")
-local ours = {}
+-- grx acts where a code lens is on its line (D132), judged in keys_act_here
+local ours = { ["n grx"] = true }
 for _, key in ipairs(KEYS) do ours[name(key)] = true end
 for _, line in ipairs(builtins) do
-  expect(ours[line], "runtime %s is judged here, so it acts only where a client supports it", line)
+  expect(ours[line], "runtime %s is judged here or in keys_act_here, so it acts only where it can", line)
 end
 done()
