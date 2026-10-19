@@ -46,6 +46,8 @@ The full proposal, with its measurements and sources, was written outside the re
   tools seams ("D116: treesitter parsers on demand" below).
 - Decided and built (2026-10-19): D128, python keeps regex syntax beside treesitter for its indent plugin, declared in
   its language file's new `treesitter` field ("D128: python keeps regex syntax beside treesitter" below).
+- Decided and built (2026-10-19): D135, markdown drops regex syntax beside treesitter and spells table cells with a
+  query of its own; yaml and markdown keep their indent, now with measured reasons ("D135" below).
 
 ## Target layout
 
@@ -2048,3 +2050,81 @@ the indent setting ignored (8), the toggle's start without the syntax setting (a
 left out of `lang.of`'s answer. By `treesitter_lang`: the feature reading no settings, the indent setting ignored, the
 toggle without the syntax setting. By the unit tier: variants not inheriting, the undeclared-dotted fallback dropping
 the settings or keeping the first part's, and no check of names or of booleans.
+
+## D135: markdown drops regex syntax; yaml and markdown keep their indent, measured (2026-10-19)
+
+**Context.** D128 moved yaml's `{ indent = false }` and markdown's `{ indent = false, syntax = true }` into their
+language files with no recorded reason. The measurements below, on Neovim 0.13 nightly (v0.13.0-dev-1895) with the
+lockfile's nvim-treesitter, are in `~/.cache/nvim-config/d129/` (`yaml/`, `md/`, `bench/`).
+
+**Decision (the user's).**
+
+- yaml keeps the runtime's `GetYAMLIndent` (`indent = false`). It is right in 21 of 23 typed cases against
+  nvim-treesitter's 19, and never wrong where nvim-treesitter is right (`yaml/yaml_indent.out`). `==` on a
+  mis-indented line fixes 4 of 5 against none (`yaml/yaml_indent.out` FIXLINE, `yaml/yaml_eq.out`).
+- markdown keeps autoindent's indent (`indent = false`; `$VIMRUNTIME/indent/` has no markdown file).
+  nvim-treesitter's markdown `indents.scm` is only `(list_item) @indent.auto`. Each is right in 10 of 15 typed cases,
+  each right in one the other gets wrong: autoindent's on a heading typed after an indented line, treesitter's after a
+  paragraph starting with `if` (`md/md_indent.out`, `typed`). Treesitter's costs 35.7 to 37.2 ms per `oX<Esc>` on the
+  2050-line `docs/rearchitecture-decisions.md` against 1.0 to 1.5 ms (`md/md_cost.out`, medians of 3).
+- markdown drops `syntax = true`: its buffers run treesitter's highlighting alone. With regex syntax beside it the
+  screen differed in 11 attribute runs and no text (`md/md_render.out`): `markdownError` (linked to `Error`) on a `_`
+  inside a word, from `syn match markdownError "\w\@<=_\w\@="` (`$VIMRUNTIME/syntax/markdown.vim:148`), `htmlTag` on
+  the spaces inside tags, `markdownEscape` and `markdownFootnoteDefinition`. Nothing the config uses reads markdown's
+  syntax groups: the ftplugin's `MarkdownFold` only runs with `g:markdown_folding`, which is unset
+  (`$VIMRUNTIME/ftplugin/markdown.vim:85`, `md/md_render.out` options line); matchparen uses treesitter captures when
+  `syntax` isn't `'on'`, and the config's was `"ON"` (`$VIMRUNTIME/lua/nvim/matchparen.lua:152`); blink has no omni
+  source (`features/completion.lua`, `sources.default`).
+- The one thing only regex syntax gave was spelling in table cells: every `]s` stop it added was in one (10 against
+  9 on a sample, 57/53 on README.md, 211/211 on CONTRIBUTING.md, 1595/1568 on the decisions doc, `md/md_render.out`).
+  The markdown highlights query spells only `(inline)` (nvim-treesitter's `runtime/queries/markdown/highlights.scm:123`,
+  and Neovim's own at the same line), and a table cell is a `pipe_table_cell`. So the config adds
+  `(pipe_table_cell) @spell` in `nvim/queries/markdown/highlights.scm`, whose `;; extends` adds it to whichever
+  markdown query is the base, nvim-treesitter's or Neovim's, instead of replacing it: `vim.treesitter.query.get_files`
+  takes the first file without the modeline as the base and appends every file with it, wherever it sits on the
+  runtimepath (`$VIMRUNTIME/lua/vim/treesitter/query.lua:219-238`).
+- Where the query lives: the config had no query files. Not `after/queries/`: the rearchitecture left no `after/`
+  directory, and `;; extends` makes the position on the runtimepath irrelevant. Not a field in `lang/markdown.lua`:
+  `vim.treesitter.query.set` replaces a query, so the field would need code to read and join the base files, where
+  Neovim's file lookup does it with no code, read only when the query loads. `lang/markdown.lua` names the file in its
+  comment.
+
+**Rejected.**
+
+- **Treesitter indent for yaml:** 19 of 23 typed cases, and `==` fixes none of 5 mis-indented lines (above).
+- **Treesitter indent for markdown:** right no more often than autoindent's, at about 36 ms per `o` against about
+  1.3 ms (above).
+- **Keeping regex syntax for markdown:** it costs every redraw. On the 2050-line doc, 160x50 pty, medians of 3,
+  treesitter alone → with regex syntax: `:redraw!` 0.8 to 2.15 → 3.7 to 8.2 ms, a page scroll 1.7 to 1.8 → 6.8 to 11.4
+  ms (`bench/r1.txt`, `r2.txt`; D128's bench), the scroll at the end over D61's 8.3 ms frame. `:syntime` counts 8.2 ms
+  of syntax patterns a page. What it drew beyond treesitter was wrong or unused (above).
+
+### Cost (D61, D93)
+
+- **Startup, per key:** none. The query file is read with the rest of markdown's highlights query, the first time a
+  markdown buffer starts treesitter.
+- **Per redraw, markdown buffers:** the config before → after, spell on as the config sets it for markdown, same
+  file and bench (`~/.cache/nvim-config/d135/bench/run.sh`, D129's runner with the worktree's `nvim/` on the
+  runtimepath for the after run; `before.txt`, `after.txt`). In ms:
+
+  | where | `:redraw!` | edit a line + redraw | page down + redraw |
+  | --- | --- | --- | --- |
+  | top | 7.11 → 2.45 | 1.41 → 1.36 | 7.38 → 2.07 |
+  | middle | 8.72 → 2.13 | 1.97 → 1.12 | 8.03 → 2.14 |
+  | end | 3.88 → 1.02 | 1.14 → 0.78 | 12.00 → 2.27 |
+
+  The table-cell capture costs nothing measurable: treesitter alone with spell on gave 2.21 to 2.27 ms a page scroll
+  without the query (`before.txt`) and 2.07 to 2.27 with it (`after.txt`).
+
+### Tests
+
+Regress, `treesitter_lang`: its existing rule checks that markdown has no regex syntax beside treesitter now that it
+declares none. Added for markdown with treesitter alone: `]s` from the top stops at exactly the misspelled word in
+text and the one in a table cell, and an underscore inside a word has no error group among its syntax and treesitter
+highlights (`vim.inspect_pos`).
+
+Sibling wrong implementations, each one change on a copy of `nvim/` (`~/.cache/nvim-config/d135/wrong/run.sh`), all
+caught by `treesitter_lang`: the query file missing (`]s` stops only in the text), the query without `;; extends`, so
+it replaces the base and drops `(inline) @spell` (`]s` stops only in the cell), and `syntax = true` kept (the
+underscore gets `markdownError`, linked to `Error`). Before the query, with regex syntax already off, the table-cell
+check failed the same way as the missing query.

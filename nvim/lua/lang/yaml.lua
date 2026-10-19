@@ -4,7 +4,8 @@ return {
   servers = { yamlls = { settings = { yaml = { format = { enable = false } } } } },
   formatters = { "prettierd" },
   linters = { yamllint = {} },
-  -- The runtime's GetYAMLIndent; the history gives no reason beyond "TS indent can misbehave" (D128)
+  -- The runtime's GetYAMLIndent (D135): right in 21 of 23 typed cases against nvim-treesitter's 19, never wrong where
+  -- that is right, and `==` fixes 4 of 5 mis-indented lines against none
   treesitter = { indent = false },
   variants = {
     ["yaml.github-actions"] = {
