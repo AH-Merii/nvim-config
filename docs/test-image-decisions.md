@@ -130,8 +130,49 @@ and the tools would reinstall on every config change.
 **Rejected.** GHCR as a registry cache: needs `packages: write`, and pull requests from forks can't push to it.
 An inline cache: caches the final stage only.
 
-Runner limits: the image is 2.72 GB and the build keeps the stages besides it, so the job first deletes the
-runner's Android, .NET and GHC trees for disk headroom. Not measured on a runner.
+Runner limits: the image is 2.72 GB and the build keeps the stages besides it. The job used to delete the
+runner's Android, .NET and GHC trees first for disk headroom; measured on a runner, the disk had room without it,
+so D148 dropped that step.
+
+## D148: CI skips what it doesn't need (2026-10-19)
+
+Decided by the user, from measured runs (logs in `~/.cache/nvim-config/ci-speed/`).
+
+**Decision.** Two changes to `.github/workflows/test.yml`:
+
+- The "Free disk space" step is gone. A runner starts with 86 GB free (`/dev/root 145G 59G 86G 41%`, run
+  39290079036), not the ~14 GB the step's comment assumed, and deleting the trees took 47 to 119 s of each run's
+  413 to 585 s (9 runs on 2026-10-19).
+- A `changes` job runs `.github/test-inputs.sh`, which lists the files the run changes (a pull request: its merge
+  commit against the base tip; a push to main: against the commit the push moved main from) and says whether any
+  is a test input. When none is, the `test` job is skipped by its `if:`. Release PRs and their merges (release-please
+  changes `CHANGELOG.md` and `.release-please-manifest.json` only; 12 of the last 30 merged PRs) and docs-only
+  changes skip; each ran the whole 6 to 9 minute job before.
+
+Not test inputs, so they skip: `docs/` except `docs/languages.md` and `docs/languages.lua` (the unit tier renders
+the one from the other, `tests/unit/languages_doc_test.lua`), `.claude/`, `.githooks/`, `CHANGELOG.md`,
+`.release-please-manifest.json`, `release-please-config.json`, `version.txt`, `README.md`, `CONTRIBUTING.md`,
+`AGENTS.md`, `CLAUDE.md`, `LICENSE`, `.gitignore`. Everything else runs, so a new path runs until it is listed: the
+build context is `nvim/` and `tests/` (`/.dockerignore`), CI runs `mise-tasks/test/image/_default` and the
+workflows, and `mise.toml` and the rest of `mise-tasks/` run too, though no test reads them today. Doubt runs: an
+event other than a pull request or a push, a push with no earlier commit, a base it can't fetch, a failed diff.
+
+**How D52 still holds.** The `test` job is still the required check (ruleset "main: test must pass"), and a job
+skipped by its `if:` reports success to it, where a workflow skipped by `paths:` leaves the check pending and blocks
+the merge ([GitHub: handling skipped but required checks](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks)).
+It skips only when the merge changes no file the image or the tests read, so what the tests would run is what main
+already ran. If `changes` fails, its output is empty and `test` runs: the `if:` skips only on an explicit `false`
+(`!cancelled() && needs.changes.outputs.tests != 'false'`), so a broken `changes` can't turn into a green check, the
+case GitHub's page warns about for jobs that depend on a failed job.
+
+**Rejected.**
+
+- `paths:` / `paths-ignore:` on the workflow: the required check would stay pending on a release PR.
+- dorny/paths-filter: one more third-party action with the repo's token, for a diff `git` does in a few lines.
+- `if:` on each step of one job: no extra runner, but every new step has to remember the condition.
+- Skipping release PRs by branch name or author: a release PR that someone edits by hand would skip too.
+
+**Cost.** The `changes` job adds a runner start and a two-commit checkout ahead of `test` on every run.
 
 ## Local runs (2026-10-17)
 
