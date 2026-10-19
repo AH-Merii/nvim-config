@@ -86,12 +86,14 @@ Tools:
 ### In the test image
 
 `tests/image/Dockerfile` builds an image with a pinned nightly and the suite's tools, plugins and parsers,
-installed by `suite.sh --refresh-only` at build time; CI (`.github/workflows/test.yml`) runs both tiers in it.
+installed by `suite.sh --refresh-only` at build time; CI (`.github/workflows/test.yml`) runs both tiers in it, the
+suite as 4 shards in 4 containers at once (`test:image:shards`).
 
 ```sh
 mise run test:image:build          # podman (or docker, NVR_ENGINE=docker); cached, a config change rebuilds plugins only
 mise run test:image                # builds, then tests/unit/run.sh and the full suite
 mise run test:image suite lsp      # suite.sh args; `unit [args]` for the unit tier, or any command (bash)
+mise run test:image:shards [n]     # the suite as n shards (default 4) in n containers at once, as CI runs it
 ```
 
 - The checkout is mounted read-only and copied into the container beside the image's `data/`; the container is
