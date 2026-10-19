@@ -208,6 +208,53 @@ none used since 2026-10-18.
 **Known limit.** The cache service is not a documented API. If it changes, the job fails before deleting anything
 and the cache falls back to GitHub's eviction.
 
+## D153: tombi formats offline (2026-10-19)
+
+Investigation approved by the user; logs and scripts in `~/.cache/nvim-config/tombi-flake/`.
+
+**Context.** `tools_choice_state` failed twice in CI with `NOTIFY Formatting failed in mise.toml with tombi:
+Formatter 'tombi' timeout` (run 39294838773 attempt 2, run 39297757962 leg 3/3, which had its runner to itself). The
+check writes a `mise.toml`, and formatting on save runs tombi through conform, synchronously, with conform's default
+1 s timeout (`timeout_ms = 1000`, conform.nvim `lua/conform/init.lua:417`). With no catalog in its cache, or one
+older than a day (`TOMBI_CACHE_TTL`, default 86400 s), tombi first fetches the SchemaStore catalog and the file's
+schema, waiting up to 5 s (`TOMBI_HTTP_TIMEOUT`)
+([environment variables](https://github.com/tombi-toml/tombi/blob/main/docs/src/routes/docs/environment-variables.mdx)).
+The image starts with an empty `cache-seed/` (`tests/image/Dockerfile:129-130`), and a run's checks share one cache
+(`suite.sh:257`), so the first check in a run to format TOML pays the fetch. In both failures that was
+`tools_choice_state`: no check before it in its shard (fish_format to toggle_wk_specs) mentions a TOML file
+(`grep -l toml checks/*`). Measured with tombi 1.8.7 on `mise.toml`:
+
+| cache | network | time |
+| --- | --- | --- |
+| empty | up | 132 to 164 ms |
+| fresh | up | 64 to 74 ms |
+| empty | cut (`unshare -rn`) | 5.0 s, exit 1, "failed to fetch catalog" |
+| a day old | cut | 10.1 s |
+| empty or a day old | cut, `--offline` | 4 to 50 ms |
+
+The same timeout hits a user: saving a TOML file offline with a day-old cache fails every time.
+
+**Decision.** conform runs `tombi format --offline` (`nvim/lua/format/conform.lua`). Offline, tombi reads the
+cache whatever its age and skips the fetch
+([store.rs](https://github.com/tombi-toml/tombi/blob/80a03cf506e5cfb2cbcd53e0b6b24979369eb567/crates/tombi-schema-store/src/store.rs#L533-L557)),
+and its built-in `tombi://` schemas still apply: a `Cargo.toml`'s dependencies come out sorted with an empty cache,
+and a `mise.toml` formats the same with and without the fetched schema. The tombi language server stays online and
+fills the same cache (`TOMBI_CACHE_HOME`, else `$XDG_CACHE_HOME/tombi`, `crates/tombi-cache/src/lib.rs`).
+
+**Rejected.**
+
+- A longer conform timeout: a save would still block up to 5 s, or 10 s, on the network, and with an empty cache and
+  no network tombi fails anyway.
+- Pre-seeding tombi's cache in the image: fixes CI only, and the seeded catalog expires after a day.
+- `TOMBI_OFFLINE=true` in the formatter's environment: conform's `env` is already the resolver's per-project
+  environment (`nvim/lua/format/conform.lua`), so the flag is simpler.
+
+**Tests.** `toml_format_offline` saves a TOML file behind a proxy that accepts connections and never answers, once
+with an empty tombi cache and once with a stale one, and checks the written file is formatted. Before the fix it
+fails both cases with the CI message (3 of 3 runs); after, it passes 20 of 20. `tools_choice_state` with an empty
+`cache-seed/` (as in the image): 20 of 20 before and after with the network up, and 0 of 5 before, 5 of 5 after,
+with the network cut.
+
 ## Local runs (2026-10-17)
 
 - `mise run test:image:build`: podman by default (`NVR_ENGINE=docker` for docker), capped with
