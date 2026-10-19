@@ -13,6 +13,8 @@ suite.sh --area which-key       # iteration: checks tagged with an area
 suite.sh --changed main         # iteration: areas touched by `git diff main` in $CFG, plus startup and smoke
 suite.sh --work <feature>       # iteration: the checks in work/<feature>/
 suite.sh --list [...]           # print what would run, run nothing
+suite.sh --shard 2/3 [...]      # run shard 2 of 3 of the selection, balanced by durations.tsv
+shard-cover.sh 3 [...]          # check that 3 shards split the selection exactly (--results: what shard runs ran)
 suite.sh --selftest             # the runner's own tests: leak, over budget, fsmonitor, missing server
 suite.sh --refresh              # sync plugins, the suite's tools and parsers in data/ for the current CFG, then run
 suite.sh --refresh-only         # the same sync, then exit without running checks (the test image's build)
