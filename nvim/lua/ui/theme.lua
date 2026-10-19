@@ -75,9 +75,6 @@ M.plugins = {
           CursorLineNr = { fg = "$bright_orange", fmt = "bold" },
           CursorLineSign = { fg = "$bright_orange", fmt = "bold" },
           CursorLine = { bg = "$cursorline" },
-          -- hidden chars ('list'): set here, since the colorscheme's hi clear wipes highlights set before it loads
-          NonText = { fg = "#cccccc" },
-          SpecialKey = { fg = "#cccccc" },
           StatusLine = { bg = "none" },
 
           String = { fg = "$str" },
