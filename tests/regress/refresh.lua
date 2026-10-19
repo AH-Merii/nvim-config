@@ -193,6 +193,17 @@ local function parsers_sync()
   if not ok then fail("parsers update: %s", err) end
   local missing = vim.tbl_filter(function(l) return not vim.list_contains(ts.get_installed(), l) end, list)
   if #missing > 0 then fail("parsers missing: %s", table.concat(missing, " ")) end
+  -- nvim-treesitter relinks a language's queries only when its revision changes (install.lua, needs_update), so a link
+  -- into a plugin checkout that is gone (lazy.nvim's, a removed worktree's) stays, and that language loses its
+  -- injections, folds and indents without an error (D147)
+  local queries = require("nvim-treesitter.config").get_install_dir("queries")
+  local dangling = {}
+  for name, kind in vim.fs.dir(queries) do
+    if kind == "link" and not vim.uv.fs_stat(vim.fs.joinpath(queries, name)) then table.insert(dangling, name) end
+  end
+  if #dangling > 0 then
+    fail("parsers: query links point nowhere: %s (delete site/parser, site/parser-info and site/queries under %s, then refresh)", table.concat(dangling, " "), vim.fn.stdpath("data"))
+  end
   say("parsers: %d needed (%s), %d installed", #list, table.concat(list, " "), #ts.get_installed())
 end
 
