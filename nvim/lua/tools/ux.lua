@@ -613,6 +613,12 @@ local function next_prompt()
   end
 end
 
+--- Whether prompts are still being decided: a buffer's check is queued, or under way (looking up or asking). Once the
+--- check that FileType and BufEnter schedule has run, false means no further prompt comes for the buffer: a test waits
+--- on it to see that a buffer asks nothing.
+---@return boolean
+function M.asking() return busy or #queue > 0 end
+
 --- Asks what buf's project and filetype need, once per buffer and filetype.
 ---@param buf integer
 function M.check(buf)

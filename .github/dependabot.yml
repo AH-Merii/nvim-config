@@ -1,0 +1,14 @@
+# Keeps the workflows' actions current: they are pinned by commit SHA with a version comment, which nothing else
+# updates. One grouped PR a month, so the full test job runs about once a month for it (D156,
+# docs/test-image-decisions.md). Dependabot moves the SHA and the comment together.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/AH-Merii/nvim-config/compare/v1.3.0...v1.4.0) (2026-10-19)
+
+
+### Bug Fixes
+
+* **format:** saving a TOML file never waits on the network ([#92](https://github.com/AH-Merii/nvim-config/issues/92)) ([295786f](https://github.com/AH-Merii/nvim-config/commit/295786fdf99b9f6be71f71455a26ad267e785558))
+
 ## [1.3.0](https://github.com/AH-Merii/nvim-config/compare/v1.2.0...v1.3.0) (2026-10-19)
 
 
