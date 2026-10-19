@@ -49,6 +49,8 @@ The full proposal, with its measurements and sources, was written outside the re
 - Decided and built (2026-10-19): D132, a key's need is "would act at the cursor now", so the popup lists only keys
   that do something there, and D133, server-only keys keep "a server supports the method" (below). D48's needs read
   as D132 says.
+- Decided and built (2026-10-19): D137 to D139, the statusline names the tools of the formatters and linters that will
+  run, once each, not conform's or nvim-lint's entries ("D137: the statusline names tools, not entries" below).
 
 ## Target layout
 
@@ -1472,7 +1474,7 @@ tool catalog, and replaces both tables:
 - `tests/unit/languages_doc_test.lua` fails while the committed file differs from the render, naming the first
   differing line and saying to run `mise run docs`. It also checks the render names every filetype and every server,
   formatter and linter a language uses, and, on a fixture language, a covered linter's server and a variant's own
-  files and tools. CI runs the unit tier (`.github/workflows/test.yml:58`), so a stale doc fails a pull request.
+  files and tools. CI runs the unit tier (`.github/workflows/test.yml:76`), so a stale doc fails a pull request.
 - The two tables in `docs/mise-tooling-decisions.md` became dated notes that point at `docs/languages.md` and keep
   what the per-language table recorded as changes from Mason. Its "Install specs" table stays: its Verified column is
   evidence from the install runs, which the code can't give.
@@ -1798,14 +1800,16 @@ says "linters still running at exit" (`grep -c` gives 0 in `~/.cache/nvim-config
 `lint_quit_kill` drives its own nvim over a socket, so the wait can't hide an orphan there.
 
 **Checks.** `lint_quit_kill.sh`: a stand-in yamllint ignores SIGTERM and SIGINT; on one buffer it sleeps in a child,
-on another it reports a finding after 2 s.
+on another it reports a finding once the check has seen the `:wq` done.
 
 - `:wq` with two runs going (the one opening the file started and the one the write started) exits within 5 s, and
   none of their processes is alive 3 s later.
 - While Neovim runs, nothing but the quit kills a run: `:wq` that closes one window of three, `:bunload` and
   `:bdelete` each leave the buffer's newest run going, and the other buffer's lint, running at the `:wq`, still
   reports its finding.
-- Two writes cancel two runs; once nvim-lint has SIGKILLed their own pids, the quit leaves none of their processes.
+- Two writes cancel two runs; once their own pids have ended, the quit leaves none of their processes. On that
+  buffer the stand-in ends on nvim-lint's SIGINT and leaves its child, as a run that ignores it does when nvim-lint
+  SIGKILLs it 10 s later; the check doesn't wait the 10 s.
 
 On main (c7db37e) the quit cases fail, with the runs' yamllint and sleep alive. Sibling wrong versions each fail
 it: no kill; the kill on BufDelete instead of at the quit; the kill on WinClosed; the kill at the quit plus on
@@ -2173,3 +2177,76 @@ popup opens, pyrefly and ruff on the large python file):
 - In python the answer changes little: ruff offers code actions at 30 of 30 positions (`source.fixAll.ruff`,
   `source.organizeImports.ruff`), so `gra` would be listed everywhere anyway; and right after an edit pyrefly's code
   action answer took 179 ms (median, n=10) on the large file.
+
+## D137: the statusline names tools, not entries (2026-10-19)
+
+**Context.** The statusline's formatter segment drew conform's formatter names verbatim, so a python buffer showed
+`ruff_fix, ruff_format, ruff_organize_imports` (the line `statusline_facts` prints when the spec draws `formatters`:
+`󰁨  ruff_fix, ruff_format, ruff_organize_imports`). The chain: the segments joined
+`facts.get(buf).formatters` and `.linters` (`nvim/lua/ui/statusline.lua:48-51,218-228` at 9b0f6e0), which are
+`format.plan(buf).run` and `linting.plan(buf).run` (`nvim/lua/ui/facts.lua:76` at 9b0f6e0). The catalog already
+knows each entry's tool: `tools.catalog.binary(role, name)` (`nvim/lua/tools/catalog.lua:124-142`).
+
+**Decision (the user's).** The formatter and linter segments name tools, not conform's or nvim-lint's entries. Each
+entry maps through the catalog to its binary; each tool shows once, at its first entry's place in the plan; an entry
+with no catalog binary keeps its own name. Always the tool's name, even for a tool with one entry: terraform_fmt is
+terraform, fish_indent fish, golangcilint golangci-lint, clippy cargo-clippy, biomejs biome; clang_format and
+clang-format are clang-format; ruff's three are ruff.
+
+**Rejected:** merging only the tools with two or more entries. That is two rules for one list, and `:Tools` already
+names tools by binary (`nvim/lua/tools/ux.lua:809`).
+
+### D138: ruff shows as a server and as a formatter
+
+**Decision (the user's).** A tool can show in the LSP segment and the formatter segment at once: a python buffer shows
+`LSP: pyrefly, ruff` and `ruff`. The `ruff server` client and the ruff CLI conform runs are separate processes
+(`nvim/lua/tools/catalog.lua:37-43`: the server runs `ruff server`, the formatters are conform's ruff entries).
+
+**Rejected:** hiding a formatter whose tool already shows as a server. It would suggest the server formats.
+
+### D139: the grouping is a field of the facts
+
+**Decision (the user's).** `ui/facts.lua` computes `formatter_tools` and `linter_tools` beside `formatters` and
+`linters` (`ui.Facts`, `nvim/lua/ui/facts.lua:23-24`; `tools_of`, `:58-73`), when the facts recompute. The facts are
+cached until an event (`nvim/lua/ui/facts.lua:1-6`), so a redraw stays a table lookup. The statusline draws the new
+fields (`nvim/lua/ui/statusline.lua:218-228`). `formatters` and `linters` stay conform's and nvim-lint's names, so
+`ui_facts`'s cross-check against conform (`tests/regress/checks/ui_facts.lua:59-62`) and `:Status`, which keeps the
+full names (`nvim/lua/features/lsp_status.lua:286-290`), are unchanged. LSP servers are out of scope: unchanged.
+
+**Rejected:** grouping in `ui/statusline.lua`. It is work on every redraw, and the spec only draws
+(`nvim/lua/ui/statusline.lua:12`).
+
+### Cost (D61, D93)
+
+Measured in the regress sandbox (Neovim 0.13 nightly, the suite's tools) on a python buffer with pyrefly and ruff
+attached, so 3 formatters and no linter run (ruff's linting is covered by its server). A throwaway check
+(`~/.cache/nvim-config/d137/perf/statusline_perf.lua`, run with `suite.sh --work`) ran 3 times on 9b0f6e0 and 3 times
+on this change, interleaved. Medians of 51 batches:
+
+| what | 9b0f6e0 (3 runs) | this change (3 runs) |
+| --- | --- | --- |
+| per redraw, `nvim_eval_statusline` of the whole line (batches of 2000) | 12.9, 12.5, 12.6 µs | 12.9, 12.9, 12.9 µs |
+| per facts recompute, a `ToolsChanged` for the root then `facts.get` (batches of 100) | 656, 732, 686 µs | 791, 702, 674 µs |
+| the added work alone, a copy of `tools_of` over both lists (batches of 20000) | | 0.29 to 0.40 µs |
+
+- **Startup, per key:** none.
+- **Per redraw:** unchanged; the segments still join one cached list each, and the runs differ by less than their
+  spread.
+- **Per recompute:** about 0.3 to 0.4 µs, a lookup per entry; the whole recompute's run-to-run spread (about 0.1 ms)
+  hides it.
+
+### Tests
+
+Unit (`tests/unit/facts_test.lua`): a fixture language whose formatters interleave ruff's three entries with
+terraform_fmt and stylua, and whose linters are biome (no catalog binary), biomejs, nofacttool (no catalog binary)
+and ruff, gives `{ ruff, terraform, stylua }` and `{ biome, nofacttool, ruff }`, while `formatters` and `linters` keep
+the entries. A filetype change to a language whose formatters are stylua, ruff_format and whose linters are
+biome-check (no catalog binary), biomejs gives `{ stylua, ruff }` and `{ biome-check, biome }`: the tools follow a
+recompute, and neither list comes out in name order. Regress: `statusline_facts` draws the new fields and checks that
+none of python's formatter entries (ruff_fix, ruff_format, ruff_organize_imports) reaches the line.
+
+Sibling wrong implementations, each one change to `tools_of` or its call (`~/.cache/nvim-config/d137/wrong/run.sh`),
+all caught by the unit tier: a stub returning no tools, no dedupe, sorted, entries without a catalog binary dropped,
+only multi-entry tools merged (the rejected alternative), the linters left as entries, `formatters` and `linters`
+overwritten with the tools, and each tool at its last entry's place. The spec drawing `formatters` and `linters` is
+caught by `statusline_facts` ("the line names no formatter entry").

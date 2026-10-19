@@ -808,3 +808,16 @@ by default; throwaway mise dirs): an untrusted project whose `mise.toml` has an 
 the listing of mise's `trusted-configs/` (in a throwaway state dir) stays empty and the tool resolves. Against the first
 build it failed `the exec ran`; with `mise use --path` run from `/` it failed `mise's trusted configs`
 (`tools_mise_live_test.lua:44`).
+
+### D127: a folder with no project marker is no project (2026-10-19)
+
+**Context.** The "for this project only" install (D100) is offered only where the root holds a project marker
+(`tools/init.lua`, `project_markers` and `is_project`), so a loose folder such as a few scripts in `~/Downloads/x` gets
+only the global install. Counting any folder outside HOME as a project would offer it there too.
+
+**Decision (the user's).** No change: a folder with no marker stays no project. Turning one into a project stays
+deliberate and visible, with `git init` or an empty `mise.toml`.
+
+**Rejected.** Counting loose folders: the install writes `mise.local.toml` (and the tool may add a `.venv` or
+`node_modules`) into whatever folder a file was opened from, such as Downloads or a mounted drive, where it is easy to
+forget.

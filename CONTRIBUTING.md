@@ -129,14 +129,15 @@ nvim/
   generates it from `lang` and the catalog (`mise run docs`); don't edit it by hand
 
 **The statusline** (`ui/statusline.lua`, steps 4 and 4b in `docs/rearchitecture-decisions.md`)
-- `require("ui.facts").get(buf)` holds a buffer's servers running, the formatters and linters that will run, the
-  missing tools (and whether the project's mise config waits for an answer), its tools root and its git checkout. What
-  will run is `format.plan(buf).run` and `linting.plan(buf).run`; the rest is built from `lang.of`, the resolver's
-  results and the attached clients. It is cached per buffer, and `User FactsChanged` fires when it changes
-- The spec, neoblocks.nvim's statusline, only draws it: the LSP, formatter and linter lists, the tools indicator
-  (`tools.ux.status`), the branch's condition and the path's project come from the facts. A segment that needs
-  something new about a buffer gets it added to the facts, not computed in the spec. `:Status` reads its LSP and
-  formatter lines there too
+- `require("ui.facts").get(buf)` holds a buffer's servers running, the formatters and linters that will run (by
+  conform's and nvim-lint's names, and the tools they belong to: `formatter_tools`, `linter_tools`), the missing tools
+  (and whether the project's mise config waits for an answer), its tools root and its git checkout. What will run is
+  `format.plan(buf).run` and `linting.plan(buf).run`; the rest is built from `lang.of`, the resolver's results and the
+  attached clients. It is cached per buffer, and `User FactsChanged` fires when it changes
+- The spec, neoblocks.nvim's statusline, only draws it: the LSP list, the formatters' and linters' tools (ruff, not
+  ruff_fix, ruff_format; D137), the tools indicator (`tools.ux.status`), the branch's condition and the path's project
+  come from the facts. A segment that needs something new about a buffer gets it added to the facts, not computed in
+  the spec. `:Status` reads its LSP and formatter lines there too
 - The line is rebuilt on events only (the spec's `events`, what neoblocks' built-ins need, and `User FactsChanged`),
   never on a cursor move: the location and progress are statusline expressions Neovim evaluates on each draw. Only
   the search count is recounted on a move, while a search is highlighted
@@ -423,7 +424,10 @@ dirs; `tests/regress/README.md` has the options and how to write a check. Run th
 
 `mise run test:image` runs both tiers in a container with a pinned nightly and the suite's tools, built from
 `tests/image/Dockerfile`; nothing from your own setup is needed. CI runs the same image on every pull request
-(`.github/workflows/test.yml`), and a pull request merges once its `test` job is green.
+(`.github/workflows/test.yml`), the suite as 4 shards in parallel containers (`mise run test:image:shards` runs it
+the same way), and a pull request merges once its `test` job is green. A pull request that changes
+no file the tests read (docs, the changelog; `.github/test-inputs.sh` has the list) skips the job, which counts as
+green.
 `docs/test-image-decisions.md` has how the image is built, pinned and bumped.
 
 ## Notes

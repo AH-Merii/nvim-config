@@ -14,7 +14,11 @@ local tmp = h.tmpdir()
 require("tools.state").file = tmp .. "/state/projects.json"
 
 -- A language with catalog tools: stylua and shfmt format, ruff lints unless the fakesrv server runs, yamllint lints.
--- A second one only lints, with yamllint.
+-- A second one only lints, with yamllint. Two more name tools apart from their entries: several entries of one tool
+-- (ruff's formatters; biome's linter biomejs and a linter named biome), entries named apart from their tool
+-- (terraform_fmt, biomejs) and linters with no catalog binary (biome, nofacttool, biome-check: none has an nvim-lint
+-- definition here either, so they run). A language's linters run in name order (lang.of), so biome-check, which runs
+-- before biomejs, is how the linters' tools come out of name order.
 -- facts, format and linting read the registry from package.loaded.lang
 local registry = lang._from({
   factlang = {
@@ -24,6 +28,12 @@ local registry = lang._from({
     linters = { ruff = { covered_by = "fakesrv" }, yamllint = {} },
   },
   otherlang = { filetypes = { "factsother" }, linters = { yamllint = {} } },
+  toollang = {
+    filetypes = { "factstools" },
+    formatters = { "ruff_format", "terraform_fmt", "ruff_fix", "stylua", "ruff_organize_imports" },
+    linters = { nofacttool = {}, biomejs = {}, ruff = {}, biome = {} },
+  },
+  orderlang = { filetypes = { "factsorder" }, formatters = { "stylua", "ruff_format" }, linters = { biomejs = {}, ["biome-check"] = {} } },
 })
 package.loaded.lang = registry
 
@@ -41,10 +51,11 @@ local changes = {} ---@type integer[]
 vim.api.nvim_create_autocmd("User", { pattern = facts.event, callback = function(ev) table.insert(changes, ev.data.buf) end })
 
 local n = 0
---- A file of the fixture language in a fresh dir, its tools on a fake backend (stylua, ruff and yamllint installed,
---- shfmt not), resolved unless opts.resolve is false; facts and the event log start empty. opts.pins: what the dir's
---- mise config pins. The returned projects table is the fake's: a test changes a project's pins through it.
----@param opts? { resolve?: boolean, pins?: table<string, string> }
+--- A file of the fixture language (opts.ft, default factsft) in a fresh dir, its tools on a fake backend (stylua, ruff,
+--- yamllint, terraform and biome installed, shfmt not), resolved unless opts.resolve is false; facts and the event log
+--- start empty. opts.pins: what the dir's mise config pins. The returned projects table is the fake's: a test changes
+--- a project's pins through it.
+---@param opts? { resolve?: boolean, pins?: table<string, string>, ft?: string }
 ---@return integer buf, string root, table backend, table projects
 local function open(opts)
   opts = opts or {}
@@ -53,15 +64,15 @@ local function open(opts)
   vim.fn.mkdir(dir, "p")
   vim.env.PATH = dir -- an empty system PATH: only the fake's tools are found
   local projects = { [dir] = opts.pins }
-  local backend = fake({ global = { stylua = "2.0.0", ruff = "0.17.0", yamllint = "1.35.0" }, projects = projects })
+  local backend = fake({ global = { stylua = "2.0.0", ruff = "0.17.0", yamllint = "1.35.0", terraform = "1.9.0", biome = "2.0.0" }, projects = projects })
   tools.setup({ backend = backend })
   facts.setup()
   vim.cmd.edit(dir .. "/a.facts")
   local buf = vim.api.nvim_get_current_buf()
-  vim.bo[buf].filetype = "factsft"
+  vim.bo[buf].filetype = opts.ft or "factsft"
   local root = tools.root(buf)
   if opts.resolve ~= false then
-    h.await(function(done) tools.resolve_all({ "stylua", "shfmt", "ruff", "yamllint" }, root, done) end)
+    h.await(function(done) tools.resolve_all({ "stylua", "shfmt", "ruff", "yamllint", "terraform", "biome" }, root, done) end)
     tools.project(root)
     h.await(function(done) tools.project(root, done) end)
   end
@@ -80,6 +91,24 @@ local resolved = { servers = {}, formatters = { "stylua" }, linters = { "ruff", 
 h.case("what will run and what is missing: found tools run, a missing one is listed and does not run", function()
   local buf = open()
   h.eq(brief(buf), resolved)
+end)
+
+h.case("the tools the formatters and linters belong to: each name's catalog binary, once, in plan order, else the name", function()
+  local buf = open({ ft = "factstools" })
+  local f = facts.get(buf)
+  h.eq({ f.formatter_tools, f.linter_tools }, { { "ruff", "terraform", "stylua" }, { "biome", "nofacttool", "ruff" } }, "the tools")
+  h.eq({ f.formatters, f.linters }, {
+    { "ruff_format", "terraform_fmt", "ruff_fix", "stylua", "ruff_organize_imports" },
+    { "biome", "biomejs", "nofacttool", "ruff" },
+  }, "the names stay conform's and nvim-lint's")
+end)
+
+h.case("the tools follow when the formatters and linters that run change", function()
+  local buf = open()
+  h.eq({ facts.get(buf).formatter_tools, facts.get(buf).linter_tools }, { { "stylua" }, { "ruff", "yamllint" } }, "before")
+  vim.bo[buf].filetype = "factsorder"
+  settle()
+  h.eq({ facts.get(buf).formatter_tools, facts.get(buf).linter_tools }, { { "stylua", "ruff" }, { "biome-check", "biome" } }, "after a new filetype")
 end)
 
 h.case("a new filetype gets its own language's tools, with one FactsChanged", function()

@@ -4,7 +4,7 @@
 -- @needs    jactionlint yaml-language-server
 -- The UI is stubbed (nvim_list_uis) and every prompt is declined, so nothing installs. Which tools are offered
 -- depends on the suite's mise: jactionlint and yaml-language-server are there, zizmor, yamllint and prettierd are not.
-local tools = require("tools")
+local ux = require("tools.ux")
 -- The Dockerfile and COMMIT_EDITMSG buffers below would start parser installs (a download and a C build) that
 -- outlive the check when the build is slow; parsers are not what this check is about
 require("nvim-treesitter").install = function() return { await = function() end } end
@@ -29,16 +29,20 @@ local function write(rel, lines)
   vim.fn.writefile(lines, path)
   return path
 end
---- Opens rel and returns the prompts it raised once they settle.
+local function show(list)
+  return vim.inspect(vim.tbl_map(function(p) return p.prompt end, list))
+end
+--- Opens rel and returns the prompts it raised, once the check that opening it schedules has run and has nothing left
+--- to ask: a second prompt follows the first one's answer
 local function open(rel, lines)
   local n = #prompts
   vim.cmd.edit(write(rel, lines or { "" }))
-  wait_until(function() return #prompts > n end, 2000)
-  vim.wait(300) -- a second prompt follows the first one's answer
+  local scheduled = false
+  vim.schedule(function() scheduled = true end)
+  if not wait_until(function() return scheduled and not ux.asking() end, 10000) then
+    check("the prompts for " .. rel .. " are decided within 10s", false, show(vim.list_slice(prompts, n + 1)))
+  end
   return vim.list_slice(prompts, n + 1)
-end
-local function show(list)
-  return vim.inspect(vim.tbl_map(function(p) return p.prompt end, list))
 end
 
 local got = open("proj/a.lua", { "return 1" }) -- proj/mise.toml written below, before it opens
