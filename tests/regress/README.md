@@ -31,8 +31,10 @@ CFG=/path/to/nvim suite.sh      # test another config dir (default: ../../nvim, 
   status is non-zero on any failure.
 - The output and stderr of failed checks are kept in `last/<version>/`, replaced when that check
   runs again, so parallel runs of different checks don't clobber each other.
-  Run dirs live in `~/.cache/nvim-regress/run/` (`$NVR_RUNS`) only while the suite runs. They sit outside
+  Run dirs live in `~/.cache/nvr/<id>/` (`$NVR_RUNS`) only while the suite runs. They sit outside
   the repo so that no project marker above a fixture, such as an untracked `mise.local.toml`, reaches a check.
+  The path is short because tools bind unix sockets under a check's home, and a socket path holds at most 107
+  bytes: biome's daemon binds 47 bytes under it. The suite refuses to start when a home would leave less than 56.
   Each run copies `cache-seed/`'s contents, so a symlinked seed (a worktree's) is never written.
 
 ### Tiers
