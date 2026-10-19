@@ -42,6 +42,8 @@ The full proposal, with its measurements and sources, was written outside the re
   total crosses ~100 ms ("D61 amendment" below).
 - Fixed (D95): no linter run outlives Neovim: what is left of each is killed at quit, or when the run exits
   ("Linters at exit" below).
+- Decided and built (2026-10-19): D116 to D121, treesitter parsers install on demand from a `parsers/` module on the
+  tools seams ("D116: treesitter parsers on demand" below).
 
 ## Target layout
 
@@ -1813,3 +1815,152 @@ doesn't cover them: the `vim.uv.spawn` watch can go once nvim-lint stops its run
 
 **Evidence.** The `~/.cache/nvim-config/lint-quit/` and `lint-quit-review/` files cited in this section were deleted
 on 2026-10-18 after #61 merged. The results quoted here are what remains of them.
+
+## D116: treesitter parsers on demand (2026-10-19)
+
+**Context.** At VimEnter, `features/treesitter.lua` installed every parser a language file listed plus a literal
+`ensure_installed` (query, regex, vim, vimdoc, proto) (`nvim/lua/features/treesitter.lua:6,65-70` at 2aa508a). A fresh
+start downloaded and compiled them all, whether or not a file of that language was ever opened. The build had already
+been cut to `require("nvim-treesitter").update(nil, { summary = true })`: #71, merged as
+`88888f7d308c3429c9a5766e119ccc47692f3652`, removed the master and lazy.nvim migration shim.
+
+**Decision (the user's).** Nothing installs at startup. A buffer's parsers install when a buffer first needs them.
+D117 to D121 say how. The design proposal is `~/.cache/nvim-config/ts-on-demand/design.md`.
+
+**Facts it rests on.**
+
+- Neovim 0.13 nightly (v0.13.0-dev-1895) bundles `c diff lua markdown markdown_inline query vim vimdoc`, in
+  `lib/nvim/parser/` (`ls`), with their queries in `$VIMRUNTIME/queries/`, none of which has an `indents.scm`.
+- nvim-treesitter (1a4f47b0, the lockfile's) adds the query-only languages a parser requires itself
+  (`config.lua:164-168`), links its queries only on install (`install.lua:433-445`), and runs `tree-sitter build` by
+  name from PATH (`install.lua:305-316`). Without tree-sitter it downloads first, then fails:
+  `Error during "tree-sitter build": ... ENOENT ... 'tree-sitter'`.
+- A cold install takes 0.3 s (regex) to 1.6 s (javascript, typescript, tsx, json) on this machine.
+
+### D117: a `parsers/` module on the tools seams
+
+**Decision.** `nvim/lua/parsers/init.lua`, shaped like the tool resolver: `needed(ft)`, `get(lang)`, `ensure(buf, cb)`,
+`retry(langs)`, `update(langs)`, `missing(buf)`, `User ParsersChanged`, and `setup({ backend })`. The backend,
+`parsers.Backend`, is everything asked of nvim-treesitter and Neovim: `available`, `installed`, `loadable`,
+`injections`, `install` and `update` (`nvim/lua/parsers/nvim_treesitter.lua`). The unit tier swaps in
+`tests/unit/fake_parsers.lua`.
+
+- `features/treesitter.lua` keeps attaching and the keys. On FileType it calls `parsers.ensure(buf, attach)`, which
+  calls back at once when Neovim can load the buffer's own parser, and again when an install for the buffer lands.
+- tree-sitter joins the catalog (`nvim/lua/tools/catalog.lua:121`, `min = "0.26.1"` from nvim-treesitter's
+  `health.lua:10`), as decided on 2026-10-12 and not built until now (`docs/mise-tooling-decisions.md:344-355`). Before
+  an install, `parsers` resolves it for the buffer's root. If it is missing, nothing downloads, the parsers fail with
+  "needs tree-sitter to build it", and `tools/ux.lua`'s `needed(buf)` lists tree-sitter (role "builds parsers") while
+  a parser the buffer needs is still to be built, so the tools prompt offers it. The ToolsChanged its install fires
+  retries them. A copy found off PATH goes first on `vim.env.PATH` for the install, since nvim-treesitter calls it by
+  name (`nvim_treesitter.lua:61-67`).
+- `:Tools` lists each parser the buffer needs after the tools, ✓ when nvim-treesitter's copy is installed and ✗ with
+  why otherwise. Its menu has *Retry the install* after a failure and *Update* for an installed one.
+- `ui/facts` gains `parsers`, the buffer's failed parsers, and the statusline's count adds them. A parser still
+  installing doesn't count, as a tool still resolving doesn't.
+
+**Rejected.** Parsers as a resolver kind in `tools/`: the resolver works per binary and root, with project layers,
+versions, runtimes and a mise backend (`tools/init.lua:20-68`), none of which a parser has. On demand inside
+`features/treesitter.lua`, as before: nothing would show a failed parser or offer tree-sitter, and only a regress
+check that replaces `ts.install` could test the rules.
+
+### D118: one toast as a language's installs start, one as they end
+
+**Decision.** What a buffer lacks installs as one group: "Installing python, comment, printf, regex" as it starts,
+"Installed …" when it ends, and an error naming the parsers that failed. nvim-treesitter's own progress lines still
+go to `:messages`, where the error points.
+
+### D119: a language's parsers are derived, one level deep
+
+**Decision (option A).** A language file names no parsers: `parsers` is gone from `lang.Spec`, the eleven files that
+had it and `lang.views()`. `parsers.needed(ft)` is the filetype's own parser (`vim.treesitter.language.get_lang`, with
+nvim-treesitter's registrations such as `typescriptreact` → tsx), then the languages nvim-treesitter's injections query
+for it sets with `#set! injection.language`, quoted or bare, following `; inherits:` lines (`(jsx)` included). It stops
+there: an injected language's own injections aren't followed. Names captured from the text (`@injection.language`,
+code fences) and names in predicates are never read, comments are stripped, and a name nvim-treesitter has no parser
+for is dropped.
+
+**No base list.** `ensure_installed` goes. regex comes with the languages that inject it (python, go, rust, bash, php,
+and javascript and typescript through ecma); query and vim with lua; vimdoc with `:help` buffers; proto with `.proto`
+buffers.
+
+**The options**, computed over every declared filetype at 1a4f47b0 with an empty install dir
+(`~/.cache/nvim-config/ts-on-demand/sets/sets2.lua`, output in `sets2.txt` there):
+
+- **A, derived, one level (chosen):** 50 distinct parsers over all languages, each language's on its own first
+  buffer: python 4 (python, comment, printf, regex), lua 8 (lua, luadoc, luap, c, comment, printf, query, vim),
+  markdown 5 (markdown, markdown_inline, html, toml, yaml).
+- **B, derived, every level. Rejected:** chains reach hub languages. html names javascript, and javascript, through
+  ecma, names angular, comment, css, glimmer, graphql, groq, html, jsdoc, regex and styled; lua names vim, and so on.
+  Markdown's filetypes reach 32 parsers, lua's 25, c's 21. Walking every level also meets more pattern strings: a naive
+  read of `injection.language "…"` there finds `(.+)/(.+)`, `^[a-zA-Z][a-zA-Z0-9]*$` and `svg`, none a parser.
+- **C, hand lists in the language files, made on demand. Rejected:** each language file has to remember its
+  injections by hand, and they hadn't. Against A, markdown's list missed html, toml and yaml, lua's missed vim and
+  query, and no list named regex: python, bash, rust and go had it only through `ensure_installed`.
+- **D, one level plus code-fence languages** (names captured with `@injection.language`). **Deferred, not rejected:**
+  it means scanning buffers again as they're edited, and each new fence language starts an install. It can come later
+  if plain fences bother the user. Until then, a fence highlights only once its language's parser is there for
+  another reason.
+- Also considered: the own parser only (31 over all languages): python without regex, markdown without
+  markdown_inline.
+
+### D120: parser installs obey the tools switch
+
+**Decision.** Parser installs run only when `tools.can_install()` holds (`tools/init.lua:723`): never with
+`vim.g.install_tools = "off"`, never headless. No new option. A file opened at startup has its FileType before the UI
+attaches; its parsers install at UIEnter. The regress suite, all headless, pre-seeds what every declared filetype needs
+(`tests/regress/refresh.lua`, `parsers_sync`), and `ts_install_once` stands in a UI to test the install path.
+
+**Why.** One switch for everything the config installs, and a headless run (tests, scripts) never downloads.
+
+### D121: nvim-treesitter's copy even for the languages Neovim bundles
+
+**Context.** The first build skipped parsers Neovim bundles and read the injections query on the runtimepath, so a
+fresh start kept Neovim's lua, c and markdown.
+
+**Decision (the user's).** Every language gets nvim-treesitter's copy, lua, c, markdown, vim, query and vimdoc included,
+as main installed them (`nvim/lua/lang/lua.lua:4` at 2aa508a: lua, luadoc, luap). Injections are read from
+nvim-treesitter's own queries (its checkout's `runtime/queries`), so the set is the same before and after the install.
+Opening a `.lua` file on a fresh start installs lua, luadoc, luap, c, comment, printf, query and vim. Until they land,
+the buffer attaches with Neovim's copy, and again once nvim-treesitter's lands.
+
+**Why.** Neovim ships no `indents.scm`, so keeping its copy loses treesitter indent for lua and c:
+`features/treesitter.lua:33-35` sets `indentexpr` only when an indents query exists, and nvim-treesitter links its
+queries only on install (`install.lua:433-445`). Neovim's lua injections name only c, vim, query and lua
+(`$VIMRUNTIME/queries/lua/injections.scm`), so luadoc and luap would never come.
+
+**Rejected.** Skipping the parsers Neovim bundles, and deriving from whichever query is active: lua and c without
+indents, lua without luadoc and luap, and a derived set that changes once nvim-treesitter's queries are installed.
+
+**Known limit.** In the session that installs nvim-treesitter's lua, Neovim has already loaded its own lua parser, and
+a parser loaded once isn't loaded again, so the re-attach may keep Neovim's copy until the next start (unverified; the
+same held on main for the file opened at launch, before the VimEnter install finished).
+
+### Cost (D61, D93)
+
+- **Startup:** less. The VimEnter install of ~35 names goes; `parsers.setup` makes three autocmds.
+- **Per FileType, per event:** the first buffer of a filetype reads nvim-treesitter's injections queries, 0.08 to
+  1.2 ms (`sets/cost.lua`, three runs, empty install dir: python 1.1-1.2 ms, markdown 0.08-0.1 ms), plus a first stat
+  of each parser, 0.06-0.47 ms. After that, with its parsers installed, a lookup: 0.04 µs for python's four
+  (`cost_installed.lua`, 10 000 rounds). While they are missing (installs off, or failed), 41-42 µs a FileType: a stat
+  each.
+- **Per key:** none; the `treesitter` need stays a table lookup.
+
+### Tests
+
+`tests/unit/parsers_test.lua`, on the fake backend and the fake tool backend: one level of injections, not zero or
+every; inherits; junk, comments and dynamic names left out; nothing installs before a buffer opens, then its missing
+parsers as one install; a bundled language still gets nvim-treesitter's copy and its injections, with Neovim's until
+it lands; a second language installs only what it lacks; a buffer opened during an install waits for it; a failed
+install isn't retried per buffer, and `retry` installs it again; the install switch and a UI-less start; tree-sitter
+missing, then installed; the toasts; the statusline count; `:Tools`' rows. Regress: `treesitter.lua` reads the real
+queries (python needs regex; typescriptreact needs regex through tsx's inherited typescript and ecma; lua needs
+luadoc and luap); `fresh_bootstrap`, with installs off, downloads no parser while lua already needs nvim-treesitter's
+luadoc and luap; `fresh_no_prompt` installs exactly a python file's parsers after the UI is up, with no hit-enter
+prompt.
+
+Sibling wrong implementations, each one replacement (`~/.cache/nvim-config/ts-on-demand/wrong/`, `run.sh <commit>`),
+all caught. By the unit tier: zero levels, every level, inherits ignored, junk unfiltered, comments kept, bundled
+parsers skipped, retry per buffer, switch ignored, headless installs, tree-sitter unchecked, no start toast and a count
+without parsers. By `fresh_bootstrap`: the bulk install kept ("51 downloaded") and injections derived from the active
+queries (lua then needs only `lua`).

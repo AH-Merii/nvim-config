@@ -25,7 +25,6 @@ local NXO = { "n", "x", "o" }
 ---@type lang.Spec
 return {
   filetypes = { "python" },
-  parsers = { "python" },
   servers = {
     -- https://pyrefly.org/, a Python type checker written in Rust
     pyrefly = {

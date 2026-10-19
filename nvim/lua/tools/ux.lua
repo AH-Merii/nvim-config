@@ -119,17 +119,32 @@ local function add(list, name)
   end
 end
 
+--- Whether a parser buf needs is still to be built, so tree-sitter is needed too.
+---@param buf integer
+local function builds_parsers(buf)
+  local parsers = require("parsers")
+  return vim.iter(parsers.needed(vim.bo[buf].filetype)):any(function(lang)
+    local state = parsers.get(lang).state
+    return state == "missing" or state == "installing" or state == "failed"
+  end)
+end
+
 --- The catalog binaries buf's filetype runs (servers, formatters, linters, and what they call), and per binary its
---- roles there in plain words, e.g. { "lsp", "formatter", "linter" }.
+--- roles there in plain words, e.g. { "lsp", "formatter", "linter" }; tree-sitter too while a parser it needs waits to
+--- be built.
 ---@param buf integer
 ---@return string[] names, table<string, string[]> roles, string[] servers
 local function needed(buf)
   local found = require("lang").of(vim.bo[buf].filetype)
-  if not found then
-    return {}, {}, {}
+  local names, roles = {}, {}
+  if found then
+    names, roles = catalog.needed(found)
   end
-  local names, roles = catalog.needed(found)
-  return names, roles, found.servers
+  if builds_parsers(buf) then
+    add(names, "tree-sitter")
+    roles["tree-sitter"] = { "builds parsers" }
+  end
+  return names, roles, found and found.servers or {}
 end
 
 --------------------------------------------------------------------------------
@@ -634,10 +649,11 @@ function M.status(buf)
     return ""
   end
   local facts = require("ui.facts").get(buf)
-  if #facts.missing == 0 and not facts.unanswered then
+  local missing = #facts.missing + #facts.parsers
+  if missing == 0 and not facts.unanswered then
     return ""
   end
-  return (#facts.missing > 0 and tostring(#facts.missing) or "") .. (facts.unanswered and "?" or "")
+  return (missing > 0 and tostring(missing) or "") .. (facts.unanswered and "?" or "")
 end
 
 --------------------------------------------------------------------------------
@@ -715,19 +731,38 @@ end
 ---@param width integer
 local function pad(text, width) return text .. (" "):rep(width - vim.fn.strdisplaywidth(text)) end
 
---- One row per tool: mark, name and roles padded to the longest of each, then where it comes from.
+--- Where a parser stands, for its row: "nvim-treesitter", "installing", "install failed · retry".
+---@param state parsers.State
+local function parser_text(state)
+  if state.state == "installed" then
+    return "nvim-treesitter"
+  elseif state.state == "failed" then
+    return (state.reason or "install failed") .. " · retry"
+  end
+  return state.state == "installing" and "installing" or ("not installed" .. (state.reason and (" · " .. state.reason) or ""))
+end
+
+--- One row per tool, then one per parser (langs): mark, name and roles padded to the longest of each, then where it
+--- comes from.
 ---@param names string[]
 ---@param results table<string, tools.Result>
 ---@param versions table<string, string>
 ---@param roles table<string, string[]>
+---@param langs? string[]
 ---@return string[]
-local function rows(names, results, versions, roles)
-  local name_w, role_w = 0, 0
+local function rows(names, results, versions, roles, langs)
+  langs = langs or {}
+  local states = {}
+  local name_w, role_w = 0, #langs > 0 and #"parser" or 0
   for _, name in ipairs(names) do
     name_w = math.max(name_w, vim.fn.strdisplaywidth(name))
     role_w = math.max(role_w, vim.fn.strdisplaywidth(table.concat(roles[name] or {}, ", ")))
   end
-  return vim.tbl_map(function(name)
+  for _, lang in ipairs(langs) do
+    name_w = math.max(name_w, vim.fn.strdisplaywidth(lang))
+    states[lang] = require("parsers").get(lang)
+  end
+  local out = vim.tbl_map(function(name)
     local result = results[name]
     return ("%s %s  %s  %s"):format(
       result.path and "✓" or "✗",
@@ -736,6 +771,11 @@ local function rows(names, results, versions, roles)
       status_text(result, versions[name])
     )
   end, names)
+  for _, lang in ipairs(langs) do
+    local state = states[lang]
+    table.insert(out, ("%s %s  %s  %s"):format(state.state == "installed" and "✓" or "✗", pad(lang, name_w), pad("parser", role_w), parser_text(state)))
+  end
+  return out
 end
 
 ---@param root string
@@ -772,11 +812,16 @@ function M.open(buf)
   buf = buf or vim.api.nvim_get_current_buf()
   local root, ft = tools.root(buf), vim.bo[buf].filetype
   local names, roles, servers = needed(buf)
+  local langs = require("parsers").needed(ft)
   tools.project(root, function(project)
     with_versions(names, root, function(results, versions)
       local items = {}
-      for i, text in ipairs(rows(names, results, versions, roles)) do
-        table.insert(items, { result = results[names[i]], version = versions[names[i]], text = text })
+      for i, text in ipairs(rows(names, results, versions, roles, langs)) do
+        if i <= #names then
+          table.insert(items, { result = results[names[i]], version = versions[names[i]], text = text })
+        else
+          table.insert(items, { parser = langs[i - #names], text = text })
+        end
       end
       local row = project_row(project, names)
       if row then
@@ -790,6 +835,8 @@ function M.open(buf)
           return
         elseif item.rescan then
           return rescan(root, names, roles)
+        elseif item.parser then
+          return M.parser_actions(item.parser, root)
         elseif item.project and item.use then
           return use_project(item.project, names)
         elseif item.project then
@@ -809,6 +856,30 @@ function M.open(buf)
         M.actions(item.result, buf, vim.tbl_filter(function(server) return catalog.binary("server", server) == item.result.name end, servers), item.version)
       end)
     end)
+  end)
+end
+
+--- The actions for one parser: Retry after a failed install, Update an installed one. One with neither says where it
+--- stands instead.
+---@param lang string
+---@param root string where tree-sitter is looked up
+function M.parser_actions(lang, root)
+  local parsers = require("parsers")
+  local state = parsers.get(lang)
+  local actions = {}
+  if state.state == "failed" then
+    table.insert(actions, { text = "Retry the install", run = function() parsers.retry({ lang }, root) end })
+  elseif state.state == "installed" then
+    table.insert(actions, { text = "Update", run = function() parsers.update({ lang }) end })
+  end
+  local heading = ("%s parser · %s"):format(lang, parser_text(state))
+  if #actions == 0 then
+    return vim.notify(heading, vim.log.levels.INFO, { title = title })
+  end
+  select(actions, { prompt = heading, kind = "tools.actions" }, function(item)
+    if item then
+      item.run()
+    end
   end)
 end
 

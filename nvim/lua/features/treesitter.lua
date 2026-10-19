@@ -1,9 +1,6 @@
--- Treesitter: parsers installed (the languages' and Neovim's own), highlighting and indent attached per buffer, the
--- incremental selection keys and the treesitter toggle. The text objects and moves are textobjects/.
-
--- Parsers no language in lua/lang/ names: Neovim's own files and injections (query, regex, vim, vimdoc) and proto. A
--- literal list: tests/regress/refresh.lua reads it, and the languages' parsers, to choose what to install
-local ensure_installed = { "query", "regex", "vim", "vimdoc", "proto" }
+-- Treesitter: highlighting and indent attached per buffer once its parsers are there (parsers/ installs them when a
+-- buffer first needs them), the incremental selection keys and the treesitter toggle. The text objects and moves are
+-- textobjects/.
 
 -- TS indent can misbehave for these:
 local indent_disabled = { "python", "yaml", "markdown" }
@@ -48,26 +45,9 @@ local specs = {
     version = "main",
     -- before the first file's FileType; its setup uses Snacks.toggle, and snacks loads before it (ui/snacks.lua)
     phase = "startup",
-    build = function(path)
-      -- master compiled parsers into the plugin dir; main installs them under stdpath("data")/site
-      vim.fn.delete(path .. "/parser", "rf")
-      vim.fn.delete(path .. "/parser-info", "rf")
-      -- Each parser's queries are a link into a checkout's runtime/queries (install.lua do_link_queries). update()
-      -- leaves a parser whose revision is unchanged alone (install.lua needs_update), so links into another
-      -- checkout, as lazy.nvim's was, are pointed at this one here
-      local queries = require("nvim-treesitter.config").get_install_dir("queries")
-      for lang, kind in vim.fs.dir(queries) do
-        local link, src = vim.fs.joinpath(queries, lang), vim.fs.joinpath(path, "runtime", "queries", lang)
-        if kind == "link" and vim.uv.fs_readlink(link) ~= src and vim.uv.fs_stat(src) then
-          vim.uv.fs_unlink(link)
-          vim.uv.fs_symlink(src, link)
-        end
-      end
-      -- :TSUpdate, which nvim-treesitter's plugin/ file defines after this runs at startup
-      require("nvim-treesitter").update(nil, { summary = true })
-    end,
+    -- :TSUpdate, which nvim-treesitter's plugin/ file defines after this runs at startup
+    build = function() require("nvim-treesitter").update(nil, { summary = true }) end,
     setup = function()
-      local ts = require("nvim-treesitter")
       local keys = require("keys")
       keys.need("treesitter", function(buf) return attached[buf] ~= nil end)
       keys.feature("treesitter", { need = "treesitter" })({
@@ -78,32 +58,17 @@ local specs = {
         { "<leader>TT", toggle = Snacks.toggle.treesitter() },
       })
       local group = vim.api.nvim_create_augroup("features.treesitter", { clear = true })
-      -- at VimEnter, not now: what the install logs before the screen is up raises a hit-enter prompt
-      -- (checks/fresh_no_prompt.sh)
-      vim.api.nvim_create_autocmd("VimEnter", {
-        group = group,
-        once = true,
-        callback = function() ts.install(vim.list_extend(vim.deepcopy(require("lang").views().parsers), ensure_installed)) end,
-      })
 
       require("textobjects").setup()
 
-      local installs = {} -- language -> its one install task this session, so a failed build is not retried per buffer
+      -- Nothing is installed at startup (D116): a buffer's parsers install when it first needs them, after the UI is
+      -- up, so their logs raise no hit-enter prompt (checks/fresh_no_prompt.sh)
+      local parsers = require("parsers")
       vim.api.nvim_create_autocmd("FileType", {
         group = group,
         callback = function(args)
-          local lang = vim.treesitter.language.get_lang(args.match)
-          if lang and vim.treesitter.language.add(lang) then
-            attach(args.buf, lang)
-            return
-          end
           attached[args.buf] = nil
-          if lang and vim.list_contains(ts.get_available(), lang) then
-            installs[lang] = installs[lang] or ts.install(lang)
-            installs[lang]:await(function()
-              vim.schedule(function() attach(args.buf, lang) end)
-            end)
-          end
+          parsers.ensure(args.buf, function(lang) attach(args.buf, lang) end)
         end,
       })
     end,

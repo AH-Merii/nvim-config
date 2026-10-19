@@ -1,5 +1,5 @@
 -- suite.sh --refresh: sync data/ to the config under test. Plugins to the lockfile (vim.pack clones what is missing),
--- the suite's mise and rustup to every check's @needs (it never uninstalls), parsers to the config's list.
+-- the suite's mise and rustup to every check's @needs (it never uninstalls), parsers to what the languages need.
 -- NVR_REFRESH_DRY=1 (suite.sh --refresh-dry-run): only print the tools wanted and which of them do not resolve.
 -- NVR_REFRESH_STEPS picks the steps, in order (default: all four): plugins, tools (the suite's mise and rustup installs),
 -- resolve (every need resolves through the config's resolver), parsers. The test image runs tools alone on a stub
@@ -174,16 +174,18 @@ local function tools_resolve()
   say("tools: %d needed, %d resolve", #keep, #keep - #missing)
 end
 
+-- Every parser a declared filetype's buffers need (the config's parsers.needed), so no check downloads one. The config
+-- itself installs parsers only with a UI (D120), never in a headless check.
 local function parsers_sync()
-  local cfg = vim.fn.stdpath("config") .. "/lua/features/treesitter.lua"
-  local src = table.concat(vim.fn.readfile(cfg), "\n")
-  local block = src:match("local ensure_installed%s*=%s*(%b{})")
-  if not block then return fail("parsers: no ensure_installed list in %s", cfg) end
+  local parsers = require("parsers")
   local list = {}
-  for lang in block:gmatch('"([%w_]+)"') do table.insert(list, lang) end
-  -- the languages' parsers (lua/lang/), where the config has them
-  local has_lang, lang = pcall(require, "lang")
-  if has_lang then vim.list_extend(list, lang.views().parsers) end
+  for _, ft in ipairs(require("lang").filetypes()) do
+    for _, l in ipairs(parsers.needed(ft)) do
+      if not vim.list_contains(list, l) then table.insert(list, l) end
+    end
+  end
+  if #list == 0 then return fail("parsers: no declared filetype needs a parser (parsers.needed)") end
+  table.sort(list)
   local ts = require("nvim-treesitter")
   local ok, err = pcall(function() ts.install(list, { summary = true }):wait(900000) end)
   if not ok then fail("parsers install: %s", err) end
@@ -191,7 +193,7 @@ local function parsers_sync()
   if not ok then fail("parsers update: %s", err) end
   local missing = vim.tbl_filter(function(l) return not vim.list_contains(ts.get_installed(), l) end, list)
   if #missing > 0 then fail("parsers missing: %s", table.concat(missing, " ")) end
-  say("parsers: %d ensured, %d installed", #list, #ts.get_installed())
+  say("parsers: %d needed (%s), %d installed", #list, table.concat(list, " "), #ts.get_installed())
 end
 
 vim.api.nvim_create_autocmd("VimEnter", {

@@ -1,6 +1,6 @@
 ---
 name: language-tools
-description: Add a language to this Neovim config, or add, swap or remove a language's LSP server, formatter, linter or file-scoped tool, end to end. Covers finding the plugin's built-in definition and the tool's mise spec, the two files to edit (the tool catalog and the language's file in nvim/lua/lang/: servers, formatters, linters, variants, parsers), verifying installs in an isolated mise, the regression checks to add and run, regenerating docs/languages.md, and updating the decisions doc and CONTRIBUTING.md. Use it whenever the user asks for support for a language or file type, a different language server, formatter or linter, or wants a tool to run only on certain files, even if they don't name these files.
+description: Add a language to this Neovim config, or add, swap or remove a language's LSP server, formatter, linter or file-scoped tool, end to end. Covers finding the plugin's built-in definition and the tool's mise spec, the two files to edit (the tool catalog and the language's file in nvim/lua/lang/: servers, formatters, linters, variants), verifying installs in an isolated mise, the regression checks to add and run, regenerating docs/languages.md, and updating the decisions doc and CONTRIBUTING.md. Use it whenever the user asks for support for a language or file type, a different language server, formatter or linter, or wants a tool to run only on certain files, even if they don't name these files.
 ---
 
 # Language tools
@@ -43,7 +43,7 @@ Copy the command and args from the built-in definition you read in step 1. Don't
 | Server | its nvim-lspconfig name under `servers` in the language's file, `nvim/lua/lang/<lang>.lua`, with any settings as `vim.lsp.Config` fields |
 | Formatter | `formatters` in the language's file (a plain list of conform names, run in order) |
 | Linter | `linters` in the language's file; `covered_by = "<server>"` only if a server reports the same rules |
-| New language | a new `nvim/lua/lang/<lang>.lua` with its `filetypes`, and `parsers` if a tree-sitter parser exists |
+| New language | a new `nvim/lua/lang/<lang>.lua` with its `filetypes`; its treesitter parsers are derived, so it lists none (`references/edit-files.md`, Treesitter) |
 | Tool for some files only | a variant (dotted filetype) in the language's file: `references/sub-filetypes.md`, all of it |
 | Removing or replacing | `references/remove-or-replace.md` |
 
@@ -67,10 +67,10 @@ It runs in seconds: the wiring audit, the docs and tests for each binary and sub
 cd $R/tests/regress && mkdir -p last && systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=512M -- ./suite.sh --refresh '^(startup|<your checks>)$' > last/language-tools.log 2>&1
 ```
 
-`--refresh` installs each `@needs` into the suite's own mise. Then run `./suite.sh --area startup,smoke,tools,lsp,format,lint` (add `treesitter` if you touched `parsers`). Both must end with `SUITE PASS`. On a FAIL, fix the cause, never the check.
+`--refresh` installs each `@needs` into the suite's own mise. Then run `./suite.sh --area startup,smoke,tools,lsp,format,lint`. Both must end with `SUITE PASS`. On a FAIL, fix the cause, never the check.
 
 **8. Report:** the files changed, the step 2-3 commands and output, the `check.sh` and suite results, and anything left for the user, such as a version coupling or a config file the tool needs.
 
 ## What the code does for you
 
-`nvim/lua/lang/init.lua` reads every language file. `lang.of(ft)` answers what applies to a filetype; the install prompts, `:Tools`, the statusline, `:Status`, and `nvim/lua/format/` and `nvim/lua/linting/` (what formats and lints a buffer, the key gates, `<leader>ll`/`<leader>li`) ask it. A mistake such as two languages declaring one filetype is skipped and reported at startup (`lang.problems()`). `lang.views()` builds conform's `formatters_by_ft`, nvim-lint's `linters_by_ft`, each server's `vim.lsp.config` fields, the variants' filetype rules and the parsers, so none of those plugin files changes for a new tool. `lsp/init.lua` starts each server from the resolved binary with the catalog args, so `cmd` in a language file has no effect.
+`nvim/lua/lang/init.lua` reads every language file. `lang.of(ft)` answers what applies to a filetype; the install prompts, `:Tools`, the statusline, `:Status`, and `nvim/lua/format/` and `nvim/lua/linting/` (what formats and lints a buffer, the key gates, `<leader>ll`/`<leader>li`) ask it. A mistake such as two languages declaring one filetype is skipped and reported at startup (`lang.problems()`). `lang.views()` builds conform's `formatters_by_ft`, nvim-lint's `linters_by_ft`, each server's `vim.lsp.config` fields and the variants' filetype rules, so none of those plugin files changes for a new tool. `lsp/init.lua` starts each server from the resolved binary with the catalog args, so `cmd` in a language file has no effect.

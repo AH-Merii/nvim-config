@@ -12,6 +12,7 @@
 ---@field servers? table<string, string[]> server name -> args after the binary
 ---@field formatters? string[] conform formatter names
 ---@field linters? string[] nvim-lint linter names
+---@field parsers? true builds the treesitter parsers (lua/parsers/), needed while a buffer's parsers wait for it
 
 ---@class tools.Runtime
 ---@field bin string
@@ -115,6 +116,9 @@ M.tools = {
 
   -- Make
   checkmake = { spec = "checkmake", linters = { "checkmake" } },
+
+  -- Treesitter parsers: nvim-treesitter builds each one with it (its README, Requirements)
+  ["tree-sitter"] = { spec = "tree-sitter", min = "0.26.1", parsers = true },
 }
 
 ---@type table<"server"|"formatter"|"linter", table<string, string>>

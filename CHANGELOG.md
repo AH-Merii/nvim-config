@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/AH-Merii/nvim-config/compare/v0.15.0...v0.16.0) (2026-10-18)
+
+
+### Restructuring
+
+* **treesitter:** drop the build's master and lazy.nvim migration code ([#71](https://github.com/AH-Merii/nvim-config/issues/71)) ([88888f7](https://github.com/AH-Merii/nvim-config/commit/88888f7d308c3429c9a5766e119ccc47692f3652))
+
 ## [0.15.0](https://github.com/AH-Merii/nvim-config/compare/v0.14.0...v0.15.0) (2026-10-18)
 
 
