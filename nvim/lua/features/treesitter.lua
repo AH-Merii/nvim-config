@@ -1,9 +1,15 @@
 -- Treesitter: highlighting and indent attached per buffer once its parsers are there (parsers/ installs them when a
 -- buffer first needs them), the incremental selection keys and the treesitter toggle. The text objects and moves are
--- textobjects/.
+-- textobjects/. What a language keeps beside treesitter, its runtime indent plugin or regex syntax, is in its file in
+-- lang/ (lang.Treesitter).
 
--- TS indent can misbehave for these:
-local indent_disabled = { "python", "yaml", "markdown" }
+--- The treesitter settings of buf's language
+---@param buf integer
+---@return lang.Treesitter
+local function settings(buf)
+  local answer = require("lang").of(vim.bo[buf].filetype)
+  return answer and answer.treesitter or {}
+end
 
 -- custom function to disable treesitter on large files
 local function disable_on_large(lang, buf)
@@ -20,17 +26,25 @@ end
 -- The buffers treesitter attached to: where the incremental selection keys and the toggle act
 local attached = {} ---@type table<integer, string>
 
+-- Starts treesitter's highlighting, then turns regex syntax back on where the language keeps it: vim.treesitter.start
+-- turns it off, so it is turned on after every start, the toggle's included, and not with the language's options
+---@param buf integer
+---@param lang? string
+local function highlight(buf, lang)
+  vim.treesitter.start(buf, lang)
+  if settings(buf).syntax then
+    vim.bo[buf].syntax = "ON"
+  end
+end
+
 local function attach(buf, lang)
   if not vim.api.nvim_buf_is_valid(buf) or not vim.treesitter.language.add(lang) then
     return
   end
   if vim.treesitter.query.get(lang, "highlights") and not disable_on_large(lang, buf) then
-    vim.treesitter.start(buf, lang)
-    if lang == "markdown" then
-      vim.bo[buf].syntax = "ON"
-    end
+    highlight(buf, lang)
   end
-  if not vim.list_contains(indent_disabled, lang) and vim.treesitter.query.get(lang, "indents") then
+  if settings(buf).indent ~= false and vim.treesitter.query.get(lang, "indents") then
     vim.bo[buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
   end
   attached[buf] = lang
@@ -55,7 +69,19 @@ local specs = {
         { "<leader>v", "van", "Start incremental selection", remap = true, icon = { icon = "󰩭", color = "cyan" } },
         { "+", "an", "Grow selection to parent node", mode = "x", remap = true, icon = { icon = "󰩭", color = "cyan" } },
         { "-", "in", "Shrink selection to child node", mode = "x", remap = true, icon = { icon = "󰩭", color = "cyan" } },
-        { "<leader>TT", toggle = Snacks.toggle.treesitter() },
+        {
+          "<leader>TT",
+          toggle = Snacks.toggle.treesitter({
+            set = function(state)
+              local buf = vim.api.nvim_get_current_buf()
+              if state then
+                highlight(buf, attached[buf])
+              else
+                vim.treesitter.stop(buf)
+              end
+            end,
+          }),
+        },
       })
       local group = vim.api.nvim_create_augroup("features.treesitter", { clear = true })
 
