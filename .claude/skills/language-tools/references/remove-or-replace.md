@@ -23,11 +23,11 @@ Then remove, and tick off each item:
 3. The formatter in the language's `formatters` (and a variant's), and any `definitions.<name>` in `nvim/lua/format/conform.lua`. A filetype left with no formatter falls back to LSP formatting.
 4. The linter in the language's `linters` (and a variant's), plus any `keep_cwd` entry and `definitions.<name>` in `nvim/lua/linting/nvim_lint.lua`.
 5. A variant that only existed for this tool: its entry under `variants`, and its cases in `checks/tools_subfiletypes.lua`.
-6. A whole language: its file in `nvim/lua/lang/`. Its `parsers` go with it; keep a parser you still want by moving it to another language or to `ensure_installed` in `nvim/lua/features/treesitter.lua`.
+6. A whole language: its file in `nvim/lua/lang/`. Its parsers aren't listed anywhere: they still install when a buffer of its filetype opens.
 7. In tests: every `@needs` naming the binary, because `--refresh` fails on a need missing from the catalog. Also the fixture file, its entry in the `lsp_attach.lua` file list, and checks that only tested it.
 8. Docs: run `mise run docs`, which drops the tool from `docs/languages.md`, and add a "Decided since" bullet that names it and says it was replaced or dropped, and why.
 
-Some things are not tool wiring, so leave them unless the user asks: a language's `keys` (labels for its runtime ftplugin's maps), `parsers` and `options` when only a tool goes. When PHP's tools were dropped, its labels stayed: `nvim/lua/lang/php.lua` holds only them.
+Some things are not tool wiring, so leave them unless the user asks: a language's `keys` (labels for its runtime ftplugin's maps) and `options` when only a tool goes. When PHP's tools were dropped, its labels stayed: `nvim/lua/lang/php.lua` holds only them.
 
 Nothing is uninstalled from the user's mise. The user runs `mise unuse --path ~/.config/mise/conf.d/nvim-config.toml <tool>` themselves if they want to: the config's installs are in that file, and `mise unuse -g` only edits `config.toml`. The suite's mise never uninstalls either (`tests/regress/README.md`, "Refresh").
 

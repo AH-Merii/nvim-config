@@ -13,9 +13,8 @@ Work down the table. For each row, either make the edit or note why it does not 
 | 3 | `nvim/lua/lang/<lang>.lua`, `formatters` | Each new formatter. Skip it if the server formats and LSP formatting is enough (Typst: tinymist) | Formatter |
 | 4 | `nvim/lua/lang/<lang>.lua`, `linters` | Each new linter | Linter |
 | 5 | `nvim/lua/lang/<lang>.lua`, `variants` | The tool runs only on some files of a filetype | `sub-filetypes.md` |
-| 6 | `nvim/lua/lang/<lang>.lua`, `parsers` | A new language with a tree-sitter parser | Treesitter |
-| 7 | `nvim/lua/lsp/init.lua`, `roots` | nvim-lspconfig's `root_dir` runs the tool from PATH or checks its version | Custom root |
-| 8 | `definitions` in `nvim/lua/format/conform.lua` or `nvim/lua/linting/nvim_lint.lua` | Only a formatter's extra args, or a definition conform or nvim-lint lacks | Formatter, Linter |
+| 6 | `nvim/lua/lsp/init.lua`, `roots` | nvim-lspconfig's `root_dir` runs the tool from PATH or checks its version | Custom root |
+| 7 | `definitions` in `nvim/lua/format/conform.lua` or `nvim/lua/linting/nvim_lint.lua` | Only a formatter's extra args, or a definition conform or nvim-lint lacks | Formatter, Linter |
 
 You never edit these: `:Tools`, the install prompts, the statusline, `:Status`, `nvim/lua/lsp/init.lua`, conform's `formatters_by_ft`, nvim-lint's `linters_by_ft`, the server list. They are built from, or ask, `nvim/lua/lang/` (`lang.views()`, `lang.of()`).
 
@@ -170,9 +169,9 @@ Before and after for gofumpt (`nvim/lua/lang/go.lua`):
 
 ## Treesitter
 
-Check that a parser exists: `ls ~/.local/share/nvimn/site/pack/core/opt/nvim-treesitter/runtime/queries/<lang>`. If it does, add `"<lang>"` to the language's `parsers`.
+Nothing to edit. A language file names no parsers (D119 in `docs/rearchitecture-decisions.md`): `parsers.needed(ft)` in `nvim/lua/parsers/init.lua` derives them from the filetype's own parser and the languages its injections query names, and installs them when a buffer first needs them. Check what a filetype gets with `:lua =require("parsers").needed("<ft>")`, or in `:Tools`.
 
-Neovim would install the parser on first use anyway. The list matters for the suite: `tests/regress/refresh.lua` installs every language's `parsers` (through `lang.views()`) plus the literal `ensure_installed` list in `nvim/lua/features/treesitter.lua`, which holds only the parsers no language names.
+`tests/regress/refresh.lua` pre-seeds the suite with what every declared filetype needs, so a new language's parsers come with the next `--refresh`.
 
 ## Areas
 

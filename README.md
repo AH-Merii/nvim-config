@@ -17,12 +17,16 @@ through [mise](https://mise.jdx.dev). It supports Go, Rust, Python, Lua, TypeScr
   an LSP gr* key says what is missing, such as the method no server supports.
 - **snacks.nvim** for pickers, notifications, indent guides and smooth scrolling; the statusline from neoblocks.nvim;
   which-key, gitsigns, diffview, trouble, flash and treesitter.
+- **Treesitter parsers on demand.** Nothing installs at startup: opening a file installs its language's parser and
+  the languages its injections name, nvim-treesitter's copy even where Neovim bundles one. `:Tools` lists them.
 
 ## Requirements
 
 - Neovim nightly (0.13-dev)
 - [mise](https://mise.jdx.dev), for the language tools
 - git, and a [Nerd Font](https://www.nerdfonts.com) for the icons
+- for treesitter parsers: the tree-sitter CLI (offered for install with mise when a parser needs it), a C compiler,
+  curl and tar
 
 ## Install
 
@@ -61,7 +65,9 @@ lazy's checkout, so they aren't reused either. The leader key is `<space>`.
   project only instead: it goes into the project's `mise.local.toml`, which is added to the repo's `.gitignore`
   unless git already ignores or tracks it.
 - **Format and lint:** automatic, on save (conform.nvim) and on edits (nvim-lint).
-- **Turn off install offers:** `vim.g.install_tools = "off"`.
+- **Turn off install offers:** `vim.g.install_tools = "off"`. It stops parser installs too.
+- **A parser that failed to install:** `:Tools`, pick its row, then *Retry the install*; *Update* there updates an
+  installed one.
 
 ## Contributing
 

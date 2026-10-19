@@ -90,7 +90,7 @@ cd $R/tests/regress && mkdir -p last && systemd-run --user --scope -q -p MemoryM
 ```
 
 1. **`--refresh` with your checks.** It installs every check's `@needs` into the suite's mise, then syncs plugins and parsers. Without `tests/regress/data/mise` (a fresh clone) it installs every tool and can take 15 minutes. `tools: X is in a check's @needs but not in the catalog` means the catalog key and the `@needs` name differ. `./suite.sh --refresh-dry-run` previews the install list.
-2. **The areas your change touches:** `./suite.sh --area startup,smoke,tools,lsp,format,lint`, plus `treesitter` if you edited a language's `parsers`. Those are the areas `tests/regress/areas.map` gives the catalog, `lsp_servers.lua` and `lua/lang/`. `--changed` would miss new untracked files.
+2. **The areas your change touches:** `./suite.sh --area startup,smoke,tools,lsp,format,lint`. Those are the areas `tests/regress/areas.map` gives the catalog, `lsp_servers.lua` and `lua/lang/`. `--changed` would miss new untracked files.
 
 Pass: `SUITE PASS`, with `PASS the user's mise config, mise installs and rustup toolchains unchanged` in the hygiene block. The hygiene block also watches the live nvim dirs, which the user's own Neovim writes to: a `FAIL live nvim dirs changed` line naming a file your run can't have touched (an editor's server log under `~/.local/share/nvim/`) comes from outside. Say so in the report, with the line, rather than counting it as your failure. On a FAIL, the reason is under the check's line and its output is in `last/nightly/<check>.out`. Fix the cause, rerun the failed checks by name, then the area run again.
 
