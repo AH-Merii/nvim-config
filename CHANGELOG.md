@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.5.0](https://github.com/AH-Merii/nvim-config/compare/v1.4.0...v1.5.0) (2026-10-19)
+
+
+### Features
+
+* **keys:** list a key only where it would act at the cursor ([#82](https://github.com/AH-Merii/nvim-config/issues/82)) ([6f4e709](https://github.com/AH-Merii/nvim-config/commit/6f4e709be70210713e971a38b7ebebab232c0fda))
+* **textobjects:** a label naming the target's node type opens with what the key does ([#83](https://github.com/AH-Merii/nvim-config/issues/83)) ([a8b66c2](https://github.com/AH-Merii/nvim-config/commit/a8b66c26f9a63183fcc18024588a2af798bf7f5c))
+
+
+### Bug Fixes
+
+* **ui:** in the TUI [i ]i ii ai are the conditional textobjects, not snacks' scope keys ([#84](https://github.com/AH-Merii/nvim-config/issues/84)) ([a16b7cb](https://github.com/AH-Merii/nvim-config/commit/a16b7cbe4ad3b069ba323e1bc8046cef11849564))
+
 ## [1.4.0](https://github.com/AH-Merii/nvim-config/compare/v1.3.0...v1.4.0) (2026-10-19)
 
 
