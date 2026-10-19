@@ -1796,14 +1796,16 @@ says "linters still running at exit" (`grep -c` gives 0 in `~/.cache/nvim-config
 `lint_quit_kill` drives its own nvim over a socket, so the wait can't hide an orphan there.
 
 **Checks.** `lint_quit_kill.sh`: a stand-in yamllint ignores SIGTERM and SIGINT; on one buffer it sleeps in a child,
-on another it reports a finding after 2 s.
+on another it reports a finding once the check has seen the `:wq` done.
 
 - `:wq` with two runs going (the one opening the file started and the one the write started) exits within 5 s, and
   none of their processes is alive 3 s later.
 - While Neovim runs, nothing but the quit kills a run: `:wq` that closes one window of three, `:bunload` and
   `:bdelete` each leave the buffer's newest run going, and the other buffer's lint, running at the `:wq`, still
   reports its finding.
-- Two writes cancel two runs; once nvim-lint has SIGKILLed their own pids, the quit leaves none of their processes.
+- Two writes cancel two runs; once their own pids have ended, the quit leaves none of their processes. On that
+  buffer the stand-in ends on nvim-lint's SIGINT and leaves its child, as a run that ignores it does when nvim-lint
+  SIGKILLs it 10 s later; the check doesn't wait the 10 s.
 
 On main (c7db37e) the quit cases fail, with the runs' yamllint and sleep alive. Sibling wrong versions each fail
 it: no kill; the kill on BufDelete instead of at the quit; the kill on WinClosed; the kill at the quit plus on
