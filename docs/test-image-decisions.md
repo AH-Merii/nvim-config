@@ -174,6 +174,40 @@ case GitHub's page warns about for jobs that depend on a failed job.
 
 **Cost.** The `changes` job adds a runner start and a two-commit checkout ahead of `test` on every run.
 
+## D149: a daily job prunes the build cache (2026-10-19)
+
+Decided by the user.
+
+**Decision.** `.github/workflows/cache-prune.yml` runs daily (and by hand, with a dry-run choice) and deletes the
+build cache entries on main that the newest build of main no longer uses. BuildKit's `type=gha` cache keeps one
+entry per layer blob (`buildkit-blob-1-<digest>`) and, per build that exports, an index
+(`index-buildkit-1-<scope>#<n>`) of every blob that build's cache holds; a build reads only the newest index
+([gha.go](https://github.com/moby/buildkit/blob/master/cache/remotecache/gha/gha.go)). The job reads the newest
+index through the runner's cache service, the way BuildKit does
+([cache_v2.go](https://github.com/tonistiigi/go-actions-cache/blob/master/cache_v2.go)), and keeps every blob it
+lists, the index itself and anything younger than 6 hours; it deletes the other `buildkit-blob-`/`index-buildkit-`
+entries. It deletes nothing while a `test.yml` run on main is queued or running (a build uploads its blobs before
+its index), or when it can't read the index, or when the index names no blob in the cache. A pull request that
+changes the workflow runs it as a dry run. Its token has `actions: write` only.
+
+Why: the cache was at 10.29 GB in 232 entries on 2026-10-19 (`gh api repos/AH-Merii/nvim-config/actions/cache/usage`),
+over GitHub's 10 GB default, and GitHub then evicts by last access until it is under
+([dependency caching](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching)).
+Last access is a poor guide here: a fully cached build of main touched about 10 entries (run 39289495752), since
+BuildKit checks which blobs exist by listing the keys, not by reading them (gha.go, `initActiveKeyMap`), so the
+current tools layer can look older than a stale one. Losing it costs a cold build (365 s, "Measurements"). Most of
+the cache was old copies of the tools layer: five each of its two big blobs (465 MB and 694 to 701 MB), about 5.8 GB,
+none used since 2026-10-18.
+
+**Rejected.**
+
+- Deleting by last access or age alone: could delete the current tools layer, for the reason above.
+- Keeping the newest entry per key: every blob key is unique (its digest), so that keeps everything.
+- Raising the cache limit: costs money and still fills.
+
+**Known limit.** The cache service is not a documented API. If it changes, the job fails before deleting anything
+and the cache falls back to GitHub's eviction.
+
 ## Local runs (2026-10-17)
 
 - `mise run test:image:build`: podman by default (`NVR_ENGINE=docker` for docker), capped with
