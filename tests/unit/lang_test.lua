@@ -16,6 +16,7 @@ local function fixture()
       formatters = { "afmt1", "afmt2" },
       linters = { alint = { covered_by = "aserver" }, zlint = { filetypes = { "alphax" } } },
       options = { shiftwidth = 3 },
+      treesitter = { indent = false, syntax = true },
       keys = { { "]]", label = "Next alpha" } },
       variants = {
         ["alpha.own"] = {
@@ -35,6 +36,7 @@ local function fixture()
       formatters = { "bfmt", filetypes = { "beta" } },
       linters = { blint = {} },
       options = { tabstop = 5 },
+      treesitter = { indent = true },
       keys = { { "]]", label = "Next beta" }, filetypes = { "beta" } },
     },
   }
@@ -145,6 +147,18 @@ h.case("setup gives the variants' files their filetypes, and sets each filetype'
   vim.api.nvim_del_augroup_by_name("lang")
 end)
 
+h.case("a language's treesitter settings apply to its filetypes and variants; an undeclared dotted filetype gets every part's, later parts last", function()
+  local r = lang._from(fixture())
+  local alpha = { indent = false, syntax = true }
+  for _, ft in ipairs({ "alpha", "alphax", "alpha.own", "alpha.kept", "alpha.undeclared" }) do
+    h.eq(r.of(ft).treesitter, alpha, ft)
+  end
+  h.eq(r.of("beta").treesitter, { indent = true }, "beta")
+  h.eq(r.of("beta.alpha").treesitter, { indent = false, syntax = true }, "beta.alpha")
+  h.eq(r.of("alpha.beta").treesitter, { indent = true, syntax = true }, "alpha.beta")
+  h.eq(lang._from({ g = { filetypes = { "g" } } }).of("g").treesitter, nil, "a language that declares none")
+end)
+
 -- Each case: specs with one mistake, what must still hold, and a word every problem message must name
 local mistakes = {
   {
@@ -191,6 +205,12 @@ local mistakes = {
     },
     function(r) return r.views().filetypes.filename.f == "x.v1" and r.views().filetypes.pattern.p == "x.v1" and r.of("y.v2") ~= nil end,
     "x.v1",
+  },
+  {
+    "a treesitter setting that is not one, or is not true or false, is skipped; the language's other settings stay",
+    { a = { filetypes = { "x" }, treesitter = { indent = false, syntaxx = true, syntax = "ON" } } },
+    function(r) return vim.deep_equal(r.of("x").treesitter, { indent = false }) end,
+    "treesitter",
   },
 }
 for _, m in ipairs(mistakes) do
