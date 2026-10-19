@@ -3,7 +3,6 @@ local NXO = { "n", "x", "o" }
 ---@type lang.Spec
 return {
   filetypes = { "rust" },
-  parsers = { "rust" },
   servers = {
     rust_analyzer = {
       settings = { ["rust-analyzer"] = { check = { command = "clippy" }, diagnostics = { enable = true } } },

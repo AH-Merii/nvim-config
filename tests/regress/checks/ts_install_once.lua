@@ -1,7 +1,10 @@
--- @desc     a parser that is available but not installed is installed once a session: not again for each buffer after a failed build, and every buffer opened while it installs attaches when it lands
+-- @desc     with a UI, a parser that is available but not installed is installed once a session: not again for each buffer after a failed build, and every buffer opened while it installs attaches when it lands
 -- @areas    treesitter
 -- @budget   15
+-- @needs    tree-sitter
 local ts = require("nvim-treesitter")
+-- installs need a UI (D120); headless, this stands in for one
+vim.api.nvim_list_uis = function() return { {} } end
 local installed = ts.get_installed()
 -- two available languages without a parser, each with a filetype of its own
 local probes = {}
@@ -23,12 +26,18 @@ ts.install = function(langs)
   if langs == lang or (type(langs) == "table" and vim.list_contains(langs, lang)) then calls = calls + 1 end
   return { await = function(_, cb) cb("nvr: install failed") end }
 end
+-- the failure's error toast is this check's own doing: caught here, so it doesn't count as an error of the config's
+local notify, errors = vim.notify, {}
+vim.notify = function(msg, level) if level == vim.log.levels.ERROR then table.insert(errors, msg) end end
 for _ = 1, 3 do
   vim.api.nvim_set_current_buf(vim.api.nvim_create_buf(true, false))
   vim.bo.filetype = ft
 end
+wait_until(function() return #errors > 0 end, 3000)
+vim.notify = notify
 check("the missing parser is installed on first use", calls >= 1, calls)
 check("a failed install is not retried for the next buffers", calls == 1, calls .. " installs for 3 buffers")
+check("a failed install says so", #errors == 1 and errors[1]:find("Couldn't install " .. lang, 1, true) ~= nil, vim.inspect(errors))
 
 -- an install still running when more buffers of its filetype open: each of them attaches once it lands
 local lang2, ft2 = probes[2][1], probes[2][2]

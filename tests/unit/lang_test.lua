@@ -12,7 +12,6 @@ local function fixture()
   return {
     alpha = {
       filetypes = { "alpha", "alphax" },
-      parsers = { "alpha", "shared" },
       servers = { aserver = { settings = { x = 1 } }, narrow = { filetypes = { "alpha" } } },
       formatters = { "afmt1", "afmt2" },
       linters = { alint = { covered_by = "aserver" }, zlint = { filetypes = { "alphax" } } },
@@ -32,7 +31,6 @@ local function fixture()
     },
     beta = {
       filetypes = { "beta", "betax" },
-      parsers = { "shared", "beta" },
       servers = { bserver = {} },
       formatters = { "bfmt", filetypes = { "beta" } },
       linters = { blint = {} },
@@ -121,7 +119,6 @@ h.case("the views are what each plugin needs for every declared filetype", funct
     narrow = { filetypes = { "alpha", "alpha.kept", "alpha.own" } },
     bserver = { filetypes = { "alpha.own", "beta", "betax" } },
   }, "lsp")
-  h.eq(v.parsers, { "alpha", "beta", "shared" }, "parsers")
   h.eq(v.covered_by, { alint = "aserver" }, "covered_by")
   local a, b = { { "]]", label = "Next alpha" } }, { { "]]", label = "Next beta" } }
   h.eq(v.keys, { alpha = a, alphax = a, beta = b }, "keys")
@@ -246,7 +243,7 @@ h.case("each variant says what it is, and one with match rules has an example pa
   h.eq(broken, {}, "variants")
 end)
 
-h.case("every name a language uses has a catalog binary, and every catalog binary is used by a language or what it runs", function()
+h.case("every name a language uses has a catalog binary, and every catalog binary is used by a language, what it runs or the parsers", function()
   local used, broken = {}, {}
   for _, ft in ipairs(lang.filetypes()) do
     local a = lang.of(ft)
@@ -269,8 +266,8 @@ h.case("every name a language uses has a catalog binary, and every catalog binar
       broken[#broken + 1] = ("%s's covering server %s is named by no language"):format(linter, server)
     end
   end
-  for bin in pairs(catalog.tools) do
-    if not used[bin] then
+  for bin, entry in pairs(catalog.tools) do
+    if not used[bin] and not entry.parsers then
       broken[#broken + 1] = ("catalog binary %s is used by no language"):format(bin)
     end
   end

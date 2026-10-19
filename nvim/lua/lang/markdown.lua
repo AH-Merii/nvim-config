@@ -3,7 +3,6 @@ local NXO = { "n", "x", "o" }
 ---@type lang.Spec
 return {
   filetypes = { "markdown" },
-  parsers = { "markdown", "markdown_inline" },
   servers = { marksman = {} },
   formatters = { "prettierd" },
   linters = { ["markdownlint-cli2"] = {} },

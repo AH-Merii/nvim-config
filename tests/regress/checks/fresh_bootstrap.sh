@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# @desc     a first start from an empty data dir installs every plugin (vim.pack, from the lockfile) and parser, without a hit-enter prompt or an error, and the file opened at launch gets its servers from the suite's tools
+# @desc     a first start from an empty data dir installs every plugin (vim.pack, from the lockfile) and no parser, with installs off (D120), while lua already needs nvim-treesitter's luadoc and luap, without a hit-enter prompt or an error, and the file opened at launch gets its servers from the suite's tools
 # @areas    startup installer treesitter lsp tools
 # @budget   180
 # @fresh
 # @needs    lua-language-server
-# @network  the real first start: 24 plugin clones, blink.cmp binary, ~30 parser tarballs
-#           Measured in the fresh sandbox (with Mason, before mise): VimEnter at 6.5-14s, parsers ~10s after it.
+# @network  the real first start: 24 plugin clones, blink.cmp binary; no parser (D116: none at startup, and installs
+#           are off here, D120). Measured in the fresh sandbox (with Mason, before mise): VimEnter at 6.5-14s.
 #
 # Same TUI driver as fresh_no_prompt.sh (tmux, private server killed on exit; 3s init-time event loop that
 # forces the first-start prompt race), on an empty data dir, launched with main.lua so the opened buffer must get
@@ -131,9 +131,14 @@ local function report()
     if not errs[l] and not vim.list_contains(pending, l) and not (ok and r) then table.insert(unloadable, l) end
   end
   for _, t in pairs(errs) do table.insert(errlist, t) end
-  if n == 0 then info("no parser install seen: the init-time echo race was not exercised") end
-  rec(#pending == 0 and #errlist == 0 and #unloadable == 0, "parsers installed at first start load, no install errors",
-    string.format("%d installed; pending [%s]; errors [%s]; not loadable [%s]", n, join(pending), join(errlist, 2), join(unloadable)))
+  local names = vim.tbl_keys(started)
+  table.sort(names)
+  rec(n == 0, "a first start with installs off downloads no parser: nothing installs at startup, and the switch holds",
+    string.format("%d downloaded [%s]; errors [%s]", n, join(names), join(errlist, 2)))
+  -- nothing installed yet, so the queries in use are Neovim's, which inject neither: these come from nvim-treesitter's
+  local lua_needs = require("parsers").needed("lua")
+  rec(vim.list_contains(lua_needs, "luadoc") and vim.list_contains(lua_needs, "luap"),
+    "before any install, lua needs what nvim-treesitter's lua injections name (luadoc, luap)", join(lua_needs))
 
   local pm = plugins_missing()
   rec(#pm == 0, "every plugin installed", #pm > 0 and ("missing " .. join(pm)) or nil)

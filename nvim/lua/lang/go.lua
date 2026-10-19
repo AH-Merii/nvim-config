@@ -3,7 +3,6 @@ local NXO = { "n", "x", "o" }
 ---@type lang.Spec
 return {
   filetypes = { "go", "gomod", "gowork", "gotmpl", "gosum" },
-  parsers = { "go", "gomod", "gowork", "gosum" },
   servers = {
     gopls = {
       settings = {

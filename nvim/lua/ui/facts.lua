@@ -1,5 +1,5 @@
 -- What applies to each buffer, for whatever shows it (the statusline, the tools indicator, :Status): the servers
--- running, the formatters and linters that will run, the missing tools, the tools root and the git checkout. What
+-- running, the formatters and linters that will run, the missing tools and failed parsers, the tools root and the git checkout. What
 -- will run is format.plan(buf).run and linting.plan(buf).run; the rest comes from lang.of, the tool resolver's
 -- results, vim.lsp's clients and vim.fs.root. Each buffer's facts are cached until an event that can change them; User FactsChanged (M.event, data
 -- { buf }) fires once when they did, so a statusline redraws once. A read is a table lookup.
@@ -20,6 +20,7 @@ M.event = "FactsChanged"
 ---@field formatters string[] the formatters that will run, in order
 ---@field linters string[] the linters that will run
 ---@field missing string[] catalog binaries the buffer's tools run that the resolver did not find
+---@field parsers string[] treesitter parsers the buffer needs whose install failed (parsers.missing)
 ---@field unanswered boolean the root's project mise config waits for the project prompt's answer
 
 local cache = {} ---@type table<integer, ui.Facts> buf -> its facts
@@ -58,7 +59,7 @@ local touch ---@type fun(buf: integer)
 local function compute(buf)
   local found = require("lang").of(vim.bo[buf].filetype)
   local root = tools.root(buf)
-  local facts = { root = root, servers = running(buf), formatters = {}, linters = {}, missing = {} } ---@type ui.Facts
+  local facts = { root = root, servers = running(buf), formatters = {}, linters = {}, missing = {}, parsers = require("parsers").missing(buf) } ---@type ui.Facts
   facts.repo = repo_of(buf)
   -- resolve starts what is not resolved yet; until it ends, a tool counts neither as found nor as missing
   local names = found and catalog.needed(found) or {}
@@ -130,7 +131,7 @@ end
 function M.get(buf)
   buf = (buf == nil or buf == 0) and vim.api.nvim_get_current_buf() or buf
   if not vim.api.nvim_buf_is_valid(buf) then
-    return { root = tools.root(), servers = {}, formatters = {}, linters = {}, missing = {}, unanswered = false }
+    return { root = tools.root(), servers = {}, formatters = {}, linters = {}, missing = {}, parsers = {}, unanswered = false }
   end
   if not cache[buf] or stale[buf] then
     cache[buf], stale[buf] = compute(buf), nil
@@ -172,6 +173,16 @@ function M.setup()
         if facts.root == ev.data.root then
           touch(buf)
         end
+      end
+    end,
+  })
+  -- A parser's install landed or failed: any buffer may need it
+  au("User", {
+    group = group,
+    pattern = require("parsers").event,
+    callback = function()
+      for buf in pairs(cache) do
+        touch(buf)
       end
     end,
   })

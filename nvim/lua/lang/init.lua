@@ -1,4 +1,4 @@
--- The languages: one data file per language next to this one (python.lua, go.lua, ...) holds its filetypes, parsers,
+-- The languages: one data file per language next to this one (python.lua, go.lua, ...) holds its filetypes,
 -- servers and their settings, formatters, linters, variants and buffer options. Only how to install a binary stays in
 -- tools/catalog.lua: a language names a server, formatter or linter, and the catalog gives its binary.
 --
@@ -10,7 +10,6 @@
 
 ---@class lang.Spec
 ---@field filetypes string[] where everything below applies, unless an item names its own filetypes
----@field parsers? string[] nvim-treesitter parsers installed at startup; any other installs when a buffer needs it
 ---@field servers? table<string, lang.Server> nvim-lspconfig's name -> fields merged over nvim-lspconfig's config
 ---@field formatters? lang.Formatters conform names, run in order
 ---@field linters? table<string, lang.Linter> nvim-lint names
@@ -54,7 +53,6 @@
 ---@field lint table<string, string[]> nvim-lint's linters_by_ft
 ---@field lsp table<string, vim.lsp.Config> server -> the fields for vim.lsp.config, filetypes included
 ---@field filetypes vim.filetype.add.filetypes the variants' match rules
----@field parsers string[]
 ---@field covered_by table<string, string> linter -> the server that covers it
 ---@field variants table<string, { lang: string, base: string, about: string, example?: string }>
 ---@field keys table<string, keys.Row[]> filetype -> its language's key rows, for keys.language
@@ -128,7 +126,7 @@ function M._from(specs, problems)
   local owner = {} ---@type table<string, string> filetype -> language
   local raw = {} ---@type table<string, table> filetype -> its answer before finish
   local configs = {} ---@type table<string, { lang: string, config: lang.Server }>
-  local views = { conform = {}, lint = {}, lsp = {}, filetypes = { filename = {}, pattern = {} }, parsers = {}, covered_by = {}, variants = {}, keys = {} } ---@type lang.Views
+  local views = { conform = {}, lint = {}, lsp = {}, filetypes = { filename = {}, pattern = {} }, covered_by = {}, variants = {}, keys = {} } ---@type lang.Views
 
   --- The answer being built for ft, or nil when another language declared ft first.
   ---@param lang string
@@ -198,11 +196,7 @@ function M._from(specs, problems)
         views.keys[ft] = { unpack(rows) }
       end
     end
-    for _, parser in ipairs(spec.parsers or {}) do
-      add(views.parsers, parser)
-    end
   end
-  table.sort(views.parsers)
 
   -- A base's linters run first, in name order, then a variant's own
   for _, answer in pairs(raw) do

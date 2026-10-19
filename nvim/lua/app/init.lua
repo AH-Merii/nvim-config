@@ -46,6 +46,8 @@ M.phases = {
     run = function()
       require("lang").setup()
       require("tools").setup()
+      -- parsers find tree-sitter through the tool resolver; features/treesitter.lua asks for a buffer's parsers
+      require("parsers").setup()
       -- prompts need a UI and vim.g.install_tools ~= "off"
       require("tools.ux").setup()
     end,
