@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/AH-Merii/nvim-config/compare/v1.2.0...v1.3.0) (2026-10-19)
+
+
+### Features
+
+* **ui:** the statusline names each formatter's and linter's tool once ([#80](https://github.com/AH-Merii/nvim-config/issues/80)) ([290ad10](https://github.com/AH-Merii/nvim-config/commit/290ad100e98aa7c57fb82443ff5b695f48f202d8))
+
 ## [1.2.0](https://github.com/AH-Merii/nvim-config/compare/v1.1.0...v1.2.0) (2026-10-19)
 
 
