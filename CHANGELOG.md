@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/AH-Merii/nvim-config/compare/v1.1.0...v1.2.0) (2026-10-19)
+
+
+### Bug Fixes
+
+* **ui:** every hidden character is drawn in onedark's dim grey ([#77](https://github.com/AH-Merii/nvim-config/issues/77)) ([9a3fa00](https://github.com/AH-Merii/nvim-config/commit/9a3fa000eac22244dada645449d5f3d7b236a19d))
+
 ## [1.1.0](https://github.com/AH-Merii/nvim-config/compare/v1.0.0...v1.1.0) (2026-10-19)
 
 
