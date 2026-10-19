@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.0](https://github.com/AH-Merii/nvim-config/compare/v0.16.0...v1.0.0) (2026-10-19)
+
+
+### Features
+
+* **parsers:** install a buffer's treesitter parsers when it first needs them ([#73](https://github.com/AH-Merii/nvim-config/issues/73)) ([2638d32](https://github.com/AH-Merii/nvim-config/commit/2638d328fed39fc0dcaed7ba7c6c32f5a821e746))
+
+
+### Chores
+
+* release 1.0.0, the rearchitecture's first complete design ([#70](https://github.com/AH-Merii/nvim-config/issues/70)) ([f45107b](https://github.com/AH-Merii/nvim-config/commit/f45107bb577c8b87337654700b9241d73fddf597))
+
 ## [0.16.0](https://github.com/AH-Merii/nvim-config/compare/v0.15.0...v0.16.0) (2026-10-18)
 
 
