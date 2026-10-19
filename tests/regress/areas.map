@@ -18,6 +18,7 @@ lua/features/git.lua              git keys which-key
 lua/features/completion.lua       completion
 lua/keys/*                        keys which-key lsp git lint format treesitter
 lua/textobjects/*                 treesitter keys which-key
+queries/*                         treesitter editing
 lua/features/editing.lua          editing keys which-key
 lua/features/diagnostics.lua      ui lsp keys
 lua/ui/snacks.lua                 ui keys

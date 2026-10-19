@@ -183,7 +183,7 @@ treesitter = {
 },
 ```
 
-Regex syntax can't go in `options` (`syntax = "ON"`): `vim.treesitter.start` turns it off after FileType. Variants get their base's settings. `tests/regress/checks/treesitter_lang.lua` checks every declared filetype against its settings; add a check of the behaviour the setting is for, as `python_indent.lua` does.
+Regex syntax can't go in `options` (`syntax = "ON"`): `vim.treesitter.start` turns it off after FileType. A capture the language's query lacks goes in `nvim/queries/<parser>/<query>.scm`, starting with `;; extends` so it adds to nvim-treesitter's query instead of replacing it (D135: `(pipe_table_cell) @spell` for markdown). Variants get their base's settings. `tests/regress/checks/treesitter_lang.lua` checks every declared filetype against its settings; add a check of the behaviour the setting is for, as `python_indent.lua` does.
 
 ## Areas
 

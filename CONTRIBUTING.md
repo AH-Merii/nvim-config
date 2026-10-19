@@ -50,6 +50,7 @@ for a `<leader>` row added without it).
 ```
 nvim/
 ├── init.lua                  # Entry point: vim.loader, then the startup phases (lua/app/)
+├── queries/                  # Captures the config adds to treesitter's queries, each file `;; extends` (D135)
 ├── lua/
 │   ├── app/                 # Startup phases (init.lua); vim.pack installs every module's plugins (plugins.lua)
 │   ├── options.lua          # Editor-wide options
