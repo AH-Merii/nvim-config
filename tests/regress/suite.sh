@@ -277,7 +277,9 @@ run_version() {
   local v=$1
   H=$RUNROOT/$v
   make_home "$H"
-  rmdir "$H/cache" && cp -a --reflink=auto "$S/cache-seed" "$H/cache"
+  # the seed's contents: cache-seed/ may be a symlink (a worktree's, to the main checkout's), which cp -a would copy as
+  # one, so every run would write into the shared seed
+  cp -a --reflink=auto "$S/cache-seed/." "$H/cache/"
   # each version gets its own reflink copy of the nvim data; the suite's mise and rustup are used in place
   mkdir -p "$H/data"; cp -a --reflink=auto "$S/data/nvim" "$H/data/nvim"
   mkdir -p "$S/last/$v"
