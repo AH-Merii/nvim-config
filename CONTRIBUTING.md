@@ -104,22 +104,27 @@ nvim/
   finds and the tools prompt offers. A failed parser counts in the statusline's missing count; `:Tools` lists each
   parser with Retry and Update
 - `parsers.setup({ backend })` swaps nvim-treesitter for a fake (`tests/unit/fake_parsers.lua`)
+- Once a parser is there, `features/treesitter.lua` starts highlighting and sets nvim-treesitter's `indentexpr`, unless
+  the language's file says what stays instead (`treesitter`, D128): `indent = false` keeps the runtime's indent plugin,
+  and `syntax = true` turns regex syntax back on after every `vim.treesitter.start`, which turns it off, `<leader>TT`'s
+  included. Python needs both: its indent plugin reads the regex syntax groups to skip brackets in strings
 
 **Languages** (`lua/lang/`, decision D46 in `docs/rearchitecture-decisions.md`)
 - One data file per language (`python.lua`, `go.lua`, ...) holds its filetypes, servers with their
-  settings, formatters, linters, variants and buffer options. `lua/tools/catalog.lua` only says how to install each
-  binary; a language names a server, formatter or linter, and the catalog gives its binary
+  settings, formatters, linters, variants, buffer options and treesitter settings. `lua/tools/catalog.lua` only says
+  how to install each binary; a language names a server, formatter or linter, and the catalog gives its binary
 - `lang.of(ft)` answers what applies to a filetype: its servers, formatters, linters (with the server that covers each),
-  their binaries and its options. The install prompts, `:Tools`, the statusline, `:Status`, and the format and linting
-  modules below ask it. A dotted filetype no language declares gets its parts' formatters, linters and options as
-  conform, nvim-lint and the ftplugins combine them, and no servers
+  their binaries, its options and its treesitter settings. The install prompts, `:Tools`, the statusline, `:Status`,
+  and the format and linting modules below ask it. A dotted filetype no language declares gets its parts' formatters,
+  linters, options and treesitter settings as conform, nvim-lint and the ftplugins combine them, and no servers
 - `lang.views()` builds the tables the plugins get: conform's `formatters_by_ft`, nvim-lint's `linters_by_ft`, each
   server's `vim.lsp.config` fields (applied above nvim-lspconfig's `lsp/<name>.lua`) and the variants' filetype
   rules. Every variant gets explicit entries
 - A mistake in a language file, such as two languages declaring one filetype or two variants claiming one file name,
   skips that declaration and is reported once at startup; the first declaration, in file name order, stays
-- A variant (a dotted filetype such as `yaml.github-actions`) gets its base's servers and linters plus its own, and its
-  own formatters if it names any, else its base's. One with `match` rules needs an `example` path
+- A variant (a dotted filetype such as `yaml.github-actions`) gets its base's servers and linters plus its own, its
+  own formatters if it names any, else its base's, and its base's options and treesitter settings. One with `match`
+  rules needs an `example` path
 - `docs/languages.md` lists each language's and variant's tools and each binary's install spec. `docs/languages.lua`
   generates it from `lang` and the catalog (`mise run docs`); don't edit it by hand
 
@@ -169,6 +174,9 @@ return {
     },
   },
   options = { expandtab = true },                -- buffer options, set on FileType
+  -- what stays on beside treesitter once it attaches, each with its reason: the runtime's indent plugin instead of
+  -- treesitter's indent, regex syntax beside treesitter's highlighting (lua/lang/python.lua)
+  treesitter = { indent = false, syntax = true },
 }
 ```
 
@@ -241,9 +249,10 @@ It owns everything about itself: its plugins, rows, needs, autocmds (in a `featu
 
 ### Adding Filetype Behavior
 
-Buffer options go in the language's file (`options` in `lua/lang/<lang>.lua`). A language's own keys, such as labels
-for its runtime ftplugin's maps, go in its file's `keys`; a feature's keys for a filetype are `keys.language(ft)`
-rows in the feature (see "Adding a key"):
+Buffer options go in the language's file (`options` in `lua/lang/<lang>.lua`). Regex syntax beside treesitter is not
+one: `vim.treesitter.start` turns it off after FileType, so it goes in `treesitter` (D128). A language's own keys, such
+as labels for its runtime ftplugin's maps, go in its file's `keys`; a feature's keys for a filetype are
+`keys.language(ft)` rows in the feature (see "Adding a key"):
 
 ```lua
 -- lua/lang/markdown.lua

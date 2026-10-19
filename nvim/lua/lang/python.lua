@@ -93,6 +93,13 @@ return {
     ruff = { capabilities = { general = { positionEncodings = { "utf-16" } } } },
   },
   formatters = { "ruff_fix", "ruff_format", "ruff_organize_imports" },
+  treesitter = {
+    -- the runtime's python#GetIndent: treesitter's indents a line after a one-line `for x: y` 4 columns deeper
+    indent = false,
+    -- for that indent plugin, which skips brackets in strings and comments by their regex syntax groups; with syntax
+    -- off, `o` below `s.find("[{")` aligns with the bracket (docs/rearchitecture-decisions.md, D128)
+    syntax = true,
+  },
   linters = { ruff = { covered_by = "ruff" } },
   -- Labels for the runtime ftplugin's motions, which it maps without a desc, so the popup would show their rhs
   keys = {

@@ -4,6 +4,8 @@ return {
   servers = { yamlls = { settings = { yaml = { format = { enable = false } } } } },
   formatters = { "prettierd" },
   linters = { yamllint = {} },
+  -- The runtime's GetYAMLIndent; the history gives no reason beyond "TS indent can misbehave" (D128)
+  treesitter = { indent = false },
   variants = {
     ["yaml.github-actions"] = {
       about = "GitHub workflows: jactionlint, zizmor",

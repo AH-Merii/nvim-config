@@ -1,12 +1,13 @@
 -- The languages: one data file per language next to this one (python.lua, go.lua, ...) holds its filetypes,
--- servers and their settings, formatters, linters, variants and buffer options. Only how to install a binary stays in
+-- servers and their settings, formatters, linters, variants, buffer options and treesitter settings. Only how to install a binary stays in
 -- tools/catalog.lua: a language names a server, formatter or linter, and the catalog gives its binary.
 --
 -- This module turns the files into one answer per filetype (M.of) and into the tables each plugin wants (M.views), so
 -- conform, nvim-lint, vim.lsp.config and nvim-treesitter get explicit tables, and every reader, nvim-lint's runs
 -- included, asks M.of. A mistake in a file, such as two languages declaring one filetype, skips that declaration and is
 -- reported once (M.problems), rather than stopping init.lua. The variant rule: a variant (a dotted filetype, yaml.github-actions) gets its base's
--- servers and linters plus its own, and its own formatters if it names any, else its base's.
+-- servers and linters plus its own, its own formatters if it names any, else its base's, and its base's options and
+-- treesitter settings.
 
 ---@class lang.Spec
 ---@field filetypes string[] where everything below applies, unless an item names its own filetypes
@@ -15,7 +16,12 @@
 ---@field linters? table<string, lang.Linter> nvim-lint names
 ---@field variants? table<string, lang.Variant> dotted filetype -> what it adds to its base, the first part
 ---@field options? table<string, any> buffer options set on FileType
+---@field treesitter? lang.Treesitter what stays on beside treesitter once it attaches (features/treesitter.lua)
 ---@field keys? lang.Keys buffer-local key rows (keys.language), e.g. labels for the runtime ftplugin's maps
+
+---@class lang.Treesitter
+---@field indent? boolean false keeps the runtime's indent plugin (indent/<ft>.vim) instead of treesitter's indentexpr
+---@field syntax? boolean true keeps regex syntax on beside treesitter's highlighting, which vim.treesitter.start turns off
 
 ---@class lang.Keys: keys.Row[]
 ---@field filetypes? string[] where they apply instead of the language's filetypes; a dotted filetype gets its parts'
@@ -47,6 +53,7 @@
 ---@field covered_by table<string, string> linter -> the server that covers it
 ---@field tools string[] catalog binaries of the servers, formatters and linters, in that order
 ---@field options? table<string, any>
+---@field treesitter? lang.Treesitter
 
 ---@class lang.Views
 ---@field conform table<string, string[]> conform's formatters_by_ft
@@ -123,6 +130,27 @@ function M._from(specs, problems)
   end
 
   local names = sorted(specs)
+
+  -- Each language's treesitter settings that are settings, with true or false
+  local treesitter = {} ---@type table<string, lang.Treesitter>
+  for _, lang in ipairs(names) do
+    local declared = specs[lang].treesitter
+    if declared then
+      local kept = {}
+      for _, name in ipairs(sorted(declared)) do
+        local value = declared[name]
+        if name ~= "indent" and name ~= "syntax" then
+          problem("lang.%s: treesitter.%s is not a treesitter setting (indent, syntax); it is skipped", lang, name)
+        elseif type(value) ~= "boolean" then
+          problem("lang.%s: treesitter.%s is %s, not true or false; it is skipped", lang, name, vim.inspect(value))
+        else
+          kept[name] = value
+        end
+      end
+      treesitter[lang] = kept
+    end
+  end
+
   local owner = {} ---@type table<string, string> filetype -> language
   local raw = {} ---@type table<string, table> filetype -> its answer before finish
   local configs = {} ---@type table<string, { lang: string, config: lang.Server }>
@@ -137,7 +165,8 @@ function M._from(specs, problems)
       return nil
     end
     owner[ft] = lang
-    raw[ft] = raw[ft] or { lang = lang, servers = {}, formatters = {}, linters = {}, covered_by = {}, options = specs[lang].options }
+    raw[ft] = raw[ft]
+      or { lang = lang, servers = {}, formatters = {}, linters = {}, covered_by = {}, options = specs[lang].options, treesitter = treesitter[lang] }
     return raw[ft]
   end
 
@@ -224,6 +253,7 @@ function M._from(specs, problems)
           linters = { unpack(from.linters) },
           covered_by = {},
           options = from.options,
+          treesitter = from.treesitter,
         }
         for name in pairs(from.servers) do
           answer.servers[name] = true
@@ -294,12 +324,12 @@ function M._from(specs, problems)
 
   --- A dotted filetype no language declares gets what the plugins' own rules for it gave before lang/: no servers
   --- (a server attaches only to the filetypes it lists), the formatters of its last part that has any (conform's
-  --- rule), every part's linters (nvim-lint's), and every part's options, later parts last (Neovim sources each
-  --- part's ftplugin in order). Nil when no part is declared.
+  --- rule), every part's linters (nvim-lint's), and every part's options and treesitter settings, later parts last
+  --- (Neovim sources each part's ftplugin, indent and syntax files in order). Nil when no part is declared.
   ---@param ft string
   local function fallback(ft)
     local parts = vim.split(ft, ".", { plain = true })
-    local first, formatters, linters, covered_by, options = nil, {}, {}, {}, nil
+    local first, formatters, linters, covered_by, options, ts = nil, {}, {}, {}, nil, nil
     for _, part in ipairs(parts) do
       local a = answers[part]
       if a then
@@ -314,6 +344,9 @@ function M._from(specs, problems)
         if a.options then
           options = vim.tbl_extend("force", options or {}, a.options)
         end
+        if a.treesitter then
+          ts = vim.tbl_extend("force", ts or {}, a.treesitter)
+        end
       end
     end
     return first
@@ -325,6 +358,7 @@ function M._from(specs, problems)
           linters = linters,
           covered_by = covered_by,
           options = options,
+          treesitter = ts,
         })
       or false
   end

@@ -173,6 +173,18 @@ Nothing to edit. A language file names no parsers (D119 in `docs/rearchitecture-
 
 `tests/regress/refresh.lua` pre-seeds the suite with what every declared filetype needs, so a new language's parsers come with the next `--refresh`.
 
+Once a parser is there, the buffer gets treesitter's highlighting and indent. Declare `treesitter` in the language's file only when something must stay beside it (D128), with the reason in a comment:
+
+```lua
+-- nvim/lua/lang/python.lua
+treesitter = {
+  indent = false, -- keep the runtime's indent plugin (indent/<ft>.vim): treesitter's indents <case> wrong
+  syntax = true, -- keep regex syntax on beside treesitter: <what reads it, e.g. that indent plugin>
+},
+```
+
+Regex syntax can't go in `options` (`syntax = "ON"`): `vim.treesitter.start` turns it off after FileType. Variants get their base's settings. `tests/regress/checks/treesitter_lang.lua` checks every declared filetype against its settings; add a check of the behaviour the setting is for, as `python_indent.lua` does.
+
 ## Areas
 
 `tests/regress/areas.map` already maps `lua/lang/*`, `lua/tools/*` and `lua/lsp/init.lua`. Add a line only for a new config file outside those globs. An unmapped file makes `--changed` run every area.
