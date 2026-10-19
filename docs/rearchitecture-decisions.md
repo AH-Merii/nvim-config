@@ -44,6 +44,8 @@ The full proposal, with its measurements and sources, was written outside the re
   ("Linters at exit" below).
 - Decided and built (2026-10-19): D116 to D121, treesitter parsers install on demand from a `parsers/` module on the
   tools seams ("D116: treesitter parsers on demand" below).
+- Decided and built (2026-10-19): D128, python keeps regex syntax beside treesitter for its indent plugin, declared in
+  its language file's new `treesitter` field ("D128: python keeps regex syntax beside treesitter" below).
 
 ## Target layout
 
@@ -1964,3 +1966,85 @@ all caught. By the unit tier: zero levels, every level, inherits ignored, junk u
 parsers skipped, retry per buffer, switch ignored, headless installs, tree-sitter unchecked, no start toast and a count
 without parsers. By `fresh_bootstrap`: the bulk install kept ("51 downloaded") and injections derived from the active
 queries (lua then needs only `lua`).
+
+## D128: python keeps regex syntax beside treesitter, for its indent plugin (2026-10-19)
+
+**Context.** In a python buffer, `o` could indent to a column inside an earlier string. Below
+`    for it in items: it["_page"] = p; out[it["id"]] = it`, with `s.find('"interviews":[{')` 15 lines above, `oX`
+gave 34 spaces, not 4 (the diagnosis, on a copy of the user's file: `~/.cache/nvim-config/newline/scrape.py:40`). Python kept the runtime's
+indent plugin, `python#GetIndent` (`features/treesitter.lua:5-6` at 00bc92d, `indent_disabled`). That plugin skips
+brackets in strings and comments only by their regex syntax groups (`$VIMRUNTIME/autoload/python.vim:24-26`,
+`synstack` names matching `Comment`, `Todo`, `String` or `Bytes`), and `vim.treesitter.start` sets `syntax` to ''
+(`$VIMRUNTIME/lua/vim/treesitter/highlighter.lua:173`), so the `[` in that string counted as open.
+
+**Decision (the user's, option A).** Keep regex syntax on beside treesitter for python. Declared in the language's
+file, not hardcoded in the feature: a language file's `treesitter` field (`lang.Treesitter`, `nvim/lua/lang/init.lua`)
+says what stays beside treesitter once it attaches. `indent = false` keeps the runtime's indent plugin instead of
+nvim-treesitter's `indentexpr`, and `syntax = true` turns regex syntax back on. `features/treesitter.lua` reads it
+from `lang.of(ft)`; it no longer names any language. Each declaration carries its reason in a comment.
+
+- Variants get their base's settings, as they get its options, and a dotted filetype no language declares gets every
+  part's, later parts last. A setting that isn't `indent` or `syntax`, or isn't true or false, is skipped and
+  reported in `lang.problems()`.
+- `syntax = true` can't be a buffer option (`options = { syntax = "ON" }`): options are set on FileType, and
+  `vim.treesitter.start` turns syntax off whenever it runs, on FileType or later, when a parser lands. So the feature
+  sets it after every start, `<leader>TT`'s included: Snacks' own toggle calls `vim.treesitter.start()` bare
+  (`snacks.nvim/lua/snacks/toggle.lua:179-181`). On 00bc92d that dropped markdown's regex syntax after a toggle off
+  and on: `treesitter_lang`, run there, found it on after attach and off after the toggle.
+- The declarations, moved from `features/treesitter.lua`: python `{ indent = false, syntax = true }`, yaml
+  `{ indent = false }`, markdown `{ indent = false, syntax = true }`. Python's indent stays the runtime's because
+  nvim-treesitter's indents the line after a one-line `for x: y` at 8, not 4 (the `settings-ignored` wrong
+  implementation below). For yaml and markdown the history gives no reason: both came in one commit,
+  "configure treesitter" (SMS-Supercharge-My-Shell 76ac221, 2025-10-30), as nvim-treesitter's
+  `indent.disable = { "python", "yaml", "markdown" }` under the comment "TS indent can misbehave for these", and
+  `additional_vim_regex_highlighting = { "markdown" }` with no comment; 4778ee0 carried them over to the main branch.
+  Markdown has no runtime indent plugin (`$VIMRUNTIME/indent/` has no markdown file), so it gets autoindent's.
+- No other declared filetype has python's bug: of the ten that keep a runtime indent plugin (dockerfile, gomod,
+  gosum, gotmpl, gowork, make, markdown, python, tf, yaml), only python's reads regex syntax
+  (`~/.cache/nvim-config/indent-audit/audit.lua`, run with `nvim --clean --headless -l` on the worktree; a `grep -E
+  'synID|synstack|syntax_items'` of `$VIMRUNTIME/indent/{yaml,make,terraform,go}.vim` finds none, and
+  `autoload/python.vim` has it).
+
+**Rejected**, measured in the diagnosis on the same file plus `result = call(alpha,`, whose next line should align
+at 14 (`~/.cache/nvim-config/newline/paren.py`):
+
+- **B, treesitter indent for python:** 8 after the one-line `for` (wrong), 14 after the paren.
+- **C, `g:python_indent.disable_parentheses_indenting`:** 4 after the `for`, but 0 after the paren (wrong).
+- A (chosen) gives 4 and 14, at 1.6 ms per Enter.
+
+### Cost (D61, D93)
+
+- **Startup, per key:** none. Reading the setting is one `lang.of` lookup per treesitter attach.
+- **Per redraw, python buffers only:** regex syntax beside treesitter on `typing.py` (3866 lines, CPython 3.14),
+  Neovim 0.13 nightly (v0.13.0-dev-1895) `--clean` with nvim-treesitter's python parser, in a 160x50 pty
+  (`script(1)`). Each figure is the median of 3 interleaved rounds, 40 redraws each, repeated in a second run with
+  the same result within 0.8 ms (`~/.cache/nvim-config/py-indent/bench/bench.lua`, `result1.txt`, `result2.txt`).
+  In ms, treesitter alone → with regex syntax:
+
+  | where | `:redraw!` | edit a line + redraw | page down + redraw |
+  | --- | --- | --- | --- |
+  | top | 1.28 → 2.08 | 0.56 → 0.58 | 2.98 → 4.69 |
+  | middle | 2.23 → 3.84 | 2.33 → 3.22 | 2.61 → 4.29 |
+  | end | 1.48 → 2.73 | 0.68 → 0.76 | 1.65 → 3.34 |
+
+  Over both runs it adds 0.7 to 1.6 ms to a full redraw, under 1 ms to a redraw after an edit, and 1.7 to 2.2 ms
+  to a page scroll, each well inside D61's 8.3 ms frame. `:syntime` over one scroll from top to end (83 pages) counts 230 ms in
+  python's syntax patterns, 2.8 ms a page with `:syntime`'s own timing overhead included.
+
+### Tests
+
+Unit (`tests/unit/lang_test.lua`): a language's settings reach its filetypes and variants, an undeclared dotted
+filetype gets every part's with later parts last, and a setting that isn't one or isn't a boolean is skipped and
+reported. Regress: `treesitter_lang` opens every declared filetype that has a parser and checks, once treesitter
+attaches and again after `<leader>TT` off and on, that regex syntax is on exactly where the language keeps it, and
+that the indentexpr is the runtime indent plugin's (read with no FileType autocmd) where the language keeps that,
+treesitter's otherwise. `python_indent` presses `o` in python after a one-line `for` below a string with brackets,
+after a bracket in a comment and in a string (all 4), and after `call(alpha,` (aligned, 18), before and after
+`<leader>TT` off and on.
+
+Sibling wrong implementations, each one replacement (`~/.cache/nvim-config/py-indent/wrong/run.sh`), all caught. By
+`python_indent`: syntax set before `vim.treesitter.start` (30, 16 and 12 instead of 4), the syntax setting ignored,
+the indent setting ignored (8), the toggle's start without the syntax setting (after the toggle only), and the field
+left out of `lang.of`'s answer. By `treesitter_lang`: the feature reading no settings, the indent setting ignored, the
+toggle without the syntax setting. By the unit tier: variants not inheriting, the undeclared-dotted fallback dropping
+the settings or keeping the first part's, and no check of names or of booleans.
