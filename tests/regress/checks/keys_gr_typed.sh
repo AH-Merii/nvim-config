@@ -137,27 +137,33 @@ vim.wait(5000, function() return WK_READY() == "1" end, 20)
 vim.g.spy_ready = WK_READY()
 EOF
 
-# a key left pending (r after a gr that ran on its own) blocks --remote-expr until the next key
-R() { timeout 5 "$NV" "$V" --clean --headless --server "$sock" "$@" </dev/null 2>/dev/null; }
+# The client that drives it: the binary nv.sh runs, called straight, as nv.sh's setup on every call (a mise lookup when
+# NVR_NVIM is unset) costs more than the call; in the check's own XDG dirs, as nv.sh would run it. A key left pending
+# (r after a gr that ran on its own) blocks --remote-expr until the next key
+BIN=$("$NV" "$V" --clean --headless --cmd 'lua io.stdout:write(vim.v.progpath)' --cmd 'qa!' </dev/null 2>/dev/null)
+R() {
+  XDG_CONFIG_HOME=$NVR_HOME/config XDG_DATA_HOME=$NVR_DATA XDG_STATE_HOME=$NVR_STATE XDG_CACHE_HOME=$NVR_HOME/cache \
+    timeout 5 "$BIN" --clean --headless --server "$sock" "$@" </dev/null 2>/dev/null
+}
 "$NV" "$V" --headless --listen "$sock" \
   -c "autocmd VimEnter * ++once lua vim.schedule(function() dofile('$spy') end)" </dev/null >/dev/null 2>&1 &
 pid=$!
 finish() {
   [ -S "$sock" ] && R --remote-send '<C-\><C-n>:qa!<CR>' >/dev/null
-  for _ in $(seq 30); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+  for _ in $(seq 150); do kill -0 "$pid" 2>/dev/null || break; sleep 0.02; done
   kill "$pid" 2>/dev/null
   rm -f "$sock" "$spy"
   out DONE
 }
 
 ready=0
-for _ in $(seq 250); do
+for _ in $(seq 1250); do
   kill -0 "$pid" 2>/dev/null || break
   if [ -S "$sock" ]; then
     ready=$(R --remote-expr 'get(g:, "spy_ready", 0)')
     [ "$ready" != 0 ] && break
   fi
-  sleep 0.1
+  sleep 0.02
 done
 if [ "$ready" != 1 ]; then
   out "FAIL fake server and which-key ready  -- ${ready:-nvim exited}"
@@ -177,33 +183,36 @@ fi
 
 hits() { local h; h=$(R --remote-expr 'luaeval("table.concat(HITS, \",\")")'); printf '%s' "${h//$'\n'/}"; }
 seq_check() { # $1 keys, $2 gap between keys (the typing speed under test), $3 expected hits
-  local got="" k why=""
-  for _ in $(seq 50); do
+  local got="" k why="" n=0 typed
+  for _ in $(seq 250); do
     why=$(R --remote-expr 'luaeval("WK_READY()")')
     [ "$why" = 1 ] && break
-    sleep 0.1
+    sleep 0.02
   done
   if [ "$why" != 1 ]; then
     out "FAIL which-key ready before [$1] with ${2}s gaps  -- ${why:-no answer}"
     return
   fi
   R --remote-expr 'luaeval("(function() HITS = {} return 0 end)()")' >/dev/null
-  for k in $1; do
+  read -ra typed <<<"$1"
+  # the gap is the typing speed under test, so it goes between keys only; after the last one the wait is for its hit
+  for k in "${typed[@]}"; do
     R --remote-send "$k"
-    sleep "$2"
+    n=$((n + 1))
+    [ "$n" -lt "${#typed[@]}" ] && sleep "$2"
   done
-  for _ in $(seq 30); do
+  for _ in $(seq 150); do
     got=$(hits) || break
     [ -n "$got" ] && break
-    sleep 0.1
+    sleep 0.02
   done
   # past the first hit: wait until which-key has finished the sequence, then take every hit it caused
   if [ -n "$got" ]; then
-    for _ in $(seq 20); do [ "$(R --remote-expr 'luaeval("WK_IDLE()")')" = 1 ] && break; sleep 0.1; done
+    for _ in $(seq 100); do [ "$(R --remote-expr 'luaeval("WK_IDLE()")')" = 1 ] && break; sleep 0.02; done
   fi
   R --remote-send '<Esc><C-\><C-n>'
   got=$(hits)
-  for _ in $(seq 20); do [ "$(R --remote-expr 'mode()')" = n ] && break; sleep 0.1; done
+  for _ in $(seq 100); do [ "$(R --remote-expr 'mode()')" = n ] && break; sleep 0.02; done
   if [ "$got" = "$3" ]; then
     out "PASS typed [$1] with ${2}s gaps runs $3"
   else
