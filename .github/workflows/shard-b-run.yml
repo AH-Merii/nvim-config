@@ -1,0 +1,139 @@
+# EXPERIMENT, not to merge: one variant (b) run, called by shard-b.yml.
+name: shard-b-run
+
+on:
+  workflow_call:
+    inputs:
+      n:
+        type: number
+        required: true
+      shards:
+        description: JSON list 1..n, the matrix of shard indexes
+        type: string
+        required: true
+      share:
+        description: "cache: every leg builds from the GHA layer cache; artifact: build once, legs docker load it"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  NVR_ENGINE: docker
+  NVR_IMAGE: nvim-config-test:ci
+
+jobs:
+  build:
+    if: ${{ inputs.share == 'artifact' }}
+    name: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the test image to a tar
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: tests/image/Dockerfile
+          tags: ${{ env.NVR_IMAGE }}
+          outputs: type=docker,dest=${{ runner.temp }}/image.tar
+          cache-from: type=gha
+          secrets: |
+            github_token=${{ github.token }}
+      - run: ls -l "$RUNNER_TEMP/image.tar"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-${{ inputs.n }}-${{ inputs.share }}
+          path: ${{ runner.temp }}/image.tar
+          compression-level: 1
+          retention-days: 1
+
+  suite:
+    needs: build
+    if: ${{ !cancelled() && (inputs.share == 'cache' || needs.build.result == 'success') }}
+    name: suite ${{ matrix.i }}/${{ inputs.n }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        i: ${{ fromJSON(inputs.shards) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - if: ${{ inputs.share == 'cache' }}
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the test image
+        if: ${{ inputs.share == 'cache' }}
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: tests/image/Dockerfile
+          tags: ${{ env.NVR_IMAGE }}
+          load: true
+          cache-from: type=gha
+          secrets: |
+            github_token=${{ github.token }}
+
+      - if: ${{ inputs.share == 'artifact' }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: image-${{ inputs.n }}-${{ inputs.share }}
+          path: ${{ runner.temp }}
+      - name: Load the test image
+        if: ${{ inputs.share == 'artifact' }}
+        run: docker load --input "$RUNNER_TEMP/image.tar"
+
+      - name: Unit tier
+        if: ${{ matrix.i == 1 }}
+        run: bash mise-tasks/test/image/_default unit
+        env:
+          NVR_OUT: out/unit
+
+      - name: Regress suite, shard ${{ matrix.i }}/${{ inputs.n }}
+        if: ${{ !cancelled() }}
+        run: bash mise-tasks/test/image/_default suite --shard "${{ matrix.i }}/${{ inputs.n }}"
+        env:
+          NVR_OUT: out/suite
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-${{ inputs.n }}-${{ inputs.share }}-${{ matrix.i }}
+          path: out/suite/
+          if-no-files-found: ignore
+          retention-days: 3
+
+  # The one check a ruleset would require: fails unless every shard passed and together they ran every check
+  test:
+    needs: suite
+    if: ${{ always() }}
+    name: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: results-${{ inputs.n }}-${{ inputs.share }}-*
+          path: out
+      - name: Every shard passed, every check ran once
+        env:
+          SUITE: ${{ needs.suite.result }}
+          N: ${{ inputs.n }}
+          SHARE: ${{ inputs.share }}
+        run: |
+          echo "suite legs: $SUITE"
+          files=(); for i in $(seq "$N"); do files+=("out/results-$N-$SHARE-$i/results.tsv"); done
+          rc=0
+          tests/regress/shard-cover.sh --results "$N" "${files[@]}" || rc=1
+          [ "$SUITE" = success ] || rc=1
+          exit $rc

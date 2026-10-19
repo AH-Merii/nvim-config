@@ -1,0 +1,81 @@
+# EXPERIMENT, not to merge: variant (a), one job runs the regress suite as n shards in n parallel containers.
+name: shard-a
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shard-a-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  suite:
+    name: a n=${{ matrix.n }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        n: [2, 3, 4]
+    env:
+      NVR_ENGINE: docker
+      NVR_IMAGE: nvim-config-test:ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build the test image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: tests/image/Dockerfile
+          tags: ${{ env.NVR_IMAGE }}
+          load: true
+          cache-from: type=gha
+          secrets: |
+            github_token=${{ github.token }}
+
+      - name: Unit tier
+        run: bash mise-tasks/test/image/_default unit
+        env:
+          NVR_OUT: out/unit
+
+      - name: Regress suite, ${{ matrix.n }} shards in parallel containers
+        if: ${{ !cancelled() }}
+        env:
+          N: ${{ matrix.n }}
+        run: |
+          df -h / | tail -1
+          mkdir -p out/logs
+          t0=$EPOCHREALTIME pids=()
+          for i in $(seq "$N"); do
+            ( s=$EPOCHREALTIME
+              NVR_OUT=out/suite-$i bash mise-tasks/test/image/_default suite --shard "$i/$N"; rc=$?
+              echo "SHARD $i/$N container wall $(awk -v a="$s" -v b="$EPOCHREALTIME" 'BEGIN{printf "%.1f", b-a}')s rc=$rc"
+              exit $rc ) >"out/logs/shard-$i.txt" 2>&1 &
+            pids+=($!)
+          done
+          rc=0
+          for i in $(seq "$N"); do wait "${pids[$((i - 1))]}" || rc=1; done
+          echo "ALL SHARDS wall $(awk -v a="$t0" -v b="$EPOCHREALTIME" 'BEGIN{printf "%.1f", b-a}')s"
+          for i in $(seq "$N"); do echo "::group::shard $i/$N"; cat "out/logs/shard-$i.txt"; echo "::endgroup::"; done
+          grep -h -E '^(SHARD|total:)' out/logs/shard-*.txt
+          grep -h '^FAIL' out/logs/shard-*.txt || true
+          df -h / | tail -1
+          files=(); for i in $(seq "$N"); do files+=("out/suite-$i/results.tsv"); done
+          tests/regress/shard-cover.sh --results "$N" "${files[@]}" || rc=1
+          exit $rc
+
+      - name: Upload the shards' last/
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: regress-last-a${{ matrix.n }}
+          path: out/
+          if-no-files-found: ignore

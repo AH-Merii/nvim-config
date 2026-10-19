@@ -1,0 +1,34 @@
+# EXPERIMENT, not to merge: variant (b), a matrix of n jobs each runs one shard, and one job per n aggregates them.
+# share=cache: each leg builds the image from the GHA layer cache; share=artifact: one job builds it and the legs
+# load it from an artifact (docker save).
+name: shard-b
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shard-b-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  b3-cache:
+    uses: ./.github/workflows/shard-b-run.yml
+    with:
+      n: 3
+      shards: '[1, 2, 3]'
+      share: cache
+  b4-cache:
+    uses: ./.github/workflows/shard-b-run.yml
+    with:
+      n: 4
+      shards: '[1, 2, 3, 4]'
+      share: cache
+  b3-artifact:
+    uses: ./.github/workflows/shard-b-run.yml
+    with:
+      n: 3
+      shards: '[1, 2, 3]'
+      share: artifact
