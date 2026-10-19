@@ -46,6 +46,8 @@ The full proposal, with its measurements and sources, was written outside the re
   tools seams ("D116: treesitter parsers on demand" below).
 - Decided and built (2026-10-19): D128, python keeps regex syntax beside treesitter for its indent plugin, declared in
   its language file's new `treesitter` field ("D128: python keeps regex syntax beside treesitter" below).
+- Decided and built (2026-10-19): D137 to D139, the statusline names the tools of the formatters and linters that will
+  run, once each, not conform's or nvim-lint's entries ("D137: the statusline names tools, not entries" below).
 
 ## Target layout
 
@@ -2048,3 +2050,76 @@ the indent setting ignored (8), the toggle's start without the syntax setting (a
 left out of `lang.of`'s answer. By `treesitter_lang`: the feature reading no settings, the indent setting ignored, the
 toggle without the syntax setting. By the unit tier: variants not inheriting, the undeclared-dotted fallback dropping
 the settings or keeping the first part's, and no check of names or of booleans.
+
+## D137: the statusline names tools, not entries (2026-10-19)
+
+**Context.** The statusline's formatter segment drew conform's formatter names verbatim, so a python buffer showed
+`ruff_fix, ruff_format, ruff_organize_imports` (the line `statusline_facts` prints when the spec draws `formatters`:
+`󰁨  ruff_fix, ruff_format, ruff_organize_imports`). The chain: the segments joined
+`facts.get(buf).formatters` and `.linters` (`nvim/lua/ui/statusline.lua:48-51,218-228` at 9b0f6e0), which are
+`format.plan(buf).run` and `linting.plan(buf).run` (`nvim/lua/ui/facts.lua:76` at 9b0f6e0). The catalog already
+knows each entry's tool: `tools.catalog.binary(role, name)` (`nvim/lua/tools/catalog.lua:124-142`).
+
+**Decision (the user's).** The formatter and linter segments name tools, not conform's or nvim-lint's entries. Each
+entry maps through the catalog to its binary; each tool shows once, at its first entry's place in the plan; an entry
+with no catalog binary keeps its own name. Always the tool's name, even for a tool with one entry: terraform_fmt is
+terraform, fish_indent fish, golangcilint golangci-lint, clippy cargo-clippy, biomejs biome; clang_format and
+clang-format are clang-format; ruff's three are ruff.
+
+**Rejected:** merging only the tools with two or more entries. That is two rules for one list, and `:Tools` already
+names tools by binary (`nvim/lua/tools/ux.lua:809`).
+
+### D138: ruff shows as a server and as a formatter
+
+**Decision (the user's).** A tool can show in the LSP segment and the formatter segment at once: a python buffer shows
+`LSP: pyrefly, ruff` and `ruff`. The `ruff server` client and the ruff CLI conform runs are separate processes
+(`nvim/lua/tools/catalog.lua:37-43`: the server runs `ruff server`, the formatters are conform's ruff entries).
+
+**Rejected:** hiding a formatter whose tool already shows as a server. It would suggest the server formats.
+
+### D139: the grouping is a field of the facts
+
+**Decision (the user's).** `ui/facts.lua` computes `formatter_tools` and `linter_tools` beside `formatters` and
+`linters` (`ui.Facts`, `nvim/lua/ui/facts.lua:23-24`; `tools_of`, `:58-73`), when the facts recompute. The facts are
+cached until an event (`nvim/lua/ui/facts.lua:1-6`), so a redraw stays a table lookup. The statusline draws the new
+fields (`nvim/lua/ui/statusline.lua:218-228`). `formatters` and `linters` stay conform's and nvim-lint's names, so
+`ui_facts`'s cross-check against conform (`tests/regress/checks/ui_facts.lua:59-62`) and `:Status`, which keeps the
+full names (`nvim/lua/features/lsp_status.lua:286-290`), are unchanged. LSP servers are out of scope: unchanged.
+
+**Rejected:** grouping in `ui/statusline.lua`. It is work on every redraw, and the spec only draws
+(`nvim/lua/ui/statusline.lua:12`).
+
+### Cost (D61, D93)
+
+Measured in the regress sandbox (Neovim 0.13 nightly, the suite's tools) on a python buffer with pyrefly and ruff
+attached, so 3 formatters and no linter run (ruff's linting is covered by its server). A throwaway check
+(`~/.cache/nvim-config/d137/perf/statusline_perf.lua`, run with `suite.sh --work`) ran 3 times on 9b0f6e0 and 3 times
+on this change, interleaved. Medians of 51 batches:
+
+| what | 9b0f6e0 (3 runs) | this change (3 runs) |
+| --- | --- | --- |
+| per redraw, `nvim_eval_statusline` of the whole line (batches of 2000) | 12.9, 12.5, 12.6 µs | 12.9, 12.9, 12.9 µs |
+| per facts recompute, a `ToolsChanged` for the root then `facts.get` (batches of 100) | 656, 732, 686 µs | 791, 702, 674 µs |
+| the added work alone, a copy of `tools_of` over both lists (batches of 20000) | | 0.29 to 0.40 µs |
+
+- **Startup, per key:** none.
+- **Per redraw:** unchanged; the segments still join one cached list each, and the runs differ by less than their
+  spread.
+- **Per recompute:** about 0.3 to 0.4 µs, a lookup per entry; the whole recompute's run-to-run spread (about 0.1 ms)
+  hides it.
+
+### Tests
+
+Unit (`tests/unit/facts_test.lua`): a fixture language whose formatters interleave ruff's three entries with
+terraform_fmt and stylua, and whose linters are biome (no catalog binary), biomejs, nofacttool (no catalog binary)
+and ruff, gives `{ ruff, terraform, stylua }` and `{ biome, nofacttool, ruff }`, while `formatters` and `linters` keep
+the entries. A filetype change to a language whose formatters are stylua, ruff_format and whose linters are
+biome-check (no catalog binary), biomejs gives `{ stylua, ruff }` and `{ biome-check, biome }`: the tools follow a
+recompute, and neither list comes out in name order. Regress: `statusline_facts` draws the new fields and checks that
+none of python's formatter entries (ruff_fix, ruff_format, ruff_organize_imports) reaches the line.
+
+Sibling wrong implementations, each one change to `tools_of` or its call (`~/.cache/nvim-config/d137/wrong/run.sh`),
+all caught by the unit tier: a stub returning no tools, no dedupe, sorted, entries without a catalog binary dropped,
+only multi-entry tools merged (the rejected alternative), the linters left as entries, `formatters` and `linters`
+overwritten with the tools, and each tool at its last entry's place. The spec drawing `formatters` and `linters` is
+caught by `statusline_facts` ("the line names no formatter entry").
