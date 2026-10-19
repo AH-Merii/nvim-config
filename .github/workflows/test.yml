@@ -1,5 +1,7 @@
 # Runs the unit tier and the full regress suite in the test image (tests/image/Dockerfile), on every pull request
 # and on main. A rearchitecture step merges only once this job is green (D52, docs/test-image-decisions.md).
+# When no test input changed (a release PR, docs only), the `test` job is skipped by its `if:`, which reports
+# success to the required check; a `paths:` filter would leave it pending instead (D148).
 name: test
 
 on:
@@ -17,21 +19,37 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      tests: ${{ steps.inputs.outputs.tests }}
+    steps:
+      # Two commits: a pull request's merge commit and the base tip it was made on; a push fetches its own base
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Did a test input change?
+        id: inputs
+        run: bash .github/test-inputs.sh "$EVENT" "$BEFORE"
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+
   test:
     name: test
+    needs: changes
+    # Skipped only on a clear "no": if `changes` fails, its output is empty and the tests run
+    if: ${{ !cancelled() && needs.changes.outputs.tests != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
       NVR_ENGINE: docker
       NVR_IMAGE: nvim-config-test:ci
     steps:
-      # The builder's stages, the image and the copy loaded into docker need more than the ~14 GB a runner starts with
-      - name: Free disk space
-        run: |
-          df -h /
-          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
-          df -h /
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -59,11 +77,22 @@ jobs:
         env:
           NVR_OUT: out/unit
 
-      - name: Regress suite
+      # 4 shards in 4 containers at once, each capped at 2 GB, then a check that they ran every check once (D152)
+      - name: Regress suite, 4 shards
         if: ${{ !cancelled() }}
-        run: bash mise-tasks/test/image/_default suite
+        run: bash mise-tasks/test/image/shards 4
         env:
           NVR_OUT: out/suite
+
+      # Each check's time in CI, for tests/regress/durations.sh
+      - name: Upload the shards' results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: regress-results
+          path: out/suite/suite-*/results.tsv
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload the suite's last/
         if: failure()

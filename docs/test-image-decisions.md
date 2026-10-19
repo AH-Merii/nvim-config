@@ -120,7 +120,8 @@ layer rebuilds.
 
 **Decision.** The workflow builds with buildx and `docker/build-push-action`, caching every stage in the
 GitHub Actions cache (`type=gha,mode=max`), then runs `mise-tasks/test/image/_default` with bash (the same file
-`mise run test:image` runs) for `unit` and for `suite`, and uploads the suite's `last/` on failure. It passes
+`mise run test:image` runs) for `unit`, and `mise-tasks/test/image/shards` for the suite (D152), and uploads the
+suite's `last/` on failure. It passes
 the job's own `github.token` as a build secret so mise's GitHub API calls are not rate-limited; the secret is
 mounted for the tools step only and is in no layer. Actions are pinned by commit.
 
@@ -130,8 +131,163 @@ and the tools would reinstall on every config change.
 **Rejected.** GHCR as a registry cache: needs `packages: write`, and pull requests from forks can't push to it.
 An inline cache: caches the final stage only.
 
-Runner limits: the image is 2.72 GB and the build keeps the stages besides it, so the job first deletes the
-runner's Android, .NET and GHC trees for disk headroom. Not measured on a runner.
+Runner limits: the image is 2.72 GB and the build keeps the stages besides it. The job used to delete the
+runner's Android, .NET and GHC trees first for disk headroom; measured on a runner, the disk had room without it,
+so D148 dropped that step.
+
+## D148: CI skips what it doesn't need (2026-10-19)
+
+Decided by the user, from measured runs (logs in `~/.cache/nvim-config/ci-speed/`).
+
+**Decision.** Two changes to `.github/workflows/test.yml`:
+
+- The "Free disk space" step is gone. A runner starts with 86 GB free (`/dev/root 145G 59G 86G 41%`, run
+  39290079036), not the ~14 GB the step's comment assumed, and deleting the trees took 47 to 119 s of each run's
+  413 to 585 s (9 runs on 2026-10-19).
+- A `changes` job runs `.github/test-inputs.sh`, which lists the files the run changes (a pull request: its merge
+  commit against the base tip; a push to main: against the commit the push moved main from) and says whether any
+  is a test input. When none is, the `test` job is skipped by its `if:`. Release PRs and their merges (release-please
+  changes `CHANGELOG.md` and `.release-please-manifest.json` only; 12 of the last 30 merged PRs) and docs-only
+  changes skip; each ran the whole 6 to 9 minute job before.
+
+Not test inputs, so they skip: `docs/` except `docs/languages.md` and `docs/languages.lua` (the unit tier renders
+the one from the other, `tests/unit/languages_doc_test.lua`), `.claude/`, `.githooks/`, `CHANGELOG.md`,
+`.release-please-manifest.json`, `release-please-config.json`, `version.txt`, `README.md`, `CONTRIBUTING.md`,
+`AGENTS.md`, `CLAUDE.md`, `LICENSE`, `.gitignore`. Everything else runs, so a new path runs until it is listed: the
+build context is `nvim/` and `tests/` (`/.dockerignore`), CI runs `mise-tasks/test/image/_default` and the
+workflows, and `mise.toml` and the rest of `mise-tasks/` run too, though no test reads them today. Doubt runs: an
+event other than a pull request or a push, a push with no earlier commit, a base it can't fetch, a failed diff.
+
+**How D52 still holds.** The `test` job is still the required check (ruleset "main: test must pass"), and a job
+skipped by its `if:` reports success to it, where a workflow skipped by `paths:` leaves the check pending and blocks
+the merge ([GitHub: handling skipped but required checks](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks)).
+It skips only when the merge changes no file the image or the tests read, so what the tests would run is what main
+already ran. If `changes` fails, its output is empty and `test` runs: the `if:` skips only on an explicit `false`
+(`!cancelled() && needs.changes.outputs.tests != 'false'`), so a broken `changes` can't turn into a green check, the
+case GitHub's page warns about for jobs that depend on a failed job.
+
+**Rejected.**
+
+- `paths:` / `paths-ignore:` on the workflow: the required check would stay pending on a release PR.
+- dorny/paths-filter: one more third-party action with the repo's token, for a diff `git` does in a few lines.
+- `if:` on each step of one job: no extra runner, but every new step has to remember the condition.
+- Skipping release PRs by branch name or author: a release PR that someone edits by hand would skip too.
+
+**Cost.** The `changes` job adds a runner start and a two-commit checkout ahead of `test` on every run.
+
+## D149: a daily job prunes the build cache (2026-10-19)
+
+Decided by the user.
+
+**Decision.** `.github/workflows/cache-prune.yml` runs daily (and by hand, with a dry-run choice) and deletes the
+build cache entries on main that the newest build of main no longer uses. BuildKit's `type=gha` cache keeps one
+entry per layer blob (`buildkit-blob-1-<digest>`) and, per build that exports, an index
+(`index-buildkit-1-<scope>#<n>`) of every blob that build's cache holds; a build reads only the newest index
+([gha.go](https://github.com/moby/buildkit/blob/master/cache/remotecache/gha/gha.go)). The job reads the newest
+index through the runner's cache service, the way BuildKit does
+([cache_v2.go](https://github.com/tonistiigi/go-actions-cache/blob/master/cache_v2.go)), and keeps every blob it
+lists, the index itself and anything younger than 6 hours; it deletes the other `buildkit-blob-`/`index-buildkit-`
+entries. It deletes nothing while a `test.yml` run on main is queued or running (a build uploads its blobs before
+its index), or when it can't read the index, or when the index names no blob in the cache. A pull request that
+changes the workflow runs it as a dry run. Its token has `actions: write` only.
+
+Why: the cache was at 10.29 GB in 232 entries on 2026-10-19 (`gh api repos/AH-Merii/nvim-config/actions/cache/usage`),
+over GitHub's 10 GB default, and GitHub then evicts by last access until it is under
+([dependency caching](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching)).
+Last access is a poor guide here: a fully cached build of main touched about 10 entries (run 39289495752), since
+BuildKit checks which blobs exist by listing the keys, not by reading them (gha.go, `initActiveKeyMap`), so the
+current tools layer can look older than a stale one. Losing it costs a cold build (365 s, "Measurements"). Most of
+the cache was old copies of the tools layer: five each of its two big blobs (465 MB and 694 to 701 MB), about 5.8 GB,
+none used since 2026-10-18.
+
+**Rejected.**
+
+- Deleting by last access or age alone: could delete the current tools layer, for the reason above.
+- Keeping the newest entry per key: every blob key is unique (its digest), so that keeps everything.
+- Raising the cache limit: costs money and still fills.
+
+**Known limit.** The cache service is not a documented API. If it changes, the job fails before deleting anything
+and the cache falls back to GitHub's eviction.
+
+## D152: the suite runs as 4 shards in parallel containers (2026-10-19)
+
+Decided by the user, from measured runs on draft PR #86
+([measurements](https://github.com/AH-Merii/nvim-config/pull/86#issuecomment-6273802303)).
+
+**Decision.** The `test` job runs the regress suite as 4 shards in 4 containers at once, with
+`mise-tasks/test/image/shards 4`. That is the same file `mise run test:image:shards` runs. Each container is
+`_default suite --shard i/4`, capped at 2 GB with its own output dir, like a single run.
+
+- `suite.sh --shard i/n` assigns the selected checks longest first, each to the shard with the least time so far,
+  by `tests/regress/durations.tsv`. A check missing from the file counts as 1s. The split is deterministic, and a
+  shard keeps the plan's order.
+- A shard must never drop a check silently. After the shards finish, `shard-cover.sh --results` compares the
+  checks the shards recorded (each run's `last/results.tsv`) with `suite.sh --list`. It fails on a check that is
+  missing or ran twice, which also covers a shard that crashed.
+- The job uploads the shards' `results.tsv` as `regress-results`. `tests/regress/durations.sh` rebuilds
+  `durations.tsv` from those files, taking each check's median.
+
+Why: the suite ran its checks one after another, so its step took 215 to 247 s of a 420 to 455 s job. Checks run
+in turn within a version (`suite.sh`, `run_version`), and only versions run in parallel. A runner has 4 vCPUs and
+16 GB, so 4 containers of 2 GB fit.
+
+Measured with 3 runs per variant. "Verdict" is from the run's creation to the end of the job that decides
+pass/fail. Every build in these runs rebuilt the tools stage, because the branch changed `suite.sh`, which that
+stage copies, so builds took 156 to 197 s.
+
+| variant | N | verdict (s) | suite step (s) | runs |
+| --- | --- | --- | --- | --- |
+| one container (before) | 1 | 451, 420, 455 | 247, 215, 246 | 39294838667 (attempts 1, 2), 39297757909 |
+| a: N containers in one job | 3 | 282, 340 (failed), 307 | 87, 100, 106 | 39294838773 (1, 2), 39297757910 |
+| a | 4 | 289, 307, 297 | 76, 91, 90 | same |
+| b: a matrix of N jobs and an aggregating `test` | 3 | 327, 304, 314 | 85, 79, 90 | 39294838869 (1, 2), 39297757962 |
+| b | 4 | 305, 292, 303 | 67, 69, 66 | same |
+| b, the image built once and shared as an artifact | 3 | build failed, 561, 342 (failed) | 89, 92 | same |
+
+The first two baseline numbers leave out the "Free disk space" step, which D148 removed. N=2 in variant a gave
+334 to 354 s.
+
+**Why (a) over (b).** Both get the verdict about 2.5 minutes sooner. The matrix is no faster: its N legs each
+build the image, and the slowest of N builds sets the pace (183 to 197 s against 175 to 186 s for one build at
+N=4). Variant (a) keeps:
+
+- one job, and so the one `test` check the ruleset requires (D52);
+- one image build, with one read of the build cache and one tools install when the cache misses (the
+  artifact variant's build failed once there, `FAIL tools: mise use -g: mise ERROR`);
+- the `changes` skip from D148 as it is.
+
+A matrix would need an aggregator that repeats that skip. It would also take N runners per run from the
+account's 20 concurrent jobs ([limits](https://docs.github.com/en/actions/reference/limits)).
+
+Sharing the image as an artifact is slower still. The tar is 1,034,623,488 bytes, and each leg took 11 to 47 s to
+download it and 33 to 42 s to `docker load` it, after the build job had finished.
+
+**N=4 over 3.** N=4 finished the suite step 9 to 16 s sooner than N=3 in each run. With 4 shards on 4 vCPUs the
+checks run slower: their summed time was 1.08 to 1.32 times the medians, against 0.99 to 1.18 for N=3. The check
+closest to its budget, `tools_prompts`, used 21.6 of its 40 s.
+
+**Order coupling.** Checks in one run share `$H/data`, so a check could depend on what an earlier one left
+there. None did: every split for N=2, 3 and 4 passed in CI, and each of the 99 checks passed alone
+(`suite.sh '^<name>$'`, run locally).
+
+**Rejected.**
+
+- A matrix of jobs, with or without a shared image: see above.
+- `parallel:` or `background:` steps, which would give each shard its own step log. GitHub documents them for
+  github.com ([workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepsparallel)),
+  but actionlint 1.7.12 rejects the workflow (`step must run script with "run" section or run action with
+  "uses" section`; [actionlint#693](https://github.com/rhysd/actionlint/issues/693)). Instead, the task prints
+  each shard's log in its own collapsed group once all have finished.
+- Balancing by check count or by `@budget`: checks range from 0.2 to 48 s, and budgets overstate (`lint_dedupe`
+  takes 48 s against a budget of 150).
+
+**Known issue (D153, investigated separately).** `tools_choice_state` failed twice with `NOTIFY Formatting failed
+in mise.toml with tombi: Formatter 'tombi' timeout`. Once was with 3 shards in one job (39294838773, attempt 2),
+and once in a matrix leg that ran alone on its own runner (39297757962). Contention alone doesn't explain it.
+
+**Cost.** Four copies of `data/nvim` (1.1 GB each) are made inside containers at once, and runners have room for
+them (86 GB free, D148). When `durations.tsv` goes stale, the shards get unbalanced, but no check is dropped.
+`lint_dedupe` takes 48 s, so the suite step can't drop below that whatever N is.
 
 ## Local runs (2026-10-17)
 
