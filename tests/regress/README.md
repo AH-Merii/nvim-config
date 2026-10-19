@@ -13,6 +13,9 @@ suite.sh --area which-key       # iteration: checks tagged with an area
 suite.sh --changed main         # iteration: areas touched by `git diff main` in $CFG, plus startup and smoke
 suite.sh --work <feature>       # iteration: the checks in work/<feature>/
 suite.sh --list [...]           # print what would run, run nothing
+suite.sh --shard 2/3 [...]      # run shard 2 of 3 of the selection, balanced by durations.tsv
+shard-cover.sh 3 [...]          # check that 3 shards split the selection exactly (--results: what shard runs ran)
+durations.sh <results.tsv...>   # rewrite durations.tsv from runs' last/results.tsv (CI's: the regress-results artifact)
 suite.sh --selftest             # the runner's own tests: leak, over budget, fsmonitor, missing server
 suite.sh --refresh              # sync plugins, the suite's tools and parsers in data/ for the current CFG, then run
 suite.sh --refresh-only         # the same sync, then exit without running checks (the test image's build)
@@ -28,8 +31,11 @@ CFG=/path/to/nvim suite.sh      # test another config dir (default: ../../nvim, 
   status is non-zero on any failure.
 - The output and stderr of failed checks are kept in `last/<version>/`, replaced when that check
   runs again, so parallel runs of different checks don't clobber each other.
-  Run dirs live in `~/.cache/nvim-regress/run/` (`$NVR_RUNS`) only while the suite runs. They sit outside
+  Run dirs live in `~/.cache/nvr/<id>/` (`$NVR_RUNS`) only while the suite runs. They sit outside
   the repo so that no project marker above a fixture, such as an untracked `mise.local.toml`, reaches a check.
+  The path is short because tools bind unix sockets under a check's home, and a socket path holds at most 107
+  bytes: biome's daemon binds 47 bytes under it. The suite refuses to start when a home would leave less than 56.
+  Each run copies `cache-seed/`'s contents, so a symlinked seed (a worktree's) is never written.
 
 ### Tiers
 
@@ -83,12 +89,14 @@ Tools:
 ### In the test image
 
 `tests/image/Dockerfile` builds an image with a pinned nightly and the suite's tools, plugins and parsers,
-installed by `suite.sh --refresh-only` at build time; CI (`.github/workflows/test.yml`) runs both tiers in it.
+installed by `suite.sh --refresh-only` at build time; CI (`.github/workflows/test.yml`) runs both tiers in it, the
+suite as 4 shards in 4 containers at once (`test:image:shards`).
 
 ```sh
 mise run test:image:build          # podman (or docker, NVR_ENGINE=docker); cached, a config change rebuilds plugins only
 mise run test:image                # builds, then tests/unit/run.sh and the full suite
 mise run test:image suite lsp      # suite.sh args; `unit [args]` for the unit tier, or any command (bash)
+mise run test:image:shards [n]     # the suite as n shards (default 4) in n containers at once, as CI runs it
 ```
 
 - The checkout is mounted read-only and copied into the container beside the image's `data/`; the container is

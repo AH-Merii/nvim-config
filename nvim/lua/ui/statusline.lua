@@ -45,7 +45,7 @@ local spec = {
       return last_file and vim.api.nvim_buf_is_valid(last_file) and last_file or nil
     end
     --- buf's list of name, joined, or "" with no buffer to show
-    ---@param name "servers"|"formatters"|"linters"
+    ---@param name "servers"|"formatter_tools"|"linter_tools"
     local function list(name)
       local buf = shown_buf()
       return buf and table.concat(facts.get(buf)[name], ", ") or ""
@@ -215,14 +215,14 @@ local spec = {
         icon = "󱍔 LSP:",
         color = { fg = colors.yellow, bold = true },
       },
-      -- The formatters and linters that will run
+      -- The tools of the formatters and linters that will run: ruff, not ruff_fix, ruff_format (D137)
       {
-        function() return list("formatters") end,
+        function() return list("formatter_tools") end,
         icon = "󰁨 ",
         color = { fg = colors.magenta, bold = true },
       },
       {
-        function() return list("linters") end,
+        function() return list("linter_tools") end,
         icon = " ",
         color = { fg = colors.orange, bold = true },
       },

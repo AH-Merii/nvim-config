@@ -283,7 +283,8 @@ function M.build_status()
   table.insert(lines, string.format("Buffer Status for %s", ft))
   table.insert(lines, "─────────────────────────")
 
-  -- The servers running and the formatters that will run, as the statusline shows them (lua/ui/facts.lua)
+  -- The servers running and the formatters that will run, by conform's names; the statusline shows their tools
+  -- (lua/ui/facts.lua, D137)
   local facts = require("ui.facts").get(bufnr)
   table.insert(lines, string.format("󱍔  LSP: %s", next(facts.servers) and table.concat(facts.servers, ", ") or "none"))
   table.insert(lines, string.format("󰁨  Formatters: %s", next(facts.formatters) and table.concat(facts.formatters, ", ") or "none"))

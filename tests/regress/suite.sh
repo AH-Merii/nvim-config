@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # usage: suite.sh [-v] [--refresh] [--refresh-only] [--refresh-dry-run] [--list] [--selftest] [--area a,b] [--changed <git-range>] [--work <feature>]
-#                 [name-filter]
+#                 [--shard <i>/<n>] [name-filter]
 # See README.md.
 set -u
 S=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -11,7 +11,7 @@ unset WAYLAND_DISPLAY DISPLAY TMUX
 . "$S/lib.sh"
 export CFG
 
-FILTER= AREAS= RANGE= WORK= REFRESH=0 ONLY=0 DRY=0 LIST=0 SELFTEST=0 VERBOSE=0
+FILTER= AREAS= RANGE= WORK= SHARD= REFRESH=0 ONLY=0 DRY=0 LIST=0 SELFTEST=0 VERBOSE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --refresh) REFRESH=1 ;;
@@ -23,6 +23,7 @@ while [ $# -gt 0 ]; do
     --area) AREAS=${2//,/ }; shift ;;
     --changed) RANGE=$2; shift ;;
     --work) WORK=$2; shift ;;
+    --shard) SHARD=$2; shift ;;
     -h|--help) sed -n '2,4p' "$0"; exit 0 ;;
     -*) echo "unknown option $1" >&2; exit 2 ;;
     *) FILTER=$1 ;;
@@ -72,6 +73,28 @@ for f in "$CDIR"/*.lua "$CDIR"/*.sh; do
   PLAN+=("nightly $f")
 done
 if [ ${#PLAN[@]} = 0 ]; then echo "no checks selected" >&2; exit 2; fi
+
+# --shard i/n: keep the selected checks that shard i of n runs, in the plan's order. Longest first, each check goes to
+# the shard with the least time so far (ties: the lower shard), by the times in durations.tsv; a check without a time
+# counts as 1s. The n shards split the selection exactly: each selected check is in one shard (shard-cover.sh).
+if [ -n "$SHARD" ]; then
+  [[ $SHARD =~ ^([0-9]+)/([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -ge 1 ] &&
+    [ "${BASH_REMATCH[1]}" -le "${BASH_REMATCH[2]}" ] ||
+    { echo "--shard wants <i>/<n> with 1 <= i <= n, got $SHARD" >&2; exit 2; }
+  mine=" $(for p in "${PLAN[@]}"; do n=$(basename "${p#* }"); echo "${p%% *}:${n%.*}"; done |
+    awk -v i="${BASH_REMATCH[1]}" -v n="${BASH_REMATCH[2]}" -F'\t' '
+      FNR == NR { if ($0 !~ /^#/ && NF >= 2) t[$1] = $2; next }
+      { k = $0; sub(/^[^:]*:/, "", k); printf "%s\t%s\n", $0, (k in t ? t[k] : 1) }' "$S/durations.tsv" - |
+    LC_ALL=C sort -t$'\t' -k2,2gr -k1,1 |
+    awk -v i="${BASH_REMATCH[1]}" -v n="${BASH_REMATCH[2]}" -F'\t' '
+      { b = 1; for (s = 2; s <= n; s++) if (load[s] < load[b]) b = s; load[b] += $2; if (b == i) print $1 }' |
+    tr '\n' ' ')"
+  kept=()
+  for p in "${PLAN[@]}"; do n=$(basename "${p#* }"); [[ $mine == *" ${p%% *}:${n%.*} "* ]] && kept+=("$p"); done
+  PLAN=("${kept[@]}")
+  # more shards than checks: this shard has nothing to run, which is not a failure
+  if [ ${#PLAN[@]} = 0 ]; then echo "shard $SHARD: no checks"; exit 0; fi
+fi
 if [ $LIST = 1 ]; then
   for p in "${PLAN[@]}"; do
     f=${p#* }
@@ -81,9 +104,21 @@ if [ $LIST = 1 ]; then
 fi
 
 # ---- run setup ---------------------------------------------------------------------------------
-RUNID=$(date +%Y%m%d-%H%M%S)-$$
-RUNROOT=$RUNS/$RUNID
-mkdir -p "$RUNROOT" "$S/last"
+# A short random id: each run, local or a CI shard, gets its own dir, and tools' socket paths under it stay short
+mkdir -p "$RUNS" "$S/last"
+RUNROOT=$(mktemp -d "$RUNS/XXXXXX") || exit 2
+RUNID=${RUNROOT##*/}
+# A unix socket's path holds at most 107 bytes (sun_path), and tools bind theirs under a check's home ($RUNROOT/<version>):
+# biome's daemon 47 bytes under it, cache/biome/biome-daemon/biome-socket-<version>. Past the limit the bind fails and
+# the tool runs without its server, so checks would pass on what is left: refuse a run dir that leaves under 56 bytes
+for v in $(for p in "${PLAN[@]}"; do echo "${p%% *}"; done | sort -u) refresh; do
+  if [ $(( ${#RUNROOT} + 1 + ${#v} + 56 )) -gt 107 ]; then
+    echo "run dir $RUNROOT/$v is too long for the sockets tools put under it (${#RUNROOT}+${#v} bytes + 56 > 107):" \
+      "set NVR_RUNS to a shorter dir" >&2
+    rm -rf "$RUNROOT"
+    exit 2
+  fi
+done
 touch "$RUNROOT/stamp"
 T0=$EPOCHREALTIME
 cleanup() {
@@ -254,7 +289,9 @@ run_version() {
   local v=$1
   H=$RUNROOT/$v
   make_home "$H"
-  rmdir "$H/cache" && cp -a --reflink=auto "$S/cache-seed" "$H/cache"
+  # the seed's contents: cache-seed/ may be a symlink (a worktree's, to the main checkout's), which cp -a would copy as
+  # one, so every run would write into the shared seed
+  cp -a --reflink=auto "$S/cache-seed/." "$H/cache/"
   # each version gets its own reflink copy of the nvim data; the suite's mise and rustup are used in place
   mkdir -p "$H/data"; cp -a --reflink=auto "$S/data/nvim" "$H/data/nvim"
   mkdir -p "$S/last/$v"
@@ -270,7 +307,7 @@ run_version() {
 }
 
 VERSIONS=$(for p in "${PLAN[@]}"; do echo "${p%% *}"; done | sort -u | tr '\n' ' ')
-echo "run $RUNID: $(printf '%s\n' "${PLAN[@]}" | wc -l) check runs on $VERSIONS(CFG=$CFG)"
+echo "run $RUNID: $(printf '%s\n' "${PLAN[@]}" | wc -l) check runs on $VERSIONS${SHARD:+(shard $SHARD) }(CFG=$CFG)"
 for v in $VERSIONS; do run_version "$v" & done
 wait
 
@@ -279,6 +316,8 @@ fail=0
 echo
 echo "== results"
 cat "$RUNROOT"/*/results 2>/dev/null >"$RUNROOT/all"
+# every check's result line, for shard-cover.sh and for timing: replaced by each run
+cp "$RUNROOT/all" "$S/last/results.tsv"
 sort -t$'\t' -k2,2 "$RUNROOT/all" | awk -F'\t' 'BEGIN { printf "%-28s %s\n", "check", "result" } { printf "%-28s %s %6.1fs\n", $2, $3, $4 }'
 grep -q $'\tFAIL\t' "$RUNROOT/all" && fail=1
 
