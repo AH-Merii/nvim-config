@@ -348,7 +348,42 @@ with an empty tombi cache and once with a stale one, and checks the written file
 fails both cases with the CI message (3 of 3 runs); after, it passes 20 of 20. `tools_choice_state` with an empty
 `cache-seed/` (as in the image): 20 of 20 before and after with the network up, and 0 of 5 before, 5 of 5 after,
 with the network cut.
-||||||| e71aaf6
+
+## D157: socket paths fit, and a gr map of its own fails keys_gr_typed (2026-10-19)
+
+Approved by the user; wrong implementations and logs in `~/.cache/nvim-config/gr-biome/`.
+
+**Context.** Two checks passed without testing what they claim.
+
+- `lint_dedupe`'s "biome project" case never had biome's server locally. Biome's daemon binds
+  `$XDG_CACHE_HOME/biome/biome-daemon/biome-socket-2.5.15`, and a check's cache was
+  `~/.cache/nvim-regress/run/<date>-<time>-<pid>/nightly/cache`: 115 bytes here, over the 107 a unix socket path
+  holds (`path must be shorter than SUN_LEN`). The case saw only the linter and passed. In CI the path was 107
+  bytes (`/home/nvr`, two-digit pids), which fits with nothing to spare. Worktrees also copied a symlinked
+  `cache-seed/` as a symlink, so their runs wrote into the main checkout's seed.
+- `keys_gr_typed` passed with a global or buffer-local `gr` map. which-key decides at `gr`: within `timeoutlen` of
+  the `g` it hands `gr` to Neovim, which waits `timeoutlen` for a longer map; after that it keeps the sequence and
+  waits for the next key itself (which-key `state.lua:188-196`). Typing every key fast or every key slow never
+  leaves a pause after a fast `gr`, so the `gr` map never ran.
+
+**Decision.**
+
+- Run dirs go to `~/.cache/nvr/<6 random chars>` (`mktemp -d`), so a check's cache is about 45 bytes here and 41 in
+  CI. `suite.sh` refuses to start when a home would leave less than 56 bytes for a socket, naming `NVR_RUNS`.
+  `mktemp` keeps each run and shard in its own dir.
+- `suite.sh` copies `cache-seed/.`, the seed's contents, so a symlinked seed is only read.
+- `lint_dedupe` checks that the server attached in each case where it should run.
+- `keys_gr_typed` also types each key fast with a pause before the last key.
+
+**Rejected.**
+
+- Pointing `XDG_CACHE_HOME` at a short symlink in `/tmp`: tools that resolve the path would get the long one back.
+- `XDG_RUNTIME_DIR` for run dirs: it is a tmpfs, so each run's copy of the plugins and caches would sit in memory.
+- A static check that no `gr` map exists: a typed check catches every way a shorter map wins, including `nowait`.
+
+**Tests.** With `origin/main`'s suite, `lint_dedupe` with the new check fails "biome project: biome attached" and
+passes with this branch's. `keys_gr_typed` fails on a global, a buffer-local and a `nowait` `gr` map, each added
+alone to the config, and passes on the config as it is.
 
 ## Local runs (2026-10-17)
 

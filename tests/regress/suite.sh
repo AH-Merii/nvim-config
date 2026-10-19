@@ -104,9 +104,21 @@ if [ $LIST = 1 ]; then
 fi
 
 # ---- run setup ---------------------------------------------------------------------------------
-RUNID=$(date +%Y%m%d-%H%M%S)-$$
-RUNROOT=$RUNS/$RUNID
-mkdir -p "$RUNROOT" "$S/last"
+# A short random id: each run, local or a CI shard, gets its own dir, and tools' socket paths under it stay short
+mkdir -p "$RUNS" "$S/last"
+RUNROOT=$(mktemp -d "$RUNS/XXXXXX") || exit 2
+RUNID=${RUNROOT##*/}
+# A unix socket's path holds at most 107 bytes (sun_path), and tools bind theirs under a check's home ($RUNROOT/<version>):
+# biome's daemon 47 bytes under it, cache/biome/biome-daemon/biome-socket-<version>. Past the limit the bind fails and
+# the tool runs without its server, so checks would pass on what is left: refuse a run dir that leaves under 56 bytes
+for v in $(for p in "${PLAN[@]}"; do echo "${p%% *}"; done | sort -u) refresh; do
+  if [ $(( ${#RUNROOT} + 1 + ${#v} + 56 )) -gt 107 ]; then
+    echo "run dir $RUNROOT/$v is too long for the sockets tools put under it (${#RUNROOT}+${#v} bytes + 56 > 107):" \
+      "set NVR_RUNS to a shorter dir" >&2
+    rm -rf "$RUNROOT"
+    exit 2
+  fi
+done
 touch "$RUNROOT/stamp"
 T0=$EPOCHREALTIME
 cleanup() {
@@ -277,7 +289,9 @@ run_version() {
   local v=$1
   H=$RUNROOT/$v
   make_home "$H"
-  rmdir "$H/cache" && cp -a --reflink=auto "$S/cache-seed" "$H/cache"
+  # the seed's contents: cache-seed/ may be a symlink (a worktree's, to the main checkout's), which cp -a would copy as
+  # one, so every run would write into the shared seed
+  cp -a --reflink=auto "$S/cache-seed/." "$H/cache/"
   # each version gets its own reflink copy of the nvim data; the suite's mise and rustup are used in place
   mkdir -p "$H/data"; cp -a --reflink=auto "$S/data/nvim" "$H/data/nvim"
   mkdir -p "$S/last/$v"

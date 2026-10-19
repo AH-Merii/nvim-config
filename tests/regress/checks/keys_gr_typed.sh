@@ -1,4 +1,4 @@
-# @desc     typed one key at a time, fast and slow, once which-key's triggers are attached, every gr* key the runtime or the config maps sends its LSP request exactly once (normal mode, and visual for x maps), in a buffer with a server that serves them all: no shorter gr map swallows them
+# @desc     typed one key at a time, fast, slow and fast with a pause before the last key, once which-key's triggers are attached, every gr* key the runtime or the config maps sends its LSP request exactly once (normal mode, and visual for x maps), in a buffer with a server that serves them all: no gr map of its own, global, buffer-local or nowait, runs instead
 # @areas    keys lsp which-key
 # @budget   90
 # Ported from nvim-sbx-keys/checks2/interactive_gr.sh and spy_gr.lua. Keys go through --remote-send one at a
@@ -181,25 +181,27 @@ if [ "${#plan[@]}" -eq 0 ] || [ -z "${plan[0]}" ]; then
   exit 0
 fi
 
-hits() { local h; h=$(R --remote-expr 'luaeval("table.concat(HITS, \",\")")'); printf '%s' "${h//$'\n'/}"; }
-seq_check() { # $1 keys, $2 gap between keys (the typing speed under test), $3 expected hits
-  local got="" k why="" n=0 typed
+# fails while a key is left pending (the r of grr after a gr map ran on its own), which blocks --remote-expr
+hits() { local h; h=$(R --remote-expr 'luaeval("table.concat(HITS, \",\")")') || return; printf '%s' "${h//$'\n'/}"; }
+seq_check() { # $1 keys, $2 the gap before each key after the first (the typing rhythm under test), $3 expected hits
+  local got="" why="" idle i typed gaps label
+  read -ra typed <<<"$1"
+  read -ra gaps <<<"$2"
+  label="[$1] with gaps ${2// /s }s"
   for _ in $(seq 250); do
     why=$(R --remote-expr 'luaeval("WK_READY()")')
     [ "$why" = 1 ] && break
     sleep 0.02
   done
   if [ "$why" != 1 ]; then
-    out "FAIL which-key ready before [$1] with ${2}s gaps  -- ${why:-no answer}"
+    out "FAIL which-key ready before $label  -- ${why:-no answer}"
     return
   fi
   R --remote-expr 'luaeval("(function() HITS = {} return 0 end)()")' >/dev/null
-  read -ra typed <<<"$1"
-  # the gap is the typing speed under test, so it goes between keys only; after the last one the wait is for its hit
-  for k in "${typed[@]}"; do
-    R --remote-send "$k"
-    n=$((n + 1))
-    [ "$n" -lt "${#typed[@]}" ] && sleep "$2"
+  # the gaps are the rhythm under test, so they go between keys only; after the last one the wait is for its hit
+  for i in "${!typed[@]}"; do
+    [ "$i" -gt 0 ] && sleep "${gaps[i - 1]}"
+    R --remote-send "${typed[i]}"
   done
   for _ in $(seq 150); do
     got=$(hits) || break
@@ -208,25 +210,32 @@ seq_check() { # $1 keys, $2 gap between keys (the typing speed under test), $3 e
   done
   # past the first hit: wait until which-key has finished the sequence, then take every hit it caused
   if [ -n "$got" ]; then
-    for _ in $(seq 100); do [ "$(R --remote-expr 'luaeval("WK_IDLE()")')" = 1 ] && break; sleep 0.02; done
+    for _ in $(seq 100); do idle=$(R --remote-expr 'luaeval("WK_IDLE()")') || break; [ "$idle" = 1 ] && break; sleep 0.02; done
   fi
   R --remote-send '<Esc><C-\><C-n>'
   got=$(hits)
   for _ in $(seq 100); do [ "$(R --remote-expr 'mode()')" = n ] && break; sleep 0.02; done
   if [ "$got" = "$3" ]; then
-    out "PASS typed [$1] with ${2}s gaps runs $3"
+    out "PASS typed $label runs $3"
   else
-    out "FAIL typed [$1] with ${2}s gaps runs $3 once  -- got '${got:-nothing}'"
+    out "FAIL typed $label runs $3 once  -- got '${got:-nothing}'"
   fi
 }
-for gap in 0.05 0.7; do
-  for line in "${plan[@]}"; do
-    read -r mode lhs target <<<"$line"
-    keys=$(printf '%s' "$lhs" | sed 's/./& /g')
+# Rhythms: every key fast, every key slow, and fast with a pause before the last key. A fast gap is well under
+# timeoutlen (500 ms) and a pause well over it. The pause is what catches a gr map of its own: which-key hands a "gr" typed
+# within timeoutlen of the g to Neovim, which waits timeoutlen for a longer map and then runs the gr map, before the last
+# key; typed slower, which-key keeps the sequence and waits for the last key itself
+FAST=0.05 SLOW=0.7
+for line in "${plan[@]}"; do
+  read -r mode lhs target <<<"$line"
+  read -ra typed <<<"$(printf '%s' "$lhs" | sed 's/./& /g')"
+  fast=$(printf "$FAST %.0s" "${typed[@]:2}")
+  rhythms=("${fast}$FAST" "$(printf "$SLOW %.0s" "${typed[@]:2}")$SLOW" "${fast}$SLOW")
+  for r in "${rhythms[@]}"; do
     if [ "$mode" = x ]; then
-      seq_check "v $keys" "$gap" "$target:v"
+      seq_check "v ${typed[*]}" "$FAST $r" "$target:v"
     else
-      seq_check "$keys" "$gap" "$target:n"
+      seq_check "${typed[*]}" "$r" "$target:n"
     fi
   done
 done

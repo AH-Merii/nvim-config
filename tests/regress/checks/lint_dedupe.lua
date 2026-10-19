@@ -1,4 +1,4 @@
--- @desc     a finding that a linter and a language server both report shows once, also after a re-lint and when the server attaches after the linter reported, and still shows where the server does not run (biome outside a biome project, a disabled server)
+-- @desc     a finding that a linter and a language server both report shows once, also after a re-lint and when the server attaches after the linter reported, and still shows where the server does not run (biome outside a biome project, a disabled server); where the server should run it attaches, so each case judges both sources
 -- @areas    lint lsp
 -- @budget   150
 -- @fixture  lintdup
@@ -48,12 +48,17 @@ local function decided(buf, pat, linter, server)
   return vim.iter(from):any(function(name) return name ~= linter_ns end)
 end
 
--- the linter, and the server that reports the same findings
-local function once(file, pat, label, linter, server)
+-- the linter, and the server that reports the same findings; served: the server runs on file
+local function once(file, pat, label, linter, server, served)
   vim.cmd.edit(file)
   local buf = vim.api.nvim_get_current_buf()
   -- judge once the buffer's servers are up: a slow server (biome's daemon) leaves only the linter otherwise
   wait_attach(buf, vim.tbl_filter(vim.lsp.is_enabled, (lsp_expected(buf))), 20000)
+  -- a case whose server should run but did not judges the linter alone
+  if served then
+    local miss, why = wait_attach(buf, { server }, 20000)
+    check(label .. ": " .. server .. " attached", #miss == 0, table.concat(why, "; "))
+  end
   wait_until(function() return decided(buf, pat, linter, server) end, 30000)
   local first = sources(buf, pat)
   -- leaving insert mode lints a buffer that changed since its last lint: a change that keeps the text, then the event
@@ -72,16 +77,11 @@ local function once(file, pat, label, linter, server)
 end
 
 once("index.ts", "noDebugger", "biome outside a biome project", "biomejs", "biome")
-once("bp/index.ts", "noDebugger", "biome project", "biomejs", "biome")
-once("app.py", "F401", "ruff", "ruff", "ruff")
-once("main.tf", "required_version", "tflint", "tflint", "tflint")
+once("bp/index.ts", "noDebugger", "biome project", "biomejs", "biome", true)
+once("app.py", "F401", "ruff", "ruff", "ruff", true)
+once("main.tf", "required_version", "tflint", "tflint", "tflint", true)
 vim.cmd.cd("clip") -- cargo clippy runs in the cwd
-once("src/main.rs", "against true", "clippy", "clippy", "rust_analyzer")
-do
-  local miss, why = wait_attach(0, { "rust_analyzer" }, 20000)
-  info("clippy case: rust_analyzer " .. (#miss == 0 and "attached" or ("not attached: " .. table.concat(why, "; ")))
-    .. "; sources: " .. table.concat(sources(0, "against true"), ","))
-end
+once("src/main.rs", "against true", "clippy", "clippy", "rust_analyzer", true)
 vim.cmd.cd("..")
 
 -- with the server off, the linter still reports; wipe and reopen so the buffer is new
