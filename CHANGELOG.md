@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/AH-Merii/nvim-config/compare/v1.0.0...v1.1.0) (2026-10-19)
+
+
+### Bug Fixes
+
+* **treesitter:** python's new line skips brackets in strings and comments ([#75](https://github.com/AH-Merii/nvim-config/issues/75)) ([722cb60](https://github.com/AH-Merii/nvim-config/commit/722cb60bb8b97136f6dccf640734eee3ece9a22b))
+
 ## [1.0.0](https://github.com/AH-Merii/nvim-config/compare/v0.16.0...v1.0.0) (2026-10-19)
 
 
