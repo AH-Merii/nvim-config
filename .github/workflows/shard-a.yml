@@ -70,6 +70,12 @@ jobs:
           df -h / | tail -1
           files=(); for i in $(seq "$N"); do files+=("out/suite-$i/results.tsv"); done
           tests/regress/shard-cover.sh --results "$N" "${files[@]}" || rc=1
+          # contention or not: the failed checks again, alone in one container (the job still fails)
+          failed=$(awk -F'\t' '$3 == "FAIL" { print $2 }' "${files[@]}" 2>/dev/null | paste -sd'|')
+          if [ -n "$failed" ]; then
+            echo "RERUN alone: $failed"
+            NVR_OUT=out/rerun bash mise-tasks/test/image/_default suite "^($failed)\$" | grep -E '^(PASS|FAIL) |^       |SUITE'
+          fi
           exit $rc
 
       - name: Upload the shards' last/
