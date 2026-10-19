@@ -1,7 +1,6 @@
 ---@type lang.Spec
 return {
   filetypes = { "yaml" },
-  parsers = { "yaml" },
   servers = { yamlls = { settings = { yaml = { format = { enable = false } } } } },
   formatters = { "prettierd" },
   linters = { yamllint = {} },

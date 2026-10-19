@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
-# @desc     a first start that installs a plugin and the parsers raises no hit-enter prompt, even when init-time work runs the event loop past the install
+# @desc     a first start that installs a plugin and the launch file's parsers raises no hit-enter prompt, even when init-time work runs the event loop past the install, and installs only that file's parsers
 # @areas    startup installer treesitter ui
 # @budget   90
 # @fresh
-# @network  vim.pack clones nvim-treesitter and ts.install downloads the parsers (~30 tarballs, ~10s); every other plugin comes pre-seeded
+# @needs    pyrefly ruff tree-sitter
+# @network  vim.pack clones nvim-treesitter and the python file's parsers download (python and its injections' few
+#           tarballs); every other plugin comes pre-seeded
 #
+# Launched with app.py: a first start installs no parser until a file needs it (D116), and the file's own parsers install
+# once the UI is up (D120). Its tools come from the suite's (@needs), so no tools prompt opens.
 # The prompt only exists with a real UI, so nvim runs as a TUI in a private tmux server (killed on exit); the
 # screen is polled for "Press ENTER" and "-- More --". The data dir is seeded from the version's data/ except nvim-treesitter
 # and the parsers, so vim.pack still installs during init (its build and setup run then too) and parsers still install.
@@ -36,8 +40,6 @@ echo 'vim.wait(3000)' >"$DST/site/plugin/zz_nvr_init_wait.lua"
 # --cmd, before init.lua: record every nvim_echo (nvim-treesitter's log captures nvim_echo when it loads)
 cat >"$D/pre.lua" <<'LUA'
 _G.NVR = { echoes = {} }
--- this check is about hit-enter prompts; the tools offer is a prompt of its own and installs nothing here
-vim.g.install_tools = "off"
 local echo = vim.api.nvim_echo
 vim.api.nvim_echo = function(chunks, history, opts)
   local ok, text = pcall(function() return table.concat(vim.tbl_map(function(c) return tostring(c[1]) end, chunks)) end)
@@ -129,9 +131,17 @@ local function report()
     if not errs[l] and not vim.list_contains(pending, l) and not (ok and r) then table.insert(unloadable, l) end
   end
   for _, t in pairs(errs) do table.insert(errlist, t) end
-  if n == 0 then info("no parser install seen: the init-time echo race was not exercised") end
   rec(#pending == 0 and #errlist == 0 and #unloadable == 0, "parsers installed at first start load, no install errors",
     string.format("%d installed; pending [%s]; errors [%s]; not loadable [%s]", n, join(pending), join(errlist, 2), join(unloadable)))
+  -- only the launch file's: python's own parser and its injections' (regex among them), nothing else
+  local want = buf0 and vim.api.nvim_buf_is_valid(buf0) and require("parsers").needed(vim.bo[buf0].filetype) or {}
+  local names, extra = vim.tbl_keys(started), {}
+  table.sort(names)
+  for _, l in ipairs(names) do
+    if not vim.list_contains(want, l) then table.insert(extra, l) end
+  end
+  rec(started.python and started.regex and #extra == 0, "the first start installs the python file's parsers and no others",
+    string.format("installed [%s]; the file needs [%s]; not needed [%s]", join(names), join(want), join(extra)))
 
   local pm = plugins_missing()
   rec(#pm == 0, "every plugin installed", #pm > 0 and ("missing " .. join(pm)) or nil)
@@ -219,7 +229,7 @@ LUA
   for v in PATH HOME NVR_HOME NVR_STATE NVR_DATA NVR_VERSION NVIM_REGRESS_TAG; do printf 'export %s=%q\n' "$v" "${!v}"; done
   printf 'export TERM=xterm-256color COLORTERM=truecolor NVR_CHECK_DIR=%q NVR_MODE=prompt NVR_SETTLE_MAX=%q\n' "$D" $((BUDGET - 35))
   printf 'cd %q || exit 1\n' "$FIX"
-  printf '%q %q --cmd %q -c %q\n' "$NV" "$V" "luafile $D/pre.lua" "luafile $D/drive.lua"
+  printf '%q %q --cmd %q -c %q app.py\n' "$NV" "$V" "luafile $D/pre.lua" "luafile $D/drive.lua"
   printf 'echo $? >%q\n' "$D/exit"
 } >"$D/run.sh"
 

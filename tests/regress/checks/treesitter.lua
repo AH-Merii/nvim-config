@@ -1,4 +1,4 @@
--- @desc     treesitter highlights, indents and parses injections; textobjects, ]f/[f/]F motions and +/- node selection work; parserless buffers keep builtin ap
+-- @desc     treesitter highlights, indents and parses injections; a language needs its injections' parsers, through inherited queries, bundled ones too; textobjects, ]f/[f/]F motions and +/- node selection work; parserless buffers keep builtin ap
 -- @areas    treesitter keys
 -- @budget   30
 local function ts_active(buf) return vim.treesitter.highlighter.active[buf] ~= nil end
@@ -48,13 +48,14 @@ vim.cmd.edit("app.py")
 local pbuf = vim.api.nvim_get_current_buf()
 check("python: highlighter active", wait_until(function() return ts_active(pbuf) end, 3000))
 
--- toml is not in ensure_installed: the FileType hook installs it on demand when missing, then attaches
+-- toml's file in lua/lang/ names no parser: its own comes from get_lang, pre-seeded (headless runs never install, D120)
 vim.cmd.edit("pyproject.toml")
 local tbuf = vim.api.nvim_get_current_buf()
-check("toml: parser outside ensure_installed attaches", wait_until(function() return ts_active(tbuf) end, 20000))
+check("toml: highlighter active", wait_until(function() return ts_active(tbuf) end, 3000))
 
-vim.cmd.edit("app.conf")
-vim.api.nvim_win_set_cursor(0, { 1, 0 })
-feed("dap")
-check("conf (no parser): builtin dap deletes the paragraph", vim.api.nvim_buf_line_count(0) == 1 and vim.api.nvim_get_current_line() == "", vim.inspect(vim.api.nvim_buf_get_lines(0, 0, -1, false)))
-vim.cmd("edit!")
+-- What a language needs, read from nvim-treesitter's queries
+local parsers = require("parsers")
+local function needs(ft) return parsers.needed(ft) end
+check("python needs regex, which its injections name", vim.list_contains(needs("python"), "regex"), vim.inspect(needs("python")))
+check("typescriptreact needs regex, through tsx's inherited typescript and ecma queries", needs("typescriptreact")[1] == "tsx" and vim.list_contains(needs("typescriptreact"), "regex"), vim.inspect(needs("typescriptreact")))
+check("lua, which Neovim bundles, needs nvim-treesitter's lua, luadoc and luap", needs("lua")[1] == "lua" and vim.list_contains(needs("lua"), "luadoc") and vim.list_contains(needs("lua"), "luap"), vim.inspect(needs("lua")))

@@ -4,7 +4,6 @@ local scripts = { "javascript", "javascriptreact", "typescript", "typescriptreac
 ---@type lang.Spec
 return {
   filetypes = { "javascript", "javascriptreact", "typescript", "typescriptreact", "json", "jsonc" },
-  parsers = { "javascript", "typescript", "tsx", "json" },
   servers = {
     tsc = { filetypes = scripts },
     -- nvim-lspconfig also lists HTML, CSS and others, but its root_dir starts biome only in a Biome project; those

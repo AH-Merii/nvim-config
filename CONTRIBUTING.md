@@ -55,6 +55,8 @@ nvim/
 │   ├── options.lua          # Editor-wide options
 │   ├── lang/                # One data file per language, and the registry that reads them (init.lua)
 │   ├── tools/               # Tool resolver (mise), catalog, prompts and :Tools
+│   ├── parsers/             # The treesitter parsers a buffer needs, installed on demand (init.lua), and its
+│   │                        # nvim-treesitter backend
 │   ├── lsp/                 # Enabled servers, each run from its resolved binary (init.lua); the LSP keys and what a
 │   │                        # server gives a buffer (buffer.lua); pyrefly's type-error switch
 │   ├── format/, linting/    # Formatting and linting, each with its plugin adapter
@@ -91,8 +93,20 @@ nvim/
 - After that: a statusline indicator (a wrench with the missing count, `?` for an unanswered project config; hidden when nothing is missing) and `:Tools` (per tool: roles, source and version; a tool's menu starts or restarts its server or installs it; a row to use or stop using the project's mise config; `Rescan tool sources`; `:Tools install|rescan|restart|project`)
 - `lsp/init.lua` enables every server a language names, with its fields from `lang.views().lsp`. A server whose binary is missing is not started and raises no error; it starts once the binary turns up, and restarts when a refresh or install moves its binary
 
+**Treesitter parsers** (`lua/parsers/`, D116 to D121 in `docs/rearchitecture-decisions.md`)
+- A language file names no parsers. `parsers.needed(ft)` derives them: the filetype's own parser (`get_lang`), then
+  the languages nvim-treesitter's injections query for it names with `#set! injection.language`, through
+  `; inherits:`, one level deep. Names nvim-treesitter has no parser for are left out
+- On a buffer's FileType, `features/treesitter.lua` calls `parsers.ensure`: what it lacks installs as one group (a
+  toast as it starts and one as it ends), once a session per parser. A parser Neovim bundles (lua, c, markdown) gets
+  nvim-treesitter's copy too, for its indents and injections; the buffer uses Neovim's until it lands.
+  Installs need a UI and `vim.g.install_tools ~= "off"` (`tools.can_install`), and tree-sitter, which the tool resolver
+  finds and the tools prompt offers. A failed parser counts in the statusline's missing count; `:Tools` lists each
+  parser with Retry and Update
+- `parsers.setup({ backend })` swaps nvim-treesitter for a fake (`tests/unit/fake_parsers.lua`)
+
 **Languages** (`lua/lang/`, decision D46 in `docs/rearchitecture-decisions.md`)
-- One data file per language (`python.lua`, `go.lua`, ...) holds its filetypes, treesitter parsers, servers with their
+- One data file per language (`python.lua`, `go.lua`, ...) holds its filetypes, servers with their
   settings, formatters, linters, variants and buffer options. `lua/tools/catalog.lua` only says how to install each
   binary; a language names a server, formatter or linter, and the catalog gives its binary
 - `lang.of(ft)` answers what applies to a filetype: its servers, formatters, linters (with the server that covers each),
@@ -100,8 +114,8 @@ nvim/
   modules below ask it. A dotted filetype no language declares gets its parts' formatters, linters and options as
   conform, nvim-lint and the ftplugins combine them, and no servers
 - `lang.views()` builds the tables the plugins get: conform's `formatters_by_ft`, nvim-lint's `linters_by_ft`, each
-  server's `vim.lsp.config` fields (applied above nvim-lspconfig's `lsp/<name>.lua`), the variants' filetype rules and
-  the parsers. Every variant gets explicit entries
+  server's `vim.lsp.config` fields (applied above nvim-lspconfig's `lsp/<name>.lua`) and the variants' filetype
+  rules. Every variant gets explicit entries
 - A mistake in a language file, such as two languages declaring one filetype or two variants claiming one file name,
   skips that declaration and is reported once at startup; the first declaration, in file name order, stays
 - A variant (a dotted filetype such as `yaml.github-actions`) gets its base's servers and linters plus its own, and its
@@ -143,7 +157,6 @@ The `language-tools` skill (`.claude/skills/language-tools/`) walks through the 
 ---@type lang.Spec
 return {
   filetypes = { "toml" },
-  parsers = { "toml" },                         -- installed at startup; others install when a buffer needs them
   servers = { tombi = { settings = {} } },      -- nvim-lspconfig's name -> vim.lsp.Config fields
   formatters = { "tombi" },                     -- conform names, run in order
   linters = { tombi = { covered_by = "tombi" } }, -- nvim-lint names

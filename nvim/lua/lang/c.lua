@@ -2,7 +2,6 @@
 ---@type lang.Spec
 return {
   filetypes = { "c", "cpp" },
-  parsers = { "c" },
   -- nvim-lspconfig's list: clangd also serves Objective-C and CUDA, which get no formatter here
   servers = { clangd = { filetypes = { "c", "cpp", "objc", "objcpp", "cuda" } } },
   formatters = { "clang-format" },
