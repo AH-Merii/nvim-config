@@ -53,7 +53,9 @@ local opts = {
     keep = function(n) return n.level == "error" and not n.routine or vim.fn.getcmdpos() > 0 end,
   },
   quickfile = { enabled = true },
-  scope = { enabled = true },
+  -- The scope still draws, without snacks' keys: they mapped [i ]i ii ai over the conditional textobjects, set up on
+  -- UIEnter after ours, while the popup kept our labels (D146). [b ]b [B ]B jump to a block's edges
+  scope = { enabled = true, keys = { jump = { ["[i"] = false, ["]i"] = false }, textobject = { ii = false, ai = false } } },
   scroll = {
     enabled = true,
     -- Front-loaded, so C-d/C-u cover half the distance in about 20 ms, and done in about 80 ms; snacks' default
