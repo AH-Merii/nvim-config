@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/AH-Merii/nvim-config/compare/v1.5.0...v1.6.0) (2026-10-19)
+
+
+### Bug Fixes
+
+* **treesitter:** markdown draws no error inside a word and spells table cells ([#79](https://github.com/AH-Merii/nvim-config/issues/79)) ([a1632f6](https://github.com/AH-Merii/nvim-config/commit/a1632f6f35bd0ee5a111a80f52d13cecd9cf91c4))
+
 ## [1.5.0](https://github.com/AH-Merii/nvim-config/compare/v1.4.0...v1.5.0) (2026-10-19)
 
 
