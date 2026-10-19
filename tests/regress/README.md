@@ -15,6 +15,7 @@ suite.sh --work <feature>       # iteration: the checks in work/<feature>/
 suite.sh --list [...]           # print what would run, run nothing
 suite.sh --shard 2/3 [...]      # run shard 2 of 3 of the selection, balanced by durations.tsv
 shard-cover.sh 3 [...]          # check that 3 shards split the selection exactly (--results: what shard runs ran)
+durations.sh <results.tsv...>   # rewrite durations.tsv from runs' last/results.tsv (CI's: the regress-results artifact)
 suite.sh --selftest             # the runner's own tests: leak, over budget, fsmonitor, missing server
 suite.sh --refresh              # sync plugins, the suite's tools and parsers in data/ for the current CFG, then run
 suite.sh --refresh-only         # the same sync, then exit without running checks (the test image's build)

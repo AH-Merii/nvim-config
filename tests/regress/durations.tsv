@@ -1,6 +1,6 @@
 # name<TAB>seconds: each check's time in CI, the median of 5 runs of the test job (39280271365 39283143185 39286873140
 # 39289495752 39290079036). suite.sh --shard balances shards by it; a check missing here counts as 1s. Stale times
-# only unbalance the shards: a shard never drops a check (shard-cover.sh).
+# only unbalance the shards: a shard never drops a check (shard-cover.sh). durations.sh refreshes it.
 app_install_fails	1.7
 app_on_demand	0.8
 app_phases	0.6
