@@ -1,8 +1,9 @@
 -- What applies to each buffer, for whatever shows it (the statusline, the tools indicator, :Status): the servers
--- running, the formatters and linters that will run, the missing tools and failed parsers, the tools root and the git checkout. What
--- will run is format.plan(buf).run and linting.plan(buf).run; the rest comes from lang.of, the tool resolver's
--- results, vim.lsp's clients and vim.fs.root. Each buffer's facts are cached until an event that can change them; User FactsChanged (M.event, data
--- { buf }) fires once when they did, so a statusline redraws once. A read is a table lookup.
+-- running, the formatters and linters that will run and the tools they belong to, the missing tools and failed parsers,
+-- the tools root and the git checkout. What will run is format.plan(buf).run and linting.plan(buf).run; the rest comes
+-- from lang.of, the tool resolver's results, vim.lsp's clients and vim.fs.root. Each buffer's facts are cached until an
+-- event that can change them; User FactsChanged (M.event, data { buf }) fires once when they did, so a statusline
+-- redraws once. A read is a table lookup.
 
 local tools = require("tools")
 local catalog = require("tools.catalog")
@@ -19,6 +20,8 @@ M.event = "FactsChanged"
 ---@field servers string[] the servers attached and not stopping, by name, once each, in attach order
 ---@field formatters string[] the formatters that will run, in order
 ---@field linters string[] the linters that will run
+---@field formatter_tools string[] the tools of the formatters that will run: each one's catalog binary, else its name, once each, in order (D137)
+---@field linter_tools string[] the tools of the linters that will run, as formatter_tools
 ---@field missing string[] catalog binaries the buffer's tools run that the resolver did not find
 ---@field parsers string[] treesitter parsers the buffer needs whose install failed (parsers.missing)
 ---@field unanswered boolean the root's project mise config waits for the project prompt's answer
@@ -52,6 +55,23 @@ local function repo_of(buf)
   return folder ~= "" and vim.fs.root(folder, ".git") or nil
 end
 
+--- The tools behind names, conform's or nvim-lint's: each name's catalog binary, else the name, once each, in order.
+--- ruff_fix, ruff_format and ruff_organize_imports are ruff; terraform_fmt is terraform.
+---@param role "formatter"|"linter"
+---@param names string[]
+---@return string[]
+local function tools_of(role, names)
+  local list, seen = {}, {}
+  for _, name in ipairs(names) do
+    local tool = catalog.binary(role, name) or name
+    if not seen[tool] then
+      seen[tool] = true
+      list[#list + 1] = tool
+    end
+  end
+  return list
+end
+
 local touch ---@type fun(buf: integer)
 
 ---@param buf integer
@@ -75,6 +95,7 @@ local function compute(buf)
   if found then
     facts.formatters, facts.linters = format.plan(buf).run, linting.plan(buf).run
   end
+  facts.formatter_tools, facts.linter_tools = tools_of("formatter", facts.formatters), tools_of("linter", facts.linters)
   local project = tools.project(root)
   facts.unanswered = project ~= nil and #project.configs > 0 and project.choice == nil
   -- ToolsChanged fires only when a result differs from the one before a refresh, so wait for these ourselves
@@ -131,7 +152,17 @@ end
 function M.get(buf)
   buf = (buf == nil or buf == 0) and vim.api.nvim_get_current_buf() or buf
   if not vim.api.nvim_buf_is_valid(buf) then
-    return { root = tools.root(), servers = {}, formatters = {}, linters = {}, missing = {}, parsers = {}, unanswered = false }
+    return {
+      root = tools.root(),
+      servers = {},
+      formatters = {},
+      linters = {},
+      formatter_tools = {},
+      linter_tools = {},
+      missing = {},
+      parsers = {},
+      unanswered = false,
+    }
   end
   if not cache[buf] or stale[buf] then
     cache[buf], stale[buf] = compute(buf), nil
