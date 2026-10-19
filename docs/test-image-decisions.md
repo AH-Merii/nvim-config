@@ -348,7 +348,6 @@ with an empty tombi cache and once with a stale one, and checks the written file
 fails both cases with the CI message (3 of 3 runs); after, it passes 20 of 20. `tools_choice_state` with an empty
 `cache-seed/` (as in the image): 20 of 20 before and after with the network up, and 0 of 5 before, 5 of 5 after,
 with the network cut.
-||||||| e71aaf6
 
 ## Local runs (2026-10-17)
 
