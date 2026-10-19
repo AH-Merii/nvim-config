@@ -1,4 +1,4 @@
--- @desc     the statusline draws the shown buffer's facts (the last file buffer while the current one isn't a file): its servers, the formatters and linters that will run, and the count of missing tools; it redraws on its own when they change
+-- @desc     the statusline draws the shown buffer's facts (the last file buffer while the current one isn't a file): its servers, the tools of the formatters and linters that will run (ruff, not ruff_fix, ruff_format), and the count of missing tools; it redraws on its own when they change
 -- @areas    ui tools
 -- @budget   30
 -- @needs    ruff pyrefly
@@ -13,7 +13,7 @@ end
 --- The texts the line must hold for f: each non-empty list, joined as the segments join them, and the missing count.
 local function drawn(f)
   local want = { "LSP: " .. (#f.servers > 0 and table.concat(f.servers, ", ") or "No Active LSP") }
-  for _, list in ipairs({ f.formatters, f.linters }) do
+  for _, list in ipairs({ f.formatter_tools, f.linter_tools }) do
     if #list > 0 then
       table.insert(want, table.concat(list, ", "))
     end
@@ -39,6 +39,11 @@ wait_until(function() return #facts.get(buf).formatters > 0 and shows(facts.get(
 local f = facts.get(buf)
 check("the facts have servers and formatters to draw", #f.servers > 0 and #f.formatters > 0, vim.inspect(f))
 check("the line draws them", shows(f), vim.inspect({ want = drawn(f), line = statusline() }))
+-- Python's formatters are ruff's entries (ruff_fix, ruff_format, ...): the line names the tool, not them
+local entries = vim.tbl_filter(function(name) return not vim.list_contains(f.formatter_tools, name) end, f.formatters)
+check("python runs formatters named apart from their tool", #entries > 0, vim.inspect(f))
+check("the line names no formatter entry", vim.iter(entries):all(function(name) return not statusline():find(name, 1, true) end),
+  vim.inspect({ entries = entries, line = statusline() }))
 
 -- A window on a buffer that isn't a file (a picker, a terminal) keeps the file's lists
 vim.cmd("new | setlocal buftype=nofile")

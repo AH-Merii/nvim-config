@@ -129,14 +129,15 @@ nvim/
   generates it from `lang` and the catalog (`mise run docs`); don't edit it by hand
 
 **The statusline** (`ui/statusline.lua`, steps 4 and 4b in `docs/rearchitecture-decisions.md`)
-- `require("ui.facts").get(buf)` holds a buffer's servers running, the formatters and linters that will run, the
-  missing tools (and whether the project's mise config waits for an answer), its tools root and its git checkout. What
-  will run is `format.plan(buf).run` and `linting.plan(buf).run`; the rest is built from `lang.of`, the resolver's
-  results and the attached clients. It is cached per buffer, and `User FactsChanged` fires when it changes
-- The spec, neoblocks.nvim's statusline, only draws it: the LSP, formatter and linter lists, the tools indicator
-  (`tools.ux.status`), the branch's condition and the path's project come from the facts. A segment that needs
-  something new about a buffer gets it added to the facts, not computed in the spec. `:Status` reads its LSP and
-  formatter lines there too
+- `require("ui.facts").get(buf)` holds a buffer's servers running, the formatters and linters that will run (by
+  conform's and nvim-lint's names, and the tools they belong to: `formatter_tools`, `linter_tools`), the missing tools
+  (and whether the project's mise config waits for an answer), its tools root and its git checkout. What will run is
+  `format.plan(buf).run` and `linting.plan(buf).run`; the rest is built from `lang.of`, the resolver's results and the
+  attached clients. It is cached per buffer, and `User FactsChanged` fires when it changes
+- The spec, neoblocks.nvim's statusline, only draws it: the LSP list, the formatters' and linters' tools (ruff, not
+  ruff_fix, ruff_format; D137), the tools indicator (`tools.ux.status`), the branch's condition and the path's project
+  come from the facts. A segment that needs something new about a buffer gets it added to the facts, not computed in
+  the spec. `:Status` reads its LSP and formatter lines there too
 - The line is rebuilt on events only (the spec's `events`, what neoblocks' built-ins need, and `User FactsChanged`),
   never on a cursor move: the location and progress are statusline expressions Neovim evaluates on each draw. Only
   the search count is recounted on a move, while a search is highlighted
