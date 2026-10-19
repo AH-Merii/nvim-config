@@ -209,6 +209,19 @@ none used since 2026-10-18.
 **Known limit.** The cache service is not a documented API. If it changes, the job fails before deleting anything
 and the cache falls back to GitHub's eviction.
 
+## D156: Dependabot keeps the actions' pins current (2026-10-19)
+
+**Context.** Every action in the workflows is pinned by commit SHA with a version comment (`test.yml`,
+`cache-prune.yml`), the pin GitHub's secure-use guide recommends, and nothing updated them.
+
+**Decision (the user's).** `.github/dependabot.yml` checks the `github-actions` ecosystem monthly and groups every
+update into one PR, with `ci:` commits. Dependabot updates a SHA pin and its version comment together
+([docs](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot)).
+`.github/` is a test input (D148), so that PR runs the full test job, about once a month; `ci:` commits cut no release.
+
+**Rejected.** Weekly or ungrouped updates: a full test run per action per week for pins that rarely matter that soon.
+It doesn't cover `nvim-pack-lock.json` or `mise.toml`, which Dependabot has no ecosystem for.
+
 ## D152: the suite runs as 4 shards in parallel containers (2026-10-19)
 
 Decided by the user, from measured runs on draft PR #86
