@@ -443,7 +443,8 @@ local function describe(desc, query, range, langs)
   if kind and not name_only[object] then
     local words = vim.split(kind, "_", { trimempty = true })
     if not vim.list_contains(words, object) and not vim.iter(same_kind[object] or {}):any(function(w) return vim.list_contains(words, w) end) then
-      desc = desc:match("^%S+") .. " " .. table.concat(words, " ") .. (desc:match(" end$") or "")
+      -- after the key's own name, so a generic move doesn't read as one to that kind only: "Next block: if statement"
+      desc = desc .. ": " .. table.concat(words, " ")
     end
   end
   return ("%s (%s)"):format(desc, langs)
