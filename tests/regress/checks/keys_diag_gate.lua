@@ -1,10 +1,7 @@
--- @desc     the buffer-diagnostics keys (<leader>xX, <leader>sd) are listed by which-key and open their list in a buffer iff an LSP client is attached or its filetype's language names linters (or a dot-part's does), with controlled languages, fake servers and the fixture files
+-- @desc     the buffer-diagnostics keys (<leader>xX, <leader>sd) are listed by which-key, and open their list when pressed, iff the buffer has a diagnostic (D132): not for an attached client or a linted filetype alone, nor for another buffer's diagnostics
 -- @areas    keys lint lsp which-key
 -- @budget   40
--- @args     main.lua
--- @needs    lua-language-server
--- Judged by pressing the keys and reading which-key's popup, never by which maps exist. lua_ls makes main.lua a
--- buffer with a real client.
+-- Judged by pressing the keys and reading which-key's popup, never by which maps exist.
 
 local cur, n, bad
 local function done()
@@ -144,43 +141,31 @@ local function judge(label, buf, want)
   end
 end
 
-section("linters configured")
-expect(lang.of("sbxnone") == nil and lint.linters_by_ft.sbxnone == nil, "precondition: no linter for sbxnone")
+local ns = vim.api.nvim_create_namespace("nvr.diag")
+local function diagnose(buf) vim.diagnostic.set(ns, buf, { { lnum = 0, col = 0, message = "x", severity = vim.diagnostic.severity.WARN } }) end
+
+section("a diagnostic in the buffer")
 local bn = buf_of("sbxnone")
-judge("no linter, no client", bn, false)
-declare("sbxlint", { "a_linter_that_is_not_installed" })
-judge("linter configured", buf_of("sbxlint"), true)
-judge("compound ft with a linted part", buf_of("sbxother.sbxlint"), true)
-declare("sbxempty", {})
-judge("empty linter list", buf_of("sbxempty"), false)
+vim.api.nvim_buf_set_lines(bn, 0, -1, false, { "one", "two" })
+judge("no diagnostics", bn, false)
+diagnose(bn)
+judge("a diagnostic", bn, true)
+vim.diagnostic.reset(ns, bn)
+judge("after the reset", bn, false)
 
-section("attached clients")
--- any attached client, whatever it supports, may publish diagnostics
+section("what could produce diagnostics is not enough")
 local c1 = start_fake(bn, "fake-nothing")
-judge("client with no capabilities", bn, true)
-local c2 = start_fake(bn, "fake-nothing2")
+judge("an attached client with no diagnostics", bn, false)
 stop(c1)
-judge("one of two clients stopped", bn, true)
-stop(c2)
-judge("all clients stopped", bn, false)
-local bl = buf_of("sbxlint")
-stop(start_fake(bl, "fake-lint"))
-judge("linted ft after its client stops", bl, true)
+declare("sbxlint", { "a_linter_that_is_not_installed" })
+judge("a linted filetype with no diagnostics", buf_of("sbxlint"), false)
 
-section("fixture files")
-vim.fn.writefile({ "plain text" }, DIR .. "/plain.txt")
-local any_client = false
-for _, f in ipairs({ "main.lua", "app.conf", "main.go", DIR .. "/plain.txt" }) do
-  vim.cmd.edit(f)
-  local buf = vim.api.nvim_get_current_buf()
-  local missing, why = wait_attach(buf, (lsp_expected(buf)), 15000)
-  if #missing > 0 then info(f .. ": servers missing: " .. table.concat(why, "; ")) end
-  flush()
-  local ft = vim.bo[buf].filetype
-  local clients = #vim.lsp.get_clients({ bufnr = buf })
-  any_client = any_client or clients > 0
-  local producer = clients > 0 or #((lang.of(ft) or {}).linters or {}) > 0
-  judge(vim.fn.fnamemodify(f, ":t") .. " (producer " .. tostring(producer) .. ")", buf, producer)
-end
-expect(any_client, "some fixture buffer has a real client, so the client branch is exercised")
+section("another buffer's diagnostics do not count")
+local other = buf_of("sbxnone")
+diagnose(other)
+local here = buf_of("sbxnone")
+judge("a diagnostic in another buffer only", here, false)
+diagnose(here)
+judge("and one here", here, true)
+vim.diagnostic.reset(ns)
 done()

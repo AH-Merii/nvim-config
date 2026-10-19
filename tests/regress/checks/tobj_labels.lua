@@ -281,8 +281,9 @@ local CONTEXTS = {
   { "t.sh", "greet one two", "one" }, { "page.html", "<p>Some", "Some" }, { "page.html", "function hello(name", "name" },
   { "plug.vim", "local function hello(name", "name" }, { "plug.vim", "let g:x" },
 }
--- the node-type wording: a markdown heading is no class, an HTML element no function
-local WORDING = { ["doc.md # Title n ]c"] = true, ["doc.md ## Second heading x ac"] = true, ["page.html <p>Some x af"] = true }
+-- the node-type wording: a markdown heading is no class, an HTML element no function. The label still opens with what
+-- the key does, so a generic move doesn't read as one that only goes to that kind of node (D144)
+local WORDING = { ["doc.md # Title n ]c"] = "Next class: ", ["doc.md ## Second heading x ac"] = "Around class: ", ["page.html <p>Some x af"] = "Around function: " }
 
 local seen = {} -- mode .. lhs -> { ours = { icon = true }, cases = { ... } }
 local bad = { ours = {}, native = {}, hidden = {}, wording = {} }
@@ -320,7 +321,7 @@ for _, c in ipairs(CONTEXTS) do
           local first = (ours.vrow and (ours.vrow < ours.row or (ours.vrow == ours.row and ours.vcol < ours.col))) and { ours.vrow, ours.vcol } or { ours.row, ours.col }
           local words, hit = node_words(first[1], first[2]), false
           for _, w in ipairs(words) do hit = hit or (#w > 2 and s ~= nil and s.desc:lower():find(w, 1, true) ~= nil) end
-          if not hit then table.insert(bad.wording, ("%s at %s: %q, nodes %s"):format(id, where, s and s.desc or "hidden", table.concat(words, " "))) end
+          if not hit or not (s and vim.startswith(s.desc, WORDING[("%s %s %s"):format(c[1], c[2], id)])) then table.insert(bad.wording, ("%s at %s: %q, nodes %s"):format(id, where, s and s.desc or "hidden", table.concat(words, " "))) end
           WORDING[("%s %s %s"):format(c[1], c[2], id)] = "done"
         end
       elseif kind == "native" then
@@ -370,7 +371,7 @@ local missed = {}
 for k, v in pairs(WORDING) do
   if v ~= "done" then missed[#missed + 1] = k end
 end
-check("a heading and an element are named by their node type", #bad.wording == 0 and #missed == 0, list(bad.wording) or (#missed > 0 and ("did not act as treesitter: " .. table.concat(missed, ", ")) or nil))
+check("a heading and an element are named by their node type, after what the key does", #bad.wording == 0 and #missed == 0, list(bad.wording) or (#missed > 0 and ("did not act as treesitter: " .. table.concat(missed, ", ")) or nil))
 check("the contexts met keys acting both ways", tally.ours > 0 and tally.native > 0, vim.inspect(tally))
 -- off screen in a buffer of ordinary size, a move's label still names the target the move goes to
 do
@@ -384,7 +385,7 @@ do
   local lang = r.row > bottom and lang_at(r.row, r.col)
   local words, hit = node_words(r.row, r.col), false
   for _, w in ipairs(words) do hit = hit or (#w > 2 and s ~= nil and s.desc:lower():find(w, 1, true) ~= nil) end
-  check("a move's label names a target off screen by its language and node type", lang and s ~= nil and s.desc:find(lang, 1, true) ~= nil and hit,
+  check("a move's label names a target off screen by its language and node type", lang and s ~= nil and s.desc:find(lang, 1, true) ~= nil and hit and vim.startswith(s.desc, "Next class: "),
     ("]c to %d:%d (screen ends at %d) in %s, nodes %s: %s"):format(r.row, r.col, bottom, tostring(lang), table.concat(words, " "), s and s.desc or "hidden"))
   vim.o.lines = 60
 end

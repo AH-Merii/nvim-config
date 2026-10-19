@@ -159,20 +159,18 @@ function M.setup()
     },
   })
 
-  -- Diagnostics come from attached clients, and from the linters the filetype's language names
-  local linting = require("linting")
-  require("keys").need("diagnostics", function(buf) return #vim.lsp.get_clients({ bufnr = buf }) > 0 or linting.has(buf) end)
+  -- The buffer's diagnostics lists, where the buffer has a diagnostic (D132; the need is Neovim's, keys/neovim.lua)
   require("keys").feature("diagnostics")({
     { "<leader>x", group = "Diagnostics", icon = { icon = "", color = "orange" } },
     { "<leader>xx", "<cmd>Trouble diagnostics toggle<cr>", "Diagnostics (Trouble)" },
-    { "<leader>xX", "<cmd>Trouble diagnostics toggle filter.buf=0<cr>", "Buffer Diagnostics (Trouble)", need = "diagnostics" },
+    { "<leader>xX", "<cmd>Trouble diagnostics toggle filter.buf=0<cr>", "Buffer Diagnostics (Trouble)", need = "a diagnostic in the buffer" },
     { "<leader>xL", "<cmd>Trouble loclist toggle<cr>", "Location List (Trouble)" },
     { "<leader>xQ", "<cmd>Trouble qflist toggle<cr>", "Quickfix List (Trouble)" },
     {
       "<leader>sd",
       function() Snacks.picker.diagnostics_buffer() end,
       "Diagnostics (Buffer)",
-      need = "diagnostics",
+      need = "a diagnostic in the buffer",
       icon = { icon = "", color = "orange" },
     },
   })

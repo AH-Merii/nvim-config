@@ -27,7 +27,8 @@ function M.filter(m)
   if not slot then
     return true
   end
-  local kind = m.idx and "spec" or ((m.buffer or 0) == 0 and slot.mapped) and "ours" or "other"
+  local global = (m.buffer or 0) == 0
+  local kind = m.idx and "spec" or global and slot.mapped and "ours" or global and "other" or "buffer"
   return keys._lists(slot, kind, memo)
 end
 

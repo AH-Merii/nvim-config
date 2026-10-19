@@ -52,19 +52,84 @@ local specs = {
         require("gitsigns").stage_hunk()
       end
 
-      -- The hunk keys act where gitsigns is attached: it sets the status dict then, and clears it when it detaches
-      -- (e.g. after the file is renamed out of the repo)
+      -- The gitsigns keys act where gitsigns is attached: it sets the status dict then, and clears it when it
+      -- detaches (e.g. after the file is renamed out of the repo)
       local keys = require("keys")
       keys.need("git", function(buf) return vim.b[buf].gitsigns_status_dict ~= nil end)
+      -- The hunk keys act where they find a hunk (D132): the moves and the buffer reset on an unstaged hunk anywhere,
+      -- the others on a hunk on the cursor's line, staged or unstaged as each acts. The hunks are gitsigns' cache, the
+      -- one its actions read, found as gitsigns finds the cursor's hunk; both are private (gitsigns.cache,
+      -- gitsigns.hunks.find_hunk). The public get_hunks() copies every hunk: 0.85 ms a check on a 4208-line file
+      -- with 631 hunks, against 0.017 ms. Should either module go, a hunk key acts where gitsigns is attached, as
+      -- before D132; should the cache's fields change, keys_act_here fails.
+      ---@param buf integer
+      ---@param field "hunks"|"hunks_staged"
+      ---@return Gitsigns.Hunk.Hunk[]|true|nil hunks the hunks, true where gitsigns' modules changed or an update is computing them, nil for none
+      local function hunks_of(buf, field)
+        if vim.b[buf].gitsigns_status_dict == nil then
+          return nil
+        end
+        local ok, cache, found = pcall(function() return require("gitsigns.cache").cache, require("gitsigns.hunks").find_hunk end)
+        if not ok or type(cache) ~= "table" or type(found) ~= "function" then
+          return true
+        end
+        if not cache[buf] then
+          return nil
+        end
+        -- an update clears both fields until its diffs land (gitsigns manager.lua's update): the answer isn't known
+        -- yet, so the key acts as it did before D132
+        local hunks = cache[buf][field]
+        if hunks == nil then
+          return true
+        end
+        return type(hunks) == "table" and hunks or nil
+      end
+      keys.need("an unstaged hunk", function(buf)
+        local hunks = hunks_of(buf, "hunks")
+        return hunks == true or hunks ~= nil and #hunks > 0
+      end)
+      ---@param field "hunks"|"hunks_staged"
+      local function hunk_here(field)
+        return function(buf, win)
+          local hunks = win and hunks_of(buf, field)
+          if hunks == true or not hunks then
+            return hunks == true
+          end
+          return require("gitsigns.hunks").find_hunk(vim.api.nvim_win_get_cursor(win)[1], hunks, vim.api.nvim_buf_line_count(buf)) ~= nil
+        end
+      end
+      local unstaged_here, staged_here = hunk_here("hunks"), hunk_here("hunks_staged")
+      keys.need("an unstaged hunk here", unstaged_here)
+      keys.need("a staged hunk here", staged_here)
+      -- preview_hunk and stage_hunk take the unstaged hunk there, else the staged one
+      keys.need("a hunk here", function(buf, win) return unstaged_here(buf, win) or staged_here(buf, win) end)
       keys.feature("git", { need = "git" })({
-        { "[g", function() require("gitsigns").nav_hunk("prev", { navigation_message = false }) end, "git hunk", icon = { icon = "", color = "green" } },
-        { "]g", function() require("gitsigns").nav_hunk("next", { navigation_message = false }) end, " git hunk", icon = { icon = "", color = "green" } },
+        {
+          "[g",
+          function() require("gitsigns").nav_hunk("prev", { navigation_message = false }) end,
+          "git hunk",
+          icon = { icon = "", color = "green" },
+          need = "an unstaged hunk",
+        },
+        {
+          "]g",
+          function() require("gitsigns").nav_hunk("next", { navigation_message = false }) end,
+          " git hunk",
+          icon = { icon = "", color = "green" },
+          need = "an unstaged hunk",
+        },
         { "<leader>gb", function() require("gitsigns").blame_line() end, "Blame", icon = { icon = "󰩔", color = "yellow" } },
-        { "<leader>gd", function() require("gitsigns").preview_hunk() end, "Diff (Preview)", icon = { icon = "󰦓", color = "cyan" } },
-        { "<leader>Gr", function() require("gitsigns").reset_hunk() end, "Reset Hunk", icon = { icon = "󰁯", color = "orange" } },
-        { "<leader>GR", function() require("gitsigns").reset_buffer() end, "Reset Buffer", icon = { icon = "󱄍", color = "red" } },
-        { "<leader>Gs", function() require("gitsigns").stage_hunk() end, "Stage Hunk", icon = { icon = "", color = "green" } },
-        { "<leader>Gu", unstage_hunk, "Unstage Hunk", icon = { icon = "", color = "yellow" } },
+        { "<leader>gd", function() require("gitsigns").preview_hunk() end, "Diff (Preview)", icon = { icon = "󰦓", color = "cyan" }, need = "a hunk here" },
+        {
+          "<leader>Gr",
+          function() require("gitsigns").reset_hunk() end,
+          "Reset Hunk",
+          icon = { icon = "󰁯", color = "orange" },
+          need = "an unstaged hunk here",
+        },
+        { "<leader>GR", function() require("gitsigns").reset_buffer() end, "Reset Buffer", icon = { icon = "󱄍", color = "red" }, need = "an unstaged hunk" },
+        { "<leader>Gs", function() require("gitsigns").stage_hunk() end, "Stage Hunk", icon = { icon = "", color = "green" }, need = "a hunk here" },
+        { "<leader>Gu", unstage_hunk, "Unstage Hunk", icon = { icon = "", color = "yellow" }, need = "a staged hunk here" },
         { "<leader>Gd", function() vim.cmd("Gitsigns diffthis HEAD") end, "Diff (vs HEAD)", icon = { icon = "", color = "purple" } },
         {
           "<leader>TG",

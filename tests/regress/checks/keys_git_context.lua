@@ -1,4 +1,4 @@
--- @desc     git keys are listed by which-key, and act when pressed, only in their context: the gitsigns hunk keys in buffers gitsigns is attached to (not after a detach or a :saveas out of the repo), the Snacks git pickers while the cwd is in a repo, the log keys in repo files, gitbrowse with a remote (also after a fast rename), PR review with a GitHub remote
+-- @desc     git keys are listed by which-key, and act when pressed, only in their context: the gitsigns keys in buffers gitsigns is attached to (not after a detach or a :saveas out of the repo), each hunk key where it acts on a hunk, the Snacks git pickers while the cwd is in a repo, the log keys in repo files, gitbrowse with a remote (also after a fast rename), PR review with a GitHub remote
 -- @areas    keys git which-key
 -- @budget   40
 -- Judged by pressing the keys and reading which-key's popup, never by which maps exist. Repos with remotes are
@@ -81,7 +81,10 @@ local function open(file, lcd)
 end
 
 -- The git keys, from the config's key list, written out here so the check does not read the config's tables
-local HUNK_KEYS = { "]g", "[g", "<leader>gb", "<leader>gd", "<leader>Gr", "<leader>GR", "<leader>Gs", "<leader>Gu", "<leader>Gd", "<leader>TG" }
+-- <leader>Gu acts on a staged hunk only: keys_act_here and keys_git_unstage judge it
+local HUNK_KEYS = { "]g", "[g", "<leader>gb", "<leader>gd", "<leader>Gr", "<leader>GR", "<leader>Gs", "<leader>Gd", "<leader>TG" }
+-- the keys that act anywhere in a buffer gitsigns is attached to; the hunk keys also need a hunk (keys_act_here)
+local ATTACH_KEYS = { "<leader>gb", "<leader>Gd", "<leader>TG" }
 local PICKERS = { ["<leader>gB"] = "git_branches", ["<leader>gl"] = "git_log", ["<leader>gs"] = "git_status", ["<leader>gS"] = "git_stash", ["<leader>gD"] = "git_diff" }
 local FILE_LOGS = { ["<leader>gL"] = "git_log_line", ["<leader>gf"] = "git_log_file" }
 local BROWSE = "<leader>GB"
@@ -162,7 +165,6 @@ local ACTS = {
   ["<leader>gd"] = { from = { 3, 0 }, window = true, what = "a hunk preview window" },
   ["<leader>Gd"] = { from = { 3, 0 }, window = true, what = "a diff window" },
   ["<leader>Gs"] = { from = { 3, 0 }, done = function() return staged() == "f.txt" end, what = "the hunk staged" },
-  ["<leader>Gu"] = { from = { 3, 0 }, notice = true, what = "a notice that the hunk is not staged" },
   ["<leader>Gr"] = { from = { 3, 0 }, done = function() return vim.api.nvim_buf_get_lines(hbuf, 2, 3, false)[1] == "c" end, what = "the hunk reset" },
   ["<leader>GR"] = { from = { 1, 0 }, done = function() return vim.api.nvim_buf_get_lines(hbuf, 2, 3, false)[1] == "c" end, what = "the buffer reset" },
   ["<leader>TG"] = { from = { 1, 0 }, label = true, what = "its which-key label flips" },
@@ -200,9 +202,9 @@ local cached = okc and type(gcache) == "table" and gcache[plain] ~= nil
 expect(not attached(plain) and vim.b[plain].gitsigns_head == nil and not cached,
   "gitsigns has no state for a file outside git (status dict %s, head %s, cache %s)",
   tostring(attached(plain)), tostring(vim.b[plain].gitsigns_head), tostring(cached))
-local all = table.concat(HUNK_KEYS, " ")
-wk_wait(gbuf, "n", HUNK_KEYS[#HUNK_KEYS], true)
-expect(listing(gbuf, HUNK_KEYS) == all, "a git buffer lists %s (lists: %s)", all, listing(gbuf, HUNK_KEYS))
+local all = table.concat(ATTACH_KEYS, " ")
+wk_wait(gbuf, "n", ATTACH_KEYS[#ATTACH_KEYS], true)
+expect(listing(gbuf, ATTACH_KEYS) == all, "a git buffer lists %s (lists: %s)", all, listing(gbuf, ATTACH_KEYS))
 expect(listing(plain, HUNK_KEYS) == "", "a file outside git lists none (lists: %s)", listing(plain, HUNK_KEYS))
 vim.cmd.cd(FIX)
 
@@ -210,19 +212,19 @@ section("gitsigns keys go when gitsigns detaches")
 repo(W .. "/detach", "f.txt", { "a", "b" })
 local dbuf = open(W .. "/detach/f.txt")
 wait_until(function() return attach_done(dbuf) end, 5000)
-wk_wait(dbuf, "n", HUNK_KEYS[#HUNK_KEYS], true)
-expect(listing(dbuf, HUNK_KEYS) == all, "repo buffer lists them all (lists: %s)", listing(dbuf, HUNK_KEYS))
+wk_wait(dbuf, "n", ATTACH_KEYS[#ATTACH_KEYS], true)
+expect(listing(dbuf, ATTACH_KEYS) == all, "repo buffer lists them all (lists: %s)", listing(dbuf, ATTACH_KEYS))
 vim.cmd("Gitsigns detach")
 wait_until(function() return not attached(dbuf) end, 3000)
-wk_wait(dbuf, "n", HUNK_KEYS[1], false, 3000)
+wk_wait(dbuf, "n", ATTACH_KEYS[1], false, 3000)
 expect(not attached(dbuf) and listing(dbuf, HUNK_KEYS) == "", "after :Gitsigns detach: lists %s", listing(dbuf, HUNK_KEYS))
 vim.cmd("Gitsigns attach")
 expect(wait_until(function() return attach_done(dbuf) end, 5000), "gitsigns re-attached on :Gitsigns attach")
-wk_wait(dbuf, "n", HUNK_KEYS[#HUNK_KEYS], true)
-expect(listing(dbuf, HUNK_KEYS) == all, "after :Gitsigns attach: lists %s", listing(dbuf, HUNK_KEYS))
+wk_wait(dbuf, "n", ATTACH_KEYS[#ATTACH_KEYS], true)
+expect(listing(dbuf, ATTACH_KEYS) == all, "after :Gitsigns attach: lists %s", listing(dbuf, ATTACH_KEYS))
 vim.cmd("silent saveas! " .. vim.fn.fnameescape(NOGIT .. "/out/f.txt"))
 wait_until(function() return not attached(dbuf) end, 3000)
-wk_wait(dbuf, "n", HUNK_KEYS[1], false, 3000)
+wk_wait(dbuf, "n", ATTACH_KEYS[1], false, 3000)
 expect(not attached(dbuf) and listing(dbuf, HUNK_KEYS) == "", "after :saveas out of the repo: lists %s", listing(dbuf, HUNK_KEYS))
 vim.cmd.cd(FIX)
 
@@ -348,6 +350,7 @@ for _, lhs in ipairs(vim.list_extend(vim.list_extend(vim.list_extend({ BROWSE },
   known["n " .. Util.norm(lhs)] = true
 end
 known["n " .. Util.norm(PR)], known["x " .. Util.norm(PR)] = true, true
+known["n " .. Util.norm("<leader>Gu")] = true
 vim.cmd.cd(NOGIT)
 settle()
 local pbuf = open(NOGIT .. "/plain.txt")
@@ -356,7 +359,7 @@ vim.cmd.cd(R .. "/github")
 settle()
 local gh = open(R .. "/github/file.txt")
 wait_until(function() return attach_done(gh) end, 5000)
-wk_wait(gh, "n", HUNK_KEYS[#HUNK_KEYS], true)
+wk_wait(gh, "n", ATTACH_KEYS[#ATTACH_KEYS], true)
 local gained, unknown = {}, {}
 for _, mode in ipairs({ "n", "x" }) do
   for lhs, label in pairs(wk_menu(gh, mode)) do
