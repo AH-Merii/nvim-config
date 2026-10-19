@@ -137,3 +137,5 @@ Left as is:
 - **Other files.** Bigger files and other filetypes (more treesitter work, more color matches) will cost more.
 - **Mouse wheel.** It was only measured in the hidden lab (17 ms CPU per wheel step, all features on). snacks scroll
   doesn't animate it (`snacks/scroll.lua:280-286`).
+
+<!-- throwaway: CI skip-path probe, not for merge -->
