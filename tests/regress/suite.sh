@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # usage: suite.sh [-v] [--refresh] [--refresh-only] [--refresh-dry-run] [--list] [--selftest] [--area a,b] [--changed <git-range>] [--work <feature>]
-#                 [--shard <i>/<n>] [name-filter]
+#                 [name-filter]
 # See README.md.
 set -u
 S=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -11,7 +11,7 @@ unset WAYLAND_DISPLAY DISPLAY TMUX
 . "$S/lib.sh"
 export CFG
 
-FILTER= AREAS= RANGE= WORK= SHARD= REFRESH=0 ONLY=0 DRY=0 LIST=0 SELFTEST=0 VERBOSE=0
+FILTER= AREAS= RANGE= WORK= REFRESH=0 ONLY=0 DRY=0 LIST=0 SELFTEST=0 VERBOSE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --refresh) REFRESH=1 ;;
@@ -23,7 +23,6 @@ while [ $# -gt 0 ]; do
     --area) AREAS=${2//,/ }; shift ;;
     --changed) RANGE=$2; shift ;;
     --work) WORK=$2; shift ;;
-    --shard) SHARD=$2; shift ;;
     -h|--help) sed -n '2,4p' "$0"; exit 0 ;;
     -*) echo "unknown option $1" >&2; exit 2 ;;
     *) FILTER=$1 ;;
@@ -73,28 +72,6 @@ for f in "$CDIR"/*.lua "$CDIR"/*.sh; do
   PLAN+=("nightly $f")
 done
 if [ ${#PLAN[@]} = 0 ]; then echo "no checks selected" >&2; exit 2; fi
-
-# --shard i/n: keep the selected checks that shard i of n runs, in the plan's order. Longest first, each check goes to
-# the shard with the least time so far (ties: the lower shard), by the times in durations.tsv; a check without a time
-# counts as 1s. The n shards split the selection exactly: each selected check is in one shard (shard-cover.sh).
-if [ -n "$SHARD" ]; then
-  [[ $SHARD =~ ^([0-9]+)/([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -ge 1 ] &&
-    [ "${BASH_REMATCH[1]}" -le "${BASH_REMATCH[2]}" ] ||
-    { echo "--shard wants <i>/<n> with 1 <= i <= n, got $SHARD" >&2; exit 2; }
-  mine=" $(for p in "${PLAN[@]}"; do n=$(basename "${p#* }"); echo "${p%% *}:${n%.*}"; done |
-    awk -v i="${BASH_REMATCH[1]}" -v n="${BASH_REMATCH[2]}" -F'\t' '
-      FNR == NR { if ($0 !~ /^#/ && NF >= 2) t[$1] = $2; next }
-      { k = $0; sub(/^[^:]*:/, "", k); printf "%s\t%s\n", $0, (k in t ? t[k] : 1) }' "$S/durations.tsv" - |
-    LC_ALL=C sort -t$'\t' -k2,2gr -k1,1 |
-    awk -v i="${BASH_REMATCH[1]}" -v n="${BASH_REMATCH[2]}" -F'\t' '
-      { b = 1; for (s = 2; s <= n; s++) if (load[s] < load[b]) b = s; load[b] += $2; if (b == i) print $1 }' |
-    tr '\n' ' ')"
-  kept=()
-  for p in "${PLAN[@]}"; do n=$(basename "${p#* }"); [[ $mine == *" ${p%% *}:${n%.*} "* ]] && kept+=("$p"); done
-  PLAN=("${kept[@]}")
-  # more shards than checks: this shard has nothing to run, which is not a failure
-  if [ ${#PLAN[@]} = 0 ]; then echo "shard $SHARD: no checks"; exit 0; fi
-fi
 if [ $LIST = 1 ]; then
   for p in "${PLAN[@]}"; do
     f=${p#* }
@@ -307,7 +284,7 @@ run_version() {
 }
 
 VERSIONS=$(for p in "${PLAN[@]}"; do echo "${p%% *}"; done | sort -u | tr '\n' ' ')
-echo "run $RUNID: $(printf '%s\n' "${PLAN[@]}" | wc -l) check runs on $VERSIONS${SHARD:+(shard $SHARD) }(CFG=$CFG)"
+echo "run $RUNID: $(printf '%s\n' "${PLAN[@]}" | wc -l) check runs on $VERSIONS(CFG=$CFG)"
 for v in $VERSIONS; do run_version "$v" & done
 wait
 
@@ -316,8 +293,6 @@ fail=0
 echo
 echo "== results"
 cat "$RUNROOT"/*/results 2>/dev/null >"$RUNROOT/all"
-# every check's result line, for shard-cover.sh and for timing: replaced by each run
-cp "$RUNROOT/all" "$S/last/results.tsv"
 sort -t$'\t' -k2,2 "$RUNROOT/all" | awk -F'\t' 'BEGIN { printf "%-28s %s\n", "check", "result" } { printf "%-28s %s %6.1fs\n", $2, $3, $4 }'
 grep -q $'\tFAIL\t' "$RUNROOT/all" && fail=1
 

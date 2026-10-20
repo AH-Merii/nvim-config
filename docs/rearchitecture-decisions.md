@@ -1478,7 +1478,7 @@ tool catalog, and replaces both tables:
 - `tests/unit/languages_doc_test.lua` fails while the committed file differs from the render, naming the first
   differing line and saying to run `mise run docs`. It also checks the render names every filetype and every server,
   formatter and linter a language uses, and, on a fixture language, a covered linter's server and a variant's own
-  files and tools. CI runs the unit tier (`.github/workflows/test.yml:76`), so a stale doc fails a pull request.
+  files and tools. CI runs the unit tier (`.github/workflows/test.yml:58`), so a stale doc fails a pull request.
 - The two tables in `docs/mise-tooling-decisions.md` became dated notes that point at `docs/languages.md` and keep
   what the per-language table recorded as changes from Mason. Its "Install specs" table stays: its Verified column is
   evidence from the install runs, which the code can't give.

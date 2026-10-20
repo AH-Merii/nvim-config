@@ -13,9 +13,6 @@ suite.sh --area which-key       # iteration: checks tagged with an area
 suite.sh --changed main         # iteration: areas touched by `git diff main` in $CFG, plus startup and smoke
 suite.sh --work <feature>       # iteration: the checks in work/<feature>/
 suite.sh --list [...]           # print what would run, run nothing
-suite.sh --shard 2/3 [...]      # run shard 2 of 3 of the selection, balanced by durations.tsv
-shard-cover.sh 3 [...]          # check that 3 shards split the selection exactly (--results: what shard runs ran)
-durations.sh <results.tsv...>   # rewrite durations.tsv from runs' last/results.tsv (CI's: the regress-results artifact)
 suite.sh --selftest             # the runner's own tests: leak, over budget, fsmonitor, missing server
 suite.sh --refresh              # sync plugins, the suite's tools and parsers in data/ for the current CFG, then run
 suite.sh --refresh-only         # the same sync, then exit without running checks (the test image's build)
@@ -89,14 +86,12 @@ Tools:
 ### In the test image
 
 `tests/image/Dockerfile` builds an image with a pinned nightly and the suite's tools, plugins and parsers,
-installed by `suite.sh --refresh-only` at build time; CI (`.github/workflows/test.yml`) runs both tiers in it, the
-suite as 4 shards in 4 containers at once (`test:image:shards`).
+installed by `suite.sh --refresh-only` at build time; CI (`.github/workflows/test.yml`) runs both tiers in it.
 
 ```sh
 mise run test:image:build          # podman (or docker, NVR_ENGINE=docker); cached, a config change rebuilds plugins only
 mise run test:image                # builds, then tests/unit/run.sh and the full suite
 mise run test:image suite lsp      # suite.sh args; `unit [args]` for the unit tier, or any command (bash)
-mise run test:image:shards [n]     # the suite as n shards (default 4) in n containers at once, as CI runs it
 ```
 
 - The checkout is mounted read-only and copied into the container beside the image's `data/`; the container is
