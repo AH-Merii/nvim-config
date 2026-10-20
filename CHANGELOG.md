@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/AH-Merii/nvim-config/compare/v1.7.0...v1.8.0) (2026-10-20)
+
+
+### Features
+
+* **diagnostics:** draw inline diagnostics with neoblocks' module ([#100](https://github.com/AH-Merii/nvim-config/issues/100)) ([e194cf7](https://github.com/AH-Merii/nvim-config/commit/e194cf7da90e05721ff02df3ea124d1f4562ba1a))
+
 ## [1.7.0](https://github.com/AH-Merii/nvim-config/compare/v1.6.0...v1.7.0) (2026-10-20)
 
 
