@@ -425,9 +425,7 @@ dirs; `tests/regress/README.md` has the options and how to write a check. Run th
 
 `mise run test:image` runs both tiers in a container with a pinned nightly and the suite's tools, built from
 `tests/image/Dockerfile`; nothing from your own setup is needed. CI runs the same image on every pull request
-(`.github/workflows/test.yml`), and a pull request merges once its `test` job is green. A pull request that changes
-no file the tests read (docs, the changelog; `.github/test-inputs.sh` has the list) skips the job, which counts as
-green.
+(`.github/workflows/test.yml`), and a pull request merges once its `test` job is green.
 `docs/test-image-decisions.md` has how the image is built, pinned and bumped.
 
 ## Notes
