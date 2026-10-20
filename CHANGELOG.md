@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.7.0](https://github.com/AH-Merii/nvim-config/compare/v1.6.0...v1.7.0) (2026-10-20)
+
+
+### Features
+
+* **diagnostics:** move Trouble keys to &lt;leader&gt;d and add an inline toggle ([1560a3c](https://github.com/AH-Merii/nvim-config/commit/1560a3c12fa13681059ef59ca62a5e63eadebfa4))
+
+
+### Bug Fixes
+
+* **lsp:** watched files a stopping server registers start no watcher ([6e53fce](https://github.com/AH-Merii/nvim-config/commit/6e53fce0c2f15e872941a17992e027c053ceb80a))
+* **python:** pyrefly sees packages `uv add` installs without a restart ([d44a71b](https://github.com/AH-Merii/nvim-config/commit/d44a71bba8628cdaeb50e3365d1329d15a7adfcd))
+
 ## [1.6.0](https://github.com/AH-Merii/nvim-config/compare/v1.5.0...v1.6.0) (2026-10-19)
 
 
