@@ -292,6 +292,9 @@ local spec = {
       -- history and the pending keys above. The options phase enabled ui2 already, unless it failed before; then the
       -- module enables it, with the same options (lua/app/init.lua)
       messages = { ui2 = require("app").ui2 },
+      -- The cursor line's diagnostics in a pill after it, a count on the other lines: tiny-inline-diagnostic's look
+      -- (lua/features/diagnostics.lua turns Neovim's virtual text off and toggles this on <leader>dt)
+      diagnostics = {},
       statusline = {
         color = { fg = colors.fg },
         left = left,
