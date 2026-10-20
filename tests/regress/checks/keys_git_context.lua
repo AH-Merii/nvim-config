@@ -32,8 +32,9 @@ end
 local inflight = 0
 local real_system = vim.system
 vim.system = function(cmd, opts, on_exit)
-  -- a language server runs under vim.system with stdin open and lives as long as the check
-  if not on_exit or (opts and opts.stdin == true) then return real_system(cmd, opts, on_exit) end
+  -- a language server runs under vim.system with stdin open, and the file watcher Neovim runs for a server's watched
+  -- files (inotifywait, $VIMRUNTIME/lua/vim/_watch.lua) until it's cancelled: both live as long as the check
+  if not on_exit or (opts and opts.stdin == true) or cmd[1] == "inotifywait" then return real_system(cmd, opts, on_exit) end
   inflight = inflight + 1
   local ok, obj = pcall(real_system, cmd, opts, function(...)
     local okc, err = pcall(on_exit, ...)
