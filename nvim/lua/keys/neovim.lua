@@ -58,6 +58,11 @@ end)
 -- ]d and [d, and the buffer's diagnostics lists (features/diagnostics.lua): a diagnostic anywhere in the buffer
 keys.need("a diagnostic in the buffer", function(buf) return next(vim.diagnostic.count(buf)) ~= nil end)
 
+-- The quickfix and location lists in Trouble (features/diagnostics.lua): a list with entries; the location list is
+-- the current window's
+keys.need("a quickfix list", function() return vim.fn.getqflist({ size = 0 }).size > 0 end)
+keys.need("a location list", function() return vim.fn.getloclist(0, { size = 0 }).size > 0 end)
+
 -- gx: what Neovim's gx opens (vim.ui._get_urls), less the server's document links, which it asks for with a
 -- synchronous request: a URL extmark at the cursor, a URL the highlights query names there (a markdown link's text),
 -- or <cfile> as a URL or an existing path
