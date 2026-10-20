@@ -316,19 +316,7 @@ function M.setup()
     end,
   })
 
-  -- A server can register watched files after its client was told to stop: pyrefly registers them again while a
-  -- restart or the quit above stops it. Client:stop cancelled the client's watchers before
-  -- ($VIMRUNTIME/lua/vim/lsp/client.lua, Client:stop) and nothing cancels the new ones, so their inotifywait outlives
-  -- the client and Neovim. Such a registration is dropped.
-  local watchfiles = vim.lsp._watchfiles
-  local register = watchfiles.register
-  watchfiles.register = function(reg, client_id)
-    local client = vim.lsp.get_client_by_id(client_id)
-    if client and client:is_stopped() then
-      return
-    end
-    return register(reg, client_id)
-  end
+  require("lsp.watchfiles").setup()
 
   -- A binary that turned up or moved after an install, an accepted project config or a refresh: start its servers,
   -- and restart the ones in that root running another binary. First resolutions ("resolved") need nothing, the
