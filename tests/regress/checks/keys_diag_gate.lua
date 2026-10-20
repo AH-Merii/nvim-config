@@ -1,4 +1,4 @@
--- @desc     the buffer-diagnostics keys (<leader>xX, <leader>sd) are listed by which-key, and open their list when pressed, iff the buffer has a diagnostic (D132): not for an attached client or a linted filetype alone, nor for another buffer's diagnostics
+-- @desc     the buffer-diagnostics keys (<leader>dd, <leader>sd) are listed by which-key, and open their list when pressed, iff the buffer has a diagnostic (D132): not for an attached client or a linted filetype alone, nor for another buffer's diagnostics
 -- @areas    keys lint lsp which-key
 -- @budget   40
 -- Judged by pressing the keys and reading which-key's popup, never by which maps exist.
@@ -94,7 +94,7 @@ local function declare(ft, linters)
   lint.linters_by_ft[ft] = #linters > 0 and linters or nil
 end
 -- the buffer-diagnostics keys, from the config's key list
-local KEYS = { "<leader>xX", "<leader>sd" }
+local KEYS = { "<leader>dd", "<leader>sd" }
 
 -- windows open, so a press that opens a list or a picker shows
 local function windows() return #vim.api.nvim_list_wins() end

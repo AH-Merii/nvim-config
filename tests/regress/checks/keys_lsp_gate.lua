@@ -359,7 +359,7 @@ section("every key a server brings is judged")
 -- the keys the popup gains when a server that supports every method attaches: each is one of KEYS, or a key a
 -- check of its own judges (the format keys in keys_format_gate, the diagnostics keys in keys_diag_gate, grx, which
 -- needs a code lens on its line, in keys_act_here)
-local ELSEWHERE = { "n <leader>lf", "x <leader>lf", "n <leader>Tf", "n <leader>xX", "n <leader>sd", "n grx" }
+local ELSEWHERE = { "n <leader>lf", "x <leader>lf", "n <leader>Tf", "n <leader>dd", "n <leader>sd", "n grx" }
 local Util = require("which-key.util")
 local known = {}
 for _, key in ipairs(KEYS) do known[(key.mode or "n") .. " " .. Util.norm(key[1])] = true end

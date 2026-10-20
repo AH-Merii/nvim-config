@@ -204,7 +204,9 @@ local CLASS = {
   -- the picker logs HEAD's line at the cursor's number, not the buffer's line: a check on the buffer's line is no closer
   ["n <leader>gL"] = BUFFER,
   -- diagnostics in the buffer
-  ["n <leader>xX"] = CURSOR, ["n <leader>sd"] = CURSOR, ["n ]d"] = CURSOR, ["n [d"] = CURSOR,
+  ["n <leader>dd"] = CURSOR, ["n <leader>sd"] = CURSOR, ["n ]d"] = CURSOR, ["n [d"] = CURSOR,
+  -- the quickfix list, the window's location list: what the Trouble list keys open
+  ["n <leader>dq"] = CURSOR, ["n <leader>dl"] = CURSOR,
   -- folds and spelling at the cursor, in the window
   ["n za"] = CURSOR, ["n zA"] = CURSOR, ["n zc"] = CURSOR, ["n zC"] = CURSOR, ["n zo"] = CURSOR, ["n zO"] = CURSOR,
   ["n zd"] = CURSOR, ["n zD"] = CURSOR, ["n zf"] = CURSOR, ["x zf"] = CURSOR, ["n z="] = CURSOR,
