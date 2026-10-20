@@ -47,6 +47,8 @@ local function setup(opts)
   local root = ("%s/%d"):format(tmp, n)
   vim.fn.mkdir(root .. "/.git", "p")
   vim.env.PATH = root .. "/system"
+  -- pyrefly requires it (tools/catalog.lua), and the system provides it
+  h.bin(root .. "/system/inotifywait", "4.23.9.0")
   local global = { pyrefly = "1.0.0", ruff = "1.0.0", tombi = "1.0.0" }
   if opts.cli ~= false then
     global["tree-sitter"] = "0.27.1"
