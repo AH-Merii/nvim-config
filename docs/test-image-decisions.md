@@ -136,12 +136,12 @@ runner's Android, .NET and GHC trees for disk headroom. Not measured on a runner
 ## D156: Dependabot keeps the actions' pins current (2026-10-19)
 
 **Context.** Every action in the workflows is pinned by commit SHA with a version comment (`test.yml`,
-`cache-prune.yml`), the pin GitHub's secure-use guide recommends, and nothing updated them.
+`release.yml`), the pin GitHub's secure-use guide recommends, and nothing updated them.
 
 **Decision (the user's).** `.github/dependabot.yml` checks the `github-actions` ecosystem monthly and groups every
 update into one PR, with `ci:` commits. Dependabot updates a SHA pin and its version comment together
 ([docs](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot)).
-`.github/` is a test input (D148), so that PR runs the full test job, about once a month; `ci:` commits cut no release.
+That PR runs the full test job, like every PR, about once a month; `ci:` commits cut no release.
 
 **Rejected.** Weekly or ungrouped updates: a full test run per action per week for pins that rarely matter that soon.
 It doesn't cover `nvim-pack-lock.json` or `mise.toml`, which Dependabot has no ecosystem for.
