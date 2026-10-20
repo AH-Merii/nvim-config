@@ -28,6 +28,9 @@ return {
   servers = {
     -- https://pyrefly.org/, a Python type checker written in Rust
     pyrefly = {
+      -- Neovim only advertises file watching on macOS and Windows ($VIMRUNTIME/lua/vim/lsp/protocol.lua,
+      -- didChangeWatchedFiles); without it pyrefly misses packages `uv add` installs into .venv until a restart
+      capabilities = { workspace = { didChangeWatchedFiles = { dynamicRegistration = true } } },
       settings = {
         -- the Run and Test code lenses, off by default
         python = { pyrefly = { runnableCodeLens = true } },

@@ -33,7 +33,10 @@ local node_modules = { "node_modules/.bin" }
 ---@type table<string, tools.Entry>
 M.tools = {
   -- Python
-  pyrefly = { spec = "pypi:pyrefly", project = venv, servers = { pyrefly = { "lsp" } } },
+  -- requires inotifywait: Neovim's file watcher backend for pyrefly's watched files (lang/python.lua)
+  pyrefly = { spec = "pypi:pyrefly", project = venv, requires = { "inotifywait" }, servers = { pyrefly = { "lsp" } } },
+  -- inotify-tools, from the system package manager
+  inotifywait = {},
   ruff = {
     spec = "ruff",
     project = venv,
