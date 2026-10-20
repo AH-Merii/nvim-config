@@ -7,6 +7,7 @@ lua/app/plugins.lua               startup installer
 lua/features/init.lua             startup installer
 lua/lsp/buffer.lua                lsp keys which-key
 lua/lsp/init.lua                  lsp tools
+lua/lsp/watchfiles.lua            lsp tools
 lua/lang/*                        lsp tools format lint treesitter editing keys which-key
 lua/tools/*                       tools lsp format lint
 lua/tools/ux.lua                  ui

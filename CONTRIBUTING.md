@@ -59,7 +59,8 @@ nvim/
 │   ├── parsers/             # The treesitter parsers a buffer needs, installed on demand (init.lua), and its
 │   │                        # nvim-treesitter backend
 │   ├── lsp/                 # Enabled servers, each run from its resolved binary (init.lua); the LSP keys and what a
-│   │                        # server gives a buffer (buffer.lua); pyrefly's type-error switch
+│   │                        # server gives a buffer (buffer.lua); pyrefly's type-error switch; what the config changes
+│   │                        # in Neovim's watched files (watchfiles.lua)
 │   ├── format/, linting/    # Formatting and linting, each with its plugin adapter
 │   ├── keys/                # Key rows and needs (init.lua), the which-key adapter, Neovim's own keys as rows, and
 │   │                        # the language files' rows (languages.lua)
