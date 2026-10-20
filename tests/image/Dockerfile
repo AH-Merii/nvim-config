@@ -29,10 +29,10 @@ ARG RUSTUP_SHA256=dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb
 # git: vim.pack and the git checks; tmux: pending_keys.sh; procps (pgrep), gawk (suite.sh's report): the runner;
 # curl, gcc, libc6-dev: a first start's parser downloads and builds (fresh_bootstrap.sh); python3: the interpreter
 # the suite's pypi tools were installed against, as on the host; libicu76: marksman (.NET) exits without it;
-# tini: PID 1 reaps the checks' orphans
+# tini: PID 1 reaps the checks' orphans; inotify-tools: inotifywait, which pyrefly requires (tools/catalog.lua)
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl gawk gcc git libc6-dev libicu76 procps python3 \
-    tini tmux \
+    inotify-tools tini tmux \
   && rm -rf /var/lib/apt/lists/*
 RUN curl -fsSLo /usr/local/bin/mise "https://github.com/jdx/mise/releases/download/v${MISE_VERSION}/mise-v${MISE_VERSION}-linux-x64" \
   && echo "${MISE_SHA256}  /usr/local/bin/mise" | sha256sum -c --quiet \
