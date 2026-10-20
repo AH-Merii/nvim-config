@@ -38,7 +38,7 @@
       "src": "https://github.com/nvim-mini/mini.icons"
     },
     "neoblocks.nvim": {
-      "rev": "bb5831c3a0d37959c8303e9739de0d7c180be21d",
+      "rev": "34f96bc91fad586ad362928066466ddf48051d23",
       "src": "https://github.com/AH-Merii/neoblocks.nvim"
     },
     "nvim-autopairs": {
@@ -78,10 +78,6 @@
     "snacks.nvim": {
       "rev": "882c996cf28183f4d63640de0b4c02ec886d01f2",
       "src": "https://github.com/folke/snacks.nvim"
-    },
-    "tiny-inline-diagnostic.nvim": {
-      "rev": "46ae9b3c8f3039e96ff4497d190ad0aee091f30d",
-      "src": "https://github.com/rachartier/tiny-inline-diagnostic.nvim"
     },
     "todo-comments.nvim": {
       "rev": "31e3c38ce9b29781e4422fc0322eb0a21f4e8668",
