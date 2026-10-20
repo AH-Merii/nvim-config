@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.9.0](https://github.com/AH-Merii/nvim-config/compare/v1.8.0...v1.9.0) (2026-10-20)
+
+
+### Bug Fixes
+
+* **lsp:** a directory gone before inotifywait watches it is no error ([2ad5d0a](https://github.com/AH-Merii/nvim-config/commit/2ad5d0a365364d36bdd3205babb3f8a4f4c9f74e))
+
+
+### Restructuring
+
+* **lsp:** move the watched-files adjustment to lsp/watchfiles.lua ([9a9dbc4](https://github.com/AH-Merii/nvim-config/commit/9a9dbc42e8bd17403570e05b929f1864abb42f0e))
+
 ## [1.8.0](https://github.com/AH-Merii/nvim-config/compare/v1.7.0...v1.8.0) (2026-10-20)
 
 
