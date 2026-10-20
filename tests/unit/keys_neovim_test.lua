@@ -1,6 +1,7 @@
 -- Neovim's own keys as rows (keys/neovim.lua) are listed only where they would act at the cursor now (D132): the
 -- fold keys on a fold, the spelling keys with spell checking, the diagnostic moves with a diagnostic in the buffer,
--- gx on a path or URL, grx on a code lens. Read through keys.menu, with the real runtime and a fake server; no
+-- gx on a path or URL, grx on a code lens, the list keys with an entry in their list. Read through keys.menu, with
+-- the real runtime and a fake server; no
 -- plugins. nvim --clean --headless -l tests/unit/keys_neovim_test.lua
 local here = vim.fs.dirname(vim.fs.abspath(debug.getinfo(1, "S").source:sub(2)))
 package.path = table.concat({ here .. "/../../nvim/lua/?.lua", here .. "/../../nvim/lua/?/init.lua", here .. "/?.lua", package.path }, ";")
@@ -196,6 +197,29 @@ h.case("grx is listed on a line with a code lens; with lenses off, where a serve
   srv.stop()
   h.eq(which({ "grx" }), "", "no server")
   vim.lsp.codelens.enable(true, { bufnr = buf })
+end)
+
+h.case("the list keys are listed only while their list has an entry, the location list the current window's", function()
+  -- rows with the needs, as the Trouble list keys have them (features/diagnostics.lua)
+  keys.feature("lists")({
+    { "<leader>dq", "<Nop>", "Quickfix List", need = "a quickfix list" },
+    { "<leader>dl", "<Nop>", "Location List", need = "a location list" },
+  })
+  local LISTS = { "<Space>dq", "<Space>dl" }
+  local buf = scratch({ "one", "two" })
+  vim.fn.setqflist({}, "r")
+  vim.fn.setloclist(0, {}, "r")
+  h.eq(which(LISTS), "", "both lists empty")
+  vim.fn.setqflist({ { bufnr = buf, lnum = 1, text = "q" } }, "r")
+  h.eq(which(LISTS), "<Space>dq", "an entry in the quickfix list")
+  vim.fn.setqflist({}, "r")
+  -- a split copies the location list, so this window's gets its entry after it
+  vim.cmd("vsplit")
+  vim.fn.setloclist(0, { { bufnr = buf, lnum = 2, text = "l" } }, "r")
+  h.eq(which(LISTS), "<Space>dl", "an entry in this window's location list")
+  vim.cmd("wincmd p")
+  h.eq(which(LISTS), "", "the entry is in another window's location list")
+  vim.cmd("silent! only")
 end)
 
 h.finish()
