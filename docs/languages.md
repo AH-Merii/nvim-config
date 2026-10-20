@@ -79,6 +79,7 @@ is used before mise's; CONTRIBUTING.md ("Tools from mise") has the whole order.
 | `golangci-lint` | `golangci-lint` | none | go | linter `golangcilint` | go |
 | `gopls` | `go:golang.org/x/tools/gopls` | none | go | server `gopls` | go |
 | `hadolint` | `hadolint` | none | none | linter `hadolint` | docker |
+| `inotifywait` | the system's | none | none | used by pyrefly | python |
 | `jactionlint` | `jactionlint` | none | none | linter `jactionlint` | yaml |
 | `lua-language-server` | `lua-language-server` | none | none | server `lua_ls` | lua |
 | `markdownlint-cli2` | `markdownlint-cli2` | `node_modules/.bin` | node | linter `markdownlint-cli2` | markdown |
@@ -86,7 +87,7 @@ is used before mise's; CONTRIBUTING.md ("Tools from mise") has the whole order.
 | `neocmakelsp` | `github:neocmakelsp/neocmakelsp` | none | none | server `neocmake` | cmake |
 | `prettierd` | `npm:@fsouza/prettierd` | `node_modules/.bin` | node | formatter `prettierd` | css, docker, html, markdown, yaml |
 | `pyproject-fmt` | `pypi:pyproject-fmt` | `.venv/bin` | none | formatter `pyproject-fmt` | toml |
-| `pyrefly` | `pypi:pyrefly` | `.venv/bin` | none | server `pyrefly` | python |
+| `pyrefly` | `pypi:pyrefly` | `.venv/bin` | none | server `pyrefly`; calls `inotifywait` | python |
 | `ruff` | `ruff` | `.venv/bin` | none | server `ruff`; formatters `ruff_fix`, `ruff_format`, `ruff_organize_imports`; linter `ruff` | python |
 | `rust-analyzer` | rustup component `rust-analyzer` | none | rust | server `rust_analyzer` | rust |
 | `rustfmt` | rustup component `rustfmt` | none | rust | formatter `rustfmt` | rust |
