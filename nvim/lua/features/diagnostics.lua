@@ -161,11 +161,19 @@ function M.setup()
 
   -- The buffer's diagnostics lists, where the buffer has a diagnostic (D132; the need is Neovim's, keys/neovim.lua)
   require("keys").feature("diagnostics")({
-    { "<leader>x", group = "Diagnostics", icon = { icon = "", color = "orange" } },
-    { "<leader>xx", "<cmd>Trouble diagnostics toggle<cr>", "Diagnostics (Trouble)" },
-    { "<leader>xX", "<cmd>Trouble diagnostics toggle filter.buf=0<cr>", "Buffer Diagnostics (Trouble)", need = "a diagnostic in the buffer" },
-    { "<leader>xL", "<cmd>Trouble loclist toggle<cr>", "Location List (Trouble)" },
-    { "<leader>xQ", "<cmd>Trouble qflist toggle<cr>", "Quickfix List (Trouble)" },
+    { "<leader>d", group = "Diagnostics", icon = { icon = "", color = "orange" } },
+    { "<leader>dd", "<cmd>Trouble diagnostics toggle filter.buf=0<cr>", "Buffer Diagnostics (Trouble)", need = "a diagnostic in the buffer" },
+    { "<leader>dD", "<cmd>Trouble diagnostics toggle<cr>", "Diagnostics (Trouble)" },
+    { "<leader>dl", "<cmd>Trouble loclist toggle<cr>", "Location List (Trouble)", need = "a location list" },
+    { "<leader>dq", "<cmd>Trouble qflist toggle<cr>", "Quickfix List (Trouble)", need = "a quickfix list" },
+    {
+      "<leader>dt",
+      label = "Inline Diagnostics",
+      toggle = {
+        get = function() return require("tiny-inline-diagnostic.state").user_toggle_state end,
+        set = function(on) require("tiny-inline-diagnostic")[on and "enable" or "disable"]() end,
+      },
+    },
     {
       "<leader>sd",
       function() Snacks.picker.diagnostics_buffer() end,
