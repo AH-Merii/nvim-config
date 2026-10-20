@@ -4,7 +4,7 @@
 --
 --   local srv = require("fake_server").start({ buf = buf, methods = { "textDocument/hover" } })
 --   srv.client():supports_method("textDocument/hover", buf)  -- true
---   srv.register({ "textDocument/formatting" })
+--   srv.register({ "textDocument/formatting" })               -- or a whole lsp.Registration, with its registerOptions
 --   srv.requests                                             -- { { method = "initialize", params = … }, … }
 --   srv.stop()
 
@@ -49,12 +49,13 @@ end
 ---@field client fun(): vim.lsp.Client? nil once stopped
 ---@field requests { method: string, params: any }[] every request the client sent, initialize first
 ---@field notifications { method: string, params: any }[] every notification the client sent
----@field register fun(methods: string[]) sends client/registerCapability for methods and waits for it to apply
+---@field register fun(methods: (string|lsp.Registration)[]) sends client/registerCapability for methods (a method is
+--- registered with its name as the id) and waits for it to apply
 ---@field unregister fun(methods: string[]) sends client/unregisterCapability for methods
 ---@field stop fun() stops the client and waits until it is gone
 
 --- Starts a server attached to opts.buf and waits until it is initialized.
----@param opts { buf: integer, name?: string, methods?: string[], capabilities?: lsp.ServerCapabilities, handlers?: table<string, fun(params: any): any>, root_dir?: string }
+---@param opts { buf: integer, name?: string, methods?: string[], capabilities?: lsp.ServerCapabilities, client_capabilities?: lsp.ClientCapabilities, handlers?: table<string, fun(params: any): any>, root_dir?: string }
 ---@return fake.Server
 function M.start(opts)
   local srv = { requests = {}, notifications = {} }
@@ -99,7 +100,8 @@ function M.start(opts)
   end
 
   local root = opts.root_dir or vim.fn.getcwd()
-  local id = vim.lsp.start({ name = opts.name or "fake", cmd = cmd, root_dir = root }, { bufnr = opts.buf, reuse_client = function() return false end })
+  local config = { name = opts.name or "fake", cmd = cmd, root_dir = root, capabilities = opts.client_capabilities }
+  local id = vim.lsp.start(config, { bufnr = opts.buf, reuse_client = function() return false end })
   assert(id, "fake server: vim.lsp.start returned no client")
   srv.id = id
   function srv.client() return vim.lsp.get_client_by_id(id) end
@@ -116,7 +118,9 @@ function M.start(opts)
     flush()
   end
   function srv.register(methods)
-    server_request("client/registerCapability", { registrations = vim.tbl_map(function(m) return { id = m, method = m } end, methods) })
+    server_request("client/registerCapability", {
+      registrations = vim.tbl_map(function(m) return type(m) == "table" and m or { id = m, method = m } end, methods),
+    })
   end
   function srv.unregister(methods)
     server_request("client/unregisterCapability", { unregisterations = vim.tbl_map(function(m) return { id = m, method = m } end, methods) })
