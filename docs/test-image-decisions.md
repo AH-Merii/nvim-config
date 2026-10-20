@@ -120,8 +120,7 @@ layer rebuilds.
 
 **Decision.** The workflow builds with buildx and `docker/build-push-action`, caching every stage in the
 GitHub Actions cache (`type=gha,mode=max`), then runs `mise-tasks/test/image/_default` with bash (the same file
-`mise run test:image` runs) for `unit`, and `mise-tasks/test/image/shards` for the suite (D152), and uploads the
-suite's `last/` on failure. It passes
+`mise run test:image` runs) for `unit` and for `suite`, and uploads the suite's `last/` on failure. It passes
 the job's own `github.token` as a build secret so mise's GitHub API calls are not rate-limited; the secret is
 mounted for the tools step only and is in no layer. Actions are pinned by commit.
 
@@ -221,86 +220,6 @@ update into one PR, with `ci:` commits. Dependabot updates a SHA pin and its ver
 
 **Rejected.** Weekly or ungrouped updates: a full test run per action per week for pins that rarely matter that soon.
 It doesn't cover `nvim-pack-lock.json` or `mise.toml`, which Dependabot has no ecosystem for.
-
-## D152: the suite runs as 4 shards in parallel containers (2026-10-19)
-
-Decided by the user, from measured runs on draft PR #86
-([measurements](https://github.com/AH-Merii/nvim-config/pull/86#issuecomment-6273802303)).
-
-**Decision.** The `test` job runs the regress suite as 4 shards in 4 containers at once, with
-`mise-tasks/test/image/shards 4`. That is the same file `mise run test:image:shards` runs. Each container is
-`_default suite --shard i/4`, capped at 2 GB with its own output dir, like a single run.
-
-- `suite.sh --shard i/n` assigns the selected checks longest first, each to the shard with the least time so far,
-  by `tests/regress/durations.tsv`. A check missing from the file counts as 1s. The split is deterministic, and a
-  shard keeps the plan's order.
-- A shard must never drop a check silently. After the shards finish, `shard-cover.sh --results` compares the
-  checks the shards recorded (each run's `last/results.tsv`) with `suite.sh --list`. It fails on a check that is
-  missing or ran twice, which also covers a shard that crashed.
-- The job uploads the shards' `results.tsv` as `regress-results`. `tests/regress/durations.sh` rebuilds
-  `durations.tsv` from those files, taking each check's median.
-
-Why: the suite ran its checks one after another, so its step took 215 to 247 s of a 420 to 455 s job. Checks run
-in turn within a version (`suite.sh`, `run_version`), and only versions run in parallel. A runner has 4 vCPUs and
-16 GB, so 4 containers of 2 GB fit.
-
-Measured with 3 runs per variant. "Verdict" is from the run's creation to the end of the job that decides
-pass/fail. Every build in these runs rebuilt the tools stage, because the branch changed `suite.sh`, which that
-stage copies, so builds took 156 to 197 s.
-
-| variant | N | verdict (s) | suite step (s) | runs |
-| --- | --- | --- | --- | --- |
-| one container (before) | 1 | 451, 420, 455 | 247, 215, 246 | 39294838667 (attempts 1, 2), 39297757909 |
-| a: N containers in one job | 3 | 282, 340 (failed), 307 | 87, 100, 106 | 39294838773 (1, 2), 39297757910 |
-| a | 4 | 289, 307, 297 | 76, 91, 90 | same |
-| b: a matrix of N jobs and an aggregating `test` | 3 | 327, 304, 314 | 85, 79, 90 | 39294838869 (1, 2), 39297757962 |
-| b | 4 | 305, 292, 303 | 67, 69, 66 | same |
-| b, the image built once and shared as an artifact | 3 | build failed, 561, 342 (failed) | 89, 92 | same |
-
-The first two baseline numbers leave out the "Free disk space" step, which D148 removed. N=2 in variant a gave
-334 to 354 s.
-
-**Why (a) over (b).** Both get the verdict about 2.5 minutes sooner. The matrix is no faster: its N legs each
-build the image, and the slowest of N builds sets the pace (183 to 197 s against 175 to 186 s for one build at
-N=4). Variant (a) keeps:
-
-- one job, and so the one `test` check the ruleset requires (D52);
-- one image build, with one read of the build cache and one tools install when the cache misses (the
-  artifact variant's build failed once there, `FAIL tools: mise use -g: mise ERROR`);
-- the `changes` skip from D148 as it is.
-
-A matrix would need an aggregator that repeats that skip. It would also take N runners per run from the
-account's 20 concurrent jobs ([limits](https://docs.github.com/en/actions/reference/limits)).
-
-Sharing the image as an artifact is slower still. The tar is 1,034,623,488 bytes, and each leg took 11 to 47 s to
-download it and 33 to 42 s to `docker load` it, after the build job had finished.
-
-**N=4 over 3.** N=4 finished the suite step 9 to 16 s sooner than N=3 in each run. With 4 shards on 4 vCPUs the
-checks run slower: their summed time was 1.08 to 1.32 times the medians, against 0.99 to 1.18 for N=3. The check
-closest to its budget, `tools_prompts`, used 21.6 of its 40 s.
-
-**Order coupling.** Checks in one run share `$H/data`, so a check could depend on what an earlier one left
-there. None did: every split for N=2, 3 and 4 passed in CI, and each of the 99 checks passed alone
-(`suite.sh '^<name>$'`, run locally).
-
-**Rejected.**
-
-- A matrix of jobs, with or without a shared image: see above.
-- `parallel:` or `background:` steps, which would give each shard its own step log. GitHub documents them for
-  github.com ([workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepsparallel)),
-  but actionlint 1.7.12 rejects the workflow (`step must run script with "run" section or run action with
-  "uses" section`; [actionlint#693](https://github.com/rhysd/actionlint/issues/693)). Instead, the task prints
-  each shard's log in its own collapsed group once all have finished.
-- Balancing by check count or by `@budget`: checks range from 0.2 to 48 s, and budgets overstate (`lint_dedupe`
-  takes 48 s against a budget of 150).
-
-**Known issue (D153, investigated separately).** `tools_choice_state` failed twice with `NOTIFY Formatting failed
-in mise.toml with tombi: Formatter 'tombi' timeout`. Once was with 3 shards in one job (39294838773, attempt 2),
-and once in a matrix leg that ran alone on its own runner (39297757962). Contention alone doesn't explain it.
-
-**Cost.** Four copies of `data/nvim` (1.1 GB each) are made inside containers at once, and runners have room for
-them (86 GB free, D148). When `durations.tsv` goes stale, the shards get unbalanced, but no check is dropped.
-`lint_dedupe` takes 48 s, so the suite step can't drop below that whatever N is.
 
 ## D153: tombi formats offline (2026-10-19)
 

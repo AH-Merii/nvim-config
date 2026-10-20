@@ -77,22 +77,11 @@ jobs:
         env:
           NVR_OUT: out/unit
 
-      # 4 shards in 4 containers at once, each capped at 2 GB, then a check that they ran every check once (D152)
-      - name: Regress suite, 4 shards
+      - name: Regress suite
         if: ${{ !cancelled() }}
-        run: bash mise-tasks/test/image/shards 4
+        run: bash mise-tasks/test/image/_default suite
         env:
           NVR_OUT: out/suite
-
-      # Each check's time in CI, for tests/regress/durations.sh
-      - name: Upload the shards' results
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: regress-results
-          path: out/suite/suite-*/results.tsv
-          if-no-files-found: ignore
-          retention-days: 14
 
       - name: Upload the suite's last/
         if: failure()
