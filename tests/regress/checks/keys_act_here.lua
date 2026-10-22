@@ -222,7 +222,7 @@ local CLASS = {
   -- D133
   ["n grn"] = SERVER, ["n gra"] = SERVER, ["x gra"] = SERVER, ["n gri"] = SERVER, ["n grt"] = SERVER, ["n gO"] = SERVER,
   ["n gd"] = SERVER, ["n gD"] = SERVER, ["n gI"] = SERVER, ["n gt"] = SERVER, ["n gCi"] = SERVER, ["n gCo"] = SERVER,
-  ["n K"] = SERVER, ["n <leader>lr"] = SERVER, ["n <leader>cs"] = SERVER, ["n <leader>cl"] = SERVER,
+  ["n K"] = SERVER, ["n <leader>lr"] = SERVER, ["n grN"] = SERVER, ["n <leader>cs"] = SERVER, ["n <leader>cl"] = SERVER,
   ["n <leader>sS"] = SERVER, ["n grr"] = SERVER, ["n <leader>Th"] = SERVER, ["n <leader>Tc"] = SERVER,
   ["n <leader>Te"] = SERVER,
 }
