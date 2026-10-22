@@ -31,6 +31,7 @@ lua/features/files.lua            keys editing
 lua/features/profiling.lua        keys
 lua/options.lua                   editing ui
 lua/features/lsp_status.lua      keys lsp
+lua/features/hover.lua            lsp ui
 lua/lsp/pyrefly.lua               lsp keys
 .luarc.json                       smoke
 .luacheckrc                       smoke
