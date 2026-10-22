@@ -116,6 +116,33 @@ function M.setup()
     { "<leader>ss", function() Snacks.scratch.select() end, "Scratch Buffers", icon = icon("󰎕", "grey") },
   })
 
+  -- <leader>sF: the cwd's FastAPI routes, from neoblocks' fastapi module (set up in lua/ui/statusline.lua). It acts
+  -- where the cwd's Python project depends on FastAPI; that's read once per cwd, at the first press or popup, and
+  -- forgotten when the cwd changes, since a need is read on each press and popup rebuild
+  local keys = require("keys")
+  local fastapi_cwd = {} ---@type table<string, boolean>
+  keys.need("a FastAPI project", function()
+    local cwd = vim.fn.getcwd()
+    if fastapi_cwd[cwd] == nil then
+      fastapi_cwd[cwd] = vim.iter({ "pyproject.toml", "requirements.txt", "setup.py", "Pipfile" }):any(function(name)
+        local f = io.open(vim.fs.joinpath(cwd, name), "r")
+        local text = f and f:read("*a") or ""
+        if f then
+          f:close()
+        end
+        return text:lower():find("fastapi", 1, true) ~= nil
+      end)
+    end
+    return fastapi_cwd[cwd]
+  end)
+  vim.api.nvim_create_autocmd("DirChanged", {
+    group = vim.api.nvim_create_augroup("features.search", { clear = true }),
+    callback = function() fastapi_cwd = {} end,
+  })
+  keys.feature("search", { need = "a FastAPI project" })({
+    { "<leader>sF", function() Neoblocks.fastapi.pick() end, "FastAPI Routes", icon = icon("󱂛", "green") },
+  })
+
   require("keys").feature("search")({
     -- Clear search highlight
     { "<Esc>", ":nohlsearch<CR>", "Clear search highlight", silent = true },
