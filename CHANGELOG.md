@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/AH-Merii/nvim-config/compare/v1.10.0...v1.11.0) (2026-10-22)
+
+
+### Features
+
+* **search:** &lt;leader&gt;sF lists a FastAPI project's routes ([#106](https://github.com/AH-Merii/nvim-config/issues/106)) ([650a02c](https://github.com/AH-Merii/nvim-config/commit/650a02c6ee26feb862fb3b2a4279023ec4b6288e))
+
 ## [1.10.0](https://github.com/AH-Merii/nvim-config/compare/v1.9.0...v1.10.0) (2026-10-22)
 
 
