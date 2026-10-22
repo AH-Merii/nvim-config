@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.10.0](https://github.com/AH-Merii/nvim-config/compare/v1.9.0...v1.10.0) (2026-10-22)
+
+
+### Features
+
+* **lsp:** show rename progress and what a rename edited ([bc929b4](https://github.com/AH-Merii/nvim-config/commit/bc929b40c7b7077f762a07f2dabfe0b4117a941c))
+
+
+### Bug Fixes
+
+* **lsp:** grN asks the server first and says what it needs without one ([2dfd89b](https://github.com/AH-Merii/nvim-config/commit/2dfd89b0e222e5e8d3da17826e3d2bdb8edaafbe))
+
 ## [1.9.0](https://github.com/AH-Merii/nvim-config/compare/v1.8.0...v1.9.0) (2026-10-20)
 
 
