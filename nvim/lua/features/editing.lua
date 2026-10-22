@@ -448,11 +448,16 @@ function M.setup()
     end,
   })
 
-  -- Enable spell checking and wrapping for text-based files
+  -- Enable spell checking and wrapping for text-based files. Not in a nofile buffer: an LSP hover or signature help
+  -- float is one with filetype markdown (runtime lua/vim/lsp/util.lua, open_floating_preview), text nobody edits.
+  -- Exactly nofile: oil's buffers are acwrite and keep spell
   autocmd("FileType", {
     group = group,
     pattern = { "gitcommit", "oil", "markdown", "text", "tex", "NeogitCommitMessage", "typst" },
-    callback = function()
+    callback = function(ev)
+      if vim.bo[ev.buf].buftype == "nofile" then
+        return
+      end
       vim.opt_local.spell = true
       vim.opt_local.spelllang = "en"
       vim.opt_local.wrap = true

@@ -55,10 +55,16 @@ local function covered(name, buf)
   return server ~= nil and #require("lsp").running(buf, server) > 0
 end
 
+--- Whether buf is linted at all: not a nofile buffer, such as an LSP hover or signature help float (filetype markdown,
+--- runtime lua/vim/lsp/util.lua, open_floating_preview), whose text is no file of the project. Exactly nofile, as for
+--- spell (features/editing.lua)
+---@param buf integer
+local function lintable(buf) return vim.bo[buf].buftype ~= "nofile" end
+
 ---@param buf integer
 ---@return linting.Plan plan, string root
 local function make(buf)
-  local found = require("lang").of(vim.bo[buf].filetype)
+  local found = lintable(buf) and require("lang").of(vim.bo[buf].filetype)
   local plan = { linters = found and found.linters or {}, run = {}, covered = {} } ---@type linting.Plan
   -- Finding the root probes the file system; a buffer with no linters needs none
   local root = #plan.linters > 0 and tools.root(buf) or ""
@@ -85,7 +91,8 @@ end
 ---@return integer
 local function resolve_buf(buf) return (buf == nil or buf == 0) and vim.api.nvim_get_current_buf() or buf end
 
---- Which linters apply to buf and which of them run now. Cached per buffer; callers must not modify it.
+--- Which linters apply to buf and which of them run now; none in a nofile buffer. Cached per buffer; callers must not
+--- modify it.
 ---@param buf? integer default the current buffer
 ---@return linting.Plan
 function M.plan(buf)
@@ -116,6 +123,10 @@ end
 ---@param names string[]
 ---@param root string
 local function lint(buf, names, root)
+  -- every lint comes here: on entering a buffer, writing it, <leader>ll and ToolsChanged
+  if not lintable(buf) then
+    return
+  end
   -- nvim-lint lints the current buffer
   vim.api.nvim_buf_call(buf, function()
     require("linting.nvim_lint").lint(names, {
@@ -126,13 +137,14 @@ local function lint(buf, names, root)
   end)
 end
 
---- Whether buf's language names a linter, installed or not: the "linter" need. A lookup, so a key press or a which-key
---- rebuild can call it.
+--- Whether buf's language names a linter, installed or not, and buf is linted (no nofile buffer): the "linter" need. A
+--- lookup, so a key press or a which-key rebuild can call it.
 ---@param buf? integer default the current buffer
 ---@return boolean
 function M.has(buf)
-  local found = require("lang").of(vim.bo[resolve_buf(buf)].filetype)
-  return found ~= nil and #found.linters > 0
+  buf = resolve_buf(buf)
+  local found = lintable(buf) and require("lang").of(vim.bo[buf].filetype)
+  return found and #found.linters > 0 or false
 end
 
 --- Lints buf with names (default: every linter its language names), running those of them that run now, each with the
