@@ -16,12 +16,19 @@ local function format() formatting.buffer() end
 -- grN: a rename whose edits also fill the quickfix list; the rename handler below reads and clears this
 local rename_to_quickfix = false
 local function rename_quickfix()
-  vim.ui.input({ prompt = "New Name: ", default = vim.fn.expand("<cword>") }, function(name)
-    if name and name ~= "" then
-      rename_to_quickfix = true
-      vim.lsp.buf.rename(name)
-    end
-  end)
+  rename_to_quickfix = true
+  -- vim.lsp.buf.rename asks for the name once the server allows the rename; a cancelled prompt renames nothing
+  local input = vim.ui.input
+  vim.ui.input = function(opts, on_confirm)
+    vim.ui.input = input
+    return input(opts, function(name)
+      if not name or name == "" then
+        rename_to_quickfix = false
+      end
+      on_confirm(name)
+    end)
+  end
+  vim.lsp.buf.rename()
 end
 
 local key = keys.feature("lsp")
@@ -47,7 +54,7 @@ key({
   -- A global K also keeps Neovim from mapping K in each buffer a hover server attaches to (runtime lua/vim/lsp.lua)
   { "K", function() vim.lsp.buf.hover() end, "Hover", need = "hover" },
   { "<leader>lr", function() vim.lsp.buf.rename() end, "LSP Rename", need = "rename" },
-  { "grN", rename_quickfix, "Rename, edits to quickfix", need = "rename" },
+  { "grN", rename_quickfix, "Rename, edits to quickfix", need = "rename", echo = true },
   { "<leader>cs", "<cmd>Trouble symbols toggle focus=false<cr>", "Symbols (Trouble)", need = "documentSymbol" },
   {
     "<leader>cl",

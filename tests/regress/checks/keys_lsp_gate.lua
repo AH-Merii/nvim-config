@@ -55,6 +55,7 @@ local KEYS = {
   { "<leader>Tc", need = { "textDocument/codeLens" }, sends = "codelens" },
   { "<leader>sS", need = { "workspace/symbol" } },
   { "grn", need = { "textDocument/rename" }, sends = "textDocument/prepareRename" },
+  { "grN", need = { "textDocument/rename" }, sends = "textDocument/prepareRename" },
   { "gra", need = { "textDocument/codeAction" } },
   { "gra", mode = "x", need = { "textDocument/codeAction" } },
   { "gri", need = { IMPL } },
