@@ -203,6 +203,8 @@ local CLASS = {
   ["n <leader>gD"] = BUFFER,
   -- the picker logs HEAD's line at the cursor's number, not the buffer's line: a check on the buffer's line is no closer
   ["n <leader>gL"] = BUFFER,
+  -- a FastAPI project in the cwd: whether it has routes would take reading its Python files per rebuild
+  ["n <leader>sF"] = BUFFER,
   -- diagnostics in the buffer
   ["n <leader>dd"] = CURSOR, ["n <leader>sd"] = CURSOR, ["n ]d"] = CURSOR, ["n [d"] = CURSOR,
   -- the quickfix list, the window's location list: what the Trouble list keys open

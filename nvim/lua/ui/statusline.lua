@@ -295,6 +295,9 @@ local spec = {
       -- The cursor line's diagnostics in a pill after it, a count on the other lines: tiny-inline-diagnostic's look
       -- (lua/features/diagnostics.lua turns Neovim's virtual text off and toggles this on <leader>dt)
       diagnostics = {},
+      -- A FastAPI project's routes in a picker (<leader>sF in lua/features/search.lua); it reads the project only when
+      -- picked, never at startup
+      fastapi = {},
       statusline = {
         color = { fg = colors.fg },
         left = left,

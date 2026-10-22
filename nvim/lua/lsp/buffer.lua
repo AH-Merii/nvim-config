@@ -151,15 +151,18 @@ autocmd("LspRequest", {
       return
     end
     local running = request.type == "pending"
-    vim._with({ silent = true }, function()
-      vim.api.nvim_echo({ { running and "renaming" or "done" } }, false, {
-        id = "lsp.rename." .. ev.data.client_id .. "." .. ev.data.request_id,
-        kind = "progress",
-        source = "vim.lsp",
-        title = "Rename",
-        status = running and "running" or "success",
-      })
-    end)
+    vim._with(
+      { silent = true },
+      function()
+        vim.api.nvim_echo({ { running and "renaming" or "done" } }, false, {
+          id = "lsp.rename." .. ev.data.client_id .. "." .. ev.data.request_id,
+          kind = "progress",
+          source = "vim.lsp",
+          title = "Rename",
+          status = running and "running" or "success",
+        })
+      end
+    )
   end,
 })
 
