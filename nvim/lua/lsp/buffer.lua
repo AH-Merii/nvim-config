@@ -13,6 +13,17 @@ keys.need("range formatter", function(buf) return formatting.has(buf, true) end)
 
 local function format() formatting.buffer() end
 
+-- grN: a rename whose edits also fill the quickfix list; the rename handler below reads and clears this
+local rename_to_quickfix = false
+local function rename_quickfix()
+  vim.ui.input({ prompt = "New Name: ", default = vim.fn.expand("<cword>") }, function(name)
+    if name and name ~= "" then
+      rename_to_quickfix = true
+      vim.lsp.buf.rename(name)
+    end
+  end)
+end
+
 local key = keys.feature("lsp")
 local PURPLE = "purple"
 ---@param icon string
@@ -36,6 +47,7 @@ key({
   -- A global K also keeps Neovim from mapping K in each buffer a hover server attaches to (runtime lua/vim/lsp.lua)
   { "K", function() vim.lsp.buf.hover() end, "Hover", need = "hover" },
   { "<leader>lr", function() vim.lsp.buf.rename() end, "LSP Rename", need = "rename" },
+  { "grN", rename_quickfix, "Rename, edits to quickfix", need = "rename" },
   { "<leader>cs", "<cmd>Trouble symbols toggle focus=false<cr>", "Symbols (Trouble)", need = "documentSymbol" },
   {
     "<leader>cl",
@@ -122,6 +134,81 @@ autocmd("LspProgress", {
     vim._with({ silent = true }, function() vim.api.nvim_echo({ { value.message or "done" } }, false, opts) end)
   end,
 })
+
+-- A rename as a progress-message while the server works on it (:h LspRequest), so the statusline shows it running
+autocmd("LspRequest", {
+  group = group,
+  callback = function(ev)
+    local request = ev.data.request
+    if request.method ~= "textDocument/rename" then
+      return
+    end
+    local running = request.type == "pending"
+    vim._with({ silent = true }, function()
+      vim.api.nvim_echo({ { running and "renaming" or "done" } }, false, {
+        id = "lsp.rename." .. ev.data.client_id .. "." .. ev.data.request_id,
+        kind = "progress",
+        source = "vim.lsp",
+        title = "Rename",
+        status = running and "running" or "success",
+      })
+    end)
+  end,
+})
+
+-- After a rename, which files it edited: they are left modified, not written (:wa saves them). A server that has not
+-- yet indexed the project (pyrefly a few seconds after it starts) edits only the files it has read, without saying so.
+local apply_rename = vim.lsp.handlers["textDocument/rename"]
+vim.lsp.handlers["textDocument/rename"] = function(err, result, ctx, config)
+  apply_rename(err, result, ctx, config)
+  local to_quickfix = rename_to_quickfix
+  rename_to_quickfix = false
+  if err or not result then
+    return
+  end
+  local files, edits = {}, {} ---@type table<string, true>, { uri: string, range: lsp.Range }[]
+  for uri, changes in pairs(result.changes or {}) do
+    files[uri] = true
+    for _, edit in ipairs(changes) do
+      edits[#edits + 1] = { uri = uri, range = edit.range }
+    end
+  end
+  for _, change in ipairs(result.documentChanges or {}) do
+    if change.textDocument then
+      files[change.textDocument.uri] = true
+      for _, edit in ipairs(change.edits) do
+        edits[#edits + 1] = { uri = change.textDocument.uri, range = edit.range }
+      end
+    end
+  end
+  if to_quickfix then
+    -- the edits' start positions, in the text as renamed; the line's text from its buffer, which the rename loaded
+    local items = vim.tbl_map(function(edit)
+      local buf = vim.uri_to_bufnr(edit.uri)
+      local lnum = edit.range.start.line
+      return {
+        bufnr = buf,
+        lnum = lnum + 1,
+        col = edit.range.start.character + 1,
+        text = vim.api.nvim_buf_get_lines(buf, lnum, lnum + 1, false)[1],
+      }
+    end, edits)
+    table.sort(items, function(a, b)
+      if a.bufnr ~= b.bufnr then
+        return a.bufnr < b.bufnr
+      end
+      return a.lnum < b.lnum or a.lnum == b.lnum and a.col < b.col
+    end)
+    vim.fn.setqflist({}, " ", { title = "Rename", items = items })
+    vim.cmd("botright copen")
+  end
+  local names = vim.tbl_map(function(uri) return vim.fn.fnamemodify(vim.uri_to_fname(uri), ":~:.") end, vim.tbl_keys(files))
+  vim.notify(
+    ("Renamed %d occurrences in %d files (unsaved, :wa writes them):\n%s"):format(#edits, #names, table.concat(names, "\n")),
+    vim.log.levels.INFO,
+    { title = "Rename" }
+  )
+end
 
 -- Language servers' colors (vim.lsp.document_color, on by default, redrawn on edits only), drawn as a palette
 -- symbol at the line's end in the color instead of the built-in's background
