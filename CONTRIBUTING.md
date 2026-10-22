@@ -199,7 +199,7 @@ vim.pack (`:h vim.pack`) installs the plugins; `lua/app/plugins.lua` loads each 
   src = "author/notes.nvim", -- on GitHub, or any URL git clones
   version = "main", -- a branch, tag or commit, or vim.version.range("1.*"); default the default branch
   -- "startup", "buffer" (the first file), "deferred" (after the first screen, the default) or "on_demand" (only
-  -- at one of its `cmd`)
+  -- at one of its `cmd`, or when a module of it is first required)
   phase = "buffer",
   cmd = { "Notes" }, -- commands that load it if used before its phase, as `nvim +Notes` does
   init = function() end, -- before any plugin loads
@@ -219,8 +219,9 @@ plugin another one needs early has no `dependencies` to declare. Each phase load
    ui module that wraps it
 2. Leave it deferred unless something before the first screen needs it (`startup`), it sets up the buffers it
    finds when it loads (`buffer`), or loading it changes something before it is used, such as global maps
-   (`on_demand`, with the `cmd` that loads it). Give a deferred plugin `cmd` for commands used from the command line
-   at launch
+   (`on_demand`, with the `cmd` that loads it). A plugin only some event needs is `on_demand` with no `cmd`, and the
+   feature requires it then (render-markdown, at the first LSP float: `features/hover.lua`). Give a deferred plugin
+   `cmd` for commands used from the command line at launch
 3. Add its keys as rows (see "Adding a key"). A row whose action requires the plugin loads it on the first press
 4. Start Neovim: vim.pack clones it and adds it to `nvim/nvim-pack-lock.json`; commit that file with the spec
 
@@ -272,7 +273,11 @@ buffers):
 vim.api.nvim_create_autocmd("FileType", {
   group = group,
   pattern = { "markdown", "text" },
-  callback = function()
+  callback = function(ev)
+    -- not in an LSP hover or signature help float, a nofile buffer of filetype markdown (D158)
+    if vim.bo[ev.buf].buftype == "nofile" then
+      return
+    end
     vim.opt_local.spell = true
     vim.opt_local.wrap = true
   end,
@@ -390,7 +395,8 @@ their `setup()`, and each module's adapter file is the only one that knows its p
   writing or reloading a buffer, and on entering it or leaving insert mode when it or any file changed since its
   last lint (D72), drops a linter's findings when its covering server attaches, lints again when ToolsChanged finds
   a linter, and kills the runs still going when Neovim exits (D95); `linting.plan(buf)` (`.run` is what `ui.facts`
-  lists) and `linting.has(buf)` as for format
+  lists) and `linting.has(buf)` as for format. A nofile buffer, such as an LSP float, is never linted and plans no
+  linter (D158 in `docs/hover-decisions.md`)
 
 ### Utilities
 
