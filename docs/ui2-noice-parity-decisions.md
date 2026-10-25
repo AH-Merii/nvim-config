@@ -18,6 +18,8 @@ was made.
   when the hooks are off. One niri-screen-lab pass covered all six behaviours.
 - Follow-ups (2026-10-12): routine errors time out; the split measures a typed command's output as a whole and
   other messages one at a time. The tmux check covers both.
+- Changed (2026-10-25, D160): every error toast times out, and `ui/snacks.lua` alone decides toast lifetimes. Needs
+  neoblocks' `messages-toast-lifetime` change released and the lockfile bumped to it.
 
 ## Context
 
@@ -38,7 +40,7 @@ was made.
 | `:` cmdline | noice command_palette popup: bordered float near the top-centre, title/icon per cmdline type, completion menu attached under it, lualine stays visible | vertically centred popup; keeping ui2's bottom line |
 | `/` `?` search | stays at the bottom (noice bottom_search); search count stays in lualine | same popup as `:` |
 | Messages | routed to snacks.notifier toasts, like noice (which sent them through `vim.notify` to snacks) | keeping ui2's bottom-right msg float |
-| Errors | stay until dismissed, except routine search and navigation errors (E486, E384/E385, E42, E553, ...), which time out after snacks' 3s like noice (2026-10-12) | ui2's 4s timeout; every error timing out, as under noice |
+| Errors | time out after snacks' 3s like every toast, as under noice (D160, 2026-10-25: the user asked for errors to dismiss themselves; on 2026-10-12 they stayed until dismissed, except routine search and navigation errors) | ui2's 4s timeout; errors staying until dismissed (2026-10-12 to 2026-10-25) |
 | Long output | opens in a split (long_message_to_split). A typed command's output is measured as a whole; other messages one at a time, so a burst of short async messages stays toasts (2026-10-12) | truncated float / toast; measuring a whole batch of async messages |
 | LSP docs | markdown rendering like noice's `lsp.override` (highlighted code blocks, concealed markup), only what 0.13 and blink lack natively | |
 | History | a filterable picker over all messages, like `:Noice history`; `g<` keeps working | only the `g<` pager |
@@ -50,6 +52,32 @@ Constraints:
   internal moved), and comment the runtime `path:line` they depend on.
 - Known pitfalls from the first ui2 pass: requiring snacks' notifier in a fast event raised E5560; headless has no
   UI attached, so ui2 does nothing there; the regress harness reads snacks.notifier's history.
+
+## D160: toasts time out, and `ui/snacks.lua` alone decides how long (2026-10-25)
+
+Context: errors from Neovim's own messages stayed until dismissed. Two places decided it: neoblocks' messages module
+passed `timeout = 0` for every error that wasn't routine (`lua/neoblocks/messages/toasts.lua:188` in neoblocks
+v0.3.0), and the config's `notifier.keep` in `nvim/lua/ui/snacks.lua` held every error that wasn't routine, the
+`vim.notify` ones included. snacks keeps a toast with timeout 0 whatever `keep` says (`S/notifier.lua:426-433`), so
+the config couldn't let them go on its own. The user asked for error toasts to dismiss themselves, as under noice.
+
+Decision:
+
+- neoblocks passes no `timeout` and leaves a toast's lifetime to snacks' `timeout` and `notifier.keep` (neoblocks'
+  `docs/decisions/messages.md` 10, branch `messages-toast-lifetime`). It still marks routine errors `routine = true`.
+- The config drops its error rule: `notifier` has no `keep`, so snacks' default holds a toast only while the
+  cmdline is open (`S/notifier.lua:131-133`) and every toast, error or not, goes after snacks' 3s
+  (`S/notifier.lua:113`). `<leader>N` dismisses sooner; the history (`<leader>n`) keeps them.
+- `ui/snacks.lua` is the one place that decides toast lifetimes. Errors that should stay again are one line there:
+  `keep = function(n) return n.level == "error" and not n.routine or vim.fn.getcmdpos() > 0 end`.
+- `checks/ui2_noice.sh` expects E492's toast gone after 4.5s, beside the routine E486 and E42.
+
+Rejected:
+
+- Only removing the config's `keep`: neoblocks' `timeout = 0` still kept errors (the check failed with
+  `FAIL an error (E492) is gone after 4.5s`).
+- A neoblocks option for error lifetimes: a second place deciding what snacks' `keep` already decides.
+- A timeout of its own for errors (longer than 3s): the user asked for them to behave like every other toast.
 
 ## Design (2026-10-12)
 
@@ -100,15 +128,16 @@ Runtime refs: `R` = nightly runtime (NVIM v0.13.0-dev-1808+g561857c4a8), `N` = n
   D78, on the tick after UIEnter, the same moment in this config).
 - Dropped (still in `:messages`), as noice dropped them (`N/config/routes.lua:79-96`): `progress` (lualine shows it),
   `undo`, `quickfix`, `completion`, `verbose`, `shell_cmd`. `shell_ret` is kept: it's how a failed `:!cmd` shows.
-- Toasts: errors and warnings get one toast each; errors use `timeout = 0`, so they stay until dismissed. Info
-  messages merge into one toast that replaces the last. The title is the typed command, or noice's
+- Toasts: errors and warnings get one toast each; errors used `timeout = 0`, so they stayed until dismissed, until
+  D160 left every toast's lifetime to snacks' `timeout` and `notifier.keep`. Info messages merge into one toast that replaces the last. The title is the typed command, or noice's
   Error/Warning/Messages.
 - Routine errors: the `routine` table in `messages.lua` lists the "nothing found or at the edge" codes: search
   (E486, E384/E385, E35, E348/E349), quickfix and location lists (E42, E553, E776, E380/E381), tags, include
   search, change list, marks, folds, `:next`/`:bnext` ends and `gf`, each with its `:h` source. A toast whose
   errors are all routine gets snacks' default 3s timeout (`S/notifier.lua:113`), which noice's notify view also
   used (no `timeout` in `N/config/views.lua:66-72`). It is passed as `routine = true`; `ui/snacks.lua`'s
-  `notifier.keep`, which holds every other error (including `vim.notify` ones), skips it.
+  `notifier.keep`, which held every other error (including `vim.notify` ones), skipped it. Since D160 every toast
+  times out, and `routine` is there for a `notifier.keep` that holds errors again.
 - Split: when the rows a toast would need (counted the way snacks sizes it, `S/notifier.lua:513-517,588-603`) pass
   `min(20, 0.6*lines - 2)`, the message opens a non-entered `[Output]` split; `q` closes it. 20 is noice's
   `min_height` (`N/config/preset.lua:99-106`), a per-message filter (`N/message/filter.lua:98-100`).
@@ -137,7 +166,7 @@ message ring, newest first, with a preview. `g<` and `:messages` keep ui2's page
   terminal cursor by the concealed width (measured), so it was rejected.
 - blink's labels sit one cell right of the typed text.
 - Long `:!` output shows only when the command finishes (batching), not streamed.
-- Errors inside a typed command's output that goes to the split are not sticky toasts.
+- Errors inside a typed command's output that goes to the split are not toasts.
 - `confirm()` and `:s///c` use ui2's bottom dialog, not noice's confirm popup.
 - `:messages`/`g<` use ui2's pager float, not noice's split.
 - Toast and split colours/icons need a Nerd Font; the history picker pads titles to 15 cells but doesn't cut them.

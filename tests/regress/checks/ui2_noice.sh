@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @desc     in the TUI ui2 behaves like noice did: ':' in a bordered popup with the statusline kept on the last row, '/' over the last row without moving the layout, :echo and errors as titled toasts (errors stay, search and navigation errors time out), undo messages silent, long (also wrapped) output in a split that is not entered (a typed command's output measured as a whole, other messages one at a time), g< opens the pager, and ui2's own cmdline window comes back afterwards
+# @desc     in the TUI ui2 behaves like noice did: ':' in a bordered popup with the statusline kept on the last row, '/' over the last row without moving the layout, :echo and errors as titled toasts that time out, undo messages silent, long (also wrapped) output in a split that is not entered (a typed command's output measured as a whole, other messages one at a time), g< opens the pager, and ui2's own cmdline window comes back afterwards
 # @areas    ui
 # @budget   60
 # @args     app.conf
@@ -160,7 +160,7 @@ ok "'/' leaves the window height alone" 'echo "height: $(P "height()"), before: 
 send Escape
 wait_for 3000 is "mode()" n
 
-# messages: :echo is a toast, not ui2's msg float; an error toast stays
+# messages: :echo is a toast, not ui2's msg float; error toasts time out
 reset
 send ':echo "ui2-echo-toast"' Enter
 ok ":echo shows a toast" 'screen | head -n 6' wait_for 3000 is 'toast("ui2-echo-toast")' true
@@ -177,7 +177,7 @@ send ':cnext' Enter
 ok "a routine error from a typed command (E42) shows a toast" 'screen | head -n 6' wait_for 3000 is 'toast("E42")' true
 reset
 sleep 4.5 # longer than snacks' 3s timeout and ui2's 4s 'messagesopt'
-ok "an error (E492) is still there after 4.5s" 'screen | head -n 6' is 'toast("E492")' true
+ok "an error (E492) is gone after 4.5s" 'screen | head -n 6' is 'toast("E492")' false
 ok "a routine search error (E486, pattern not found) is gone after 4.5s" 'screen | head -n 6' is 'toast("E486")' false
 ok "a routine typed error (E42, :cnext with no list) is gone after 4.5s" 'screen | head -n 6' is 'toast("E42")' false
 
