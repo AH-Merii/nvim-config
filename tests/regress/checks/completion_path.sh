@@ -29,8 +29,13 @@ mkdir -p "$FIX/src" "$FIX/sub/src"
 
 SOCK=$FIX/.nvim.sock
 [ ${#SOCK} -gt 100 ] && SOCK=${TMPDIR:-/tmp}/nvr-completion-path-$$.sock
+# The client: the binary nv.sh runs, called straight and in the check's own XDG dirs, as nv.sh would run it; in the
+# live ones it writes ~/.local/state/nvim/logs/nvim.log, which the suite's hygiene check fails (lint_quit_kill.sh)
 BIN=$("$NV" "$V" --clean --headless --cmd 'lua io.stdout:write(vim.v.progpath)' --cmd 'qa!' </dev/null 2>/dev/null)
-R() { timeout 5 "$BIN" --clean --headless --server "$SOCK" "$@" </dev/null 2>/dev/null; }
+R() {
+  XDG_CONFIG_HOME=$NVR_HOME/config XDG_DATA_HOME=$NVR_DATA XDG_STATE_HOME=$NVR_STATE XDG_CACHE_HOME=$NVR_HOME/cache \
+    timeout 5 "$BIN" --clean --headless --server "$SOCK" "$@" </dev/null 2>/dev/null
+}
 "$NV" "$V" --headless --listen "$SOCK" sub/note.txt </dev/null >/dev/null 2>&1 &
 started=$!
 trap 'R --remote-send "<C-\\><C-n>:qa!<CR>" >/dev/null; wait_for 5000 eval "! kill -0 $started 2>/dev/null" || kill -KILL $started 2>/dev/null' EXIT
