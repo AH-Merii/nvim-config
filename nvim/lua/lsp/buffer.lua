@@ -253,3 +253,8 @@ autocmd("LspDetach", {
 -- Code lenses from every server that has them, drawn as lines above their line (vim.lsp.codelens, off per buffer
 -- by default); <leader>Tc turns them off in a buffer
 vim.lsp.codelens.enable(true)
+
+-- Inlay hints from every server that has them (vim.lsp.inlay_hint, off per buffer by default); a server that has none
+-- is never asked. Which hints a server sends is its own setting, in its language file (D162 in
+-- docs/inlay-hints-decisions.md); <leader>Th turns them off in a buffer
+vim.lsp.inlay_hint.enable(true)

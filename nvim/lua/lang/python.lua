@@ -32,8 +32,13 @@ return {
       -- didChangeWatchedFiles); without it pyrefly misses packages `uv add` installs into .venv until a restart
       capabilities = { workspace = { didChangeWatchedFiles = { dynamicRegistration = true } } },
       settings = {
-        -- the Run and Test code lenses, off by default
-        python = { pyrefly = { runnableCodeLens = true } },
+        python = {
+          -- the Run and Test code lenses, off by default
+          pyrefly = { runnableCodeLens = true },
+          -- parameter names at call sites, off by default; inferred variable and return types are on by default
+          -- (pyrefly's IDE docs, analysis.inlayHints; D162)
+          analysis = { inlayHints = { callArgumentNames = "all" } },
+        },
       },
       -- Those lenses name client commands that pyrefly's VS Code extension implements; these run them the same way
       -- (lsp/src/code-lens.ts): the file, or pytest or unittest on the test, with the project's Python

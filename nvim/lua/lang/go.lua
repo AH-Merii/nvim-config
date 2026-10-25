@@ -17,14 +17,16 @@ return {
             upgrade_dependency = true,
             vendor = true,
           },
+          -- Inlay hints, all off unless set (gopls' settings.md, "hints"): parameter names and inferred types (D162);
+          -- not the composite literal ones or constant values
           hints = {
-            assignVariableTypes = false,
+            assignVariableTypes = true,
             compositeLiteralFields = false,
             compositeLiteralTypes = false,
             constantValues = false,
-            functionTypeParameters = false,
-            parameterNames = false,
-            rangeVariableTypes = false,
+            functionTypeParameters = true,
+            parameterNames = true,
+            rangeVariableTypes = true,
           },
           analyses = {
             nilness = true,
