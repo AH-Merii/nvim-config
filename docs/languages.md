@@ -18,7 +18,7 @@ A linter covered by a server is skipped while that server is attached to the buf
 | [cmake](../nvim/lua/lang/cmake.lua) | `cmake` | `neocmake` | `gersemi` | none |
 | [css](../nvim/lua/lang/css.lua) | `css`, `scss` | `cssls` | `prettierd` | none |
 | [css](../nvim/lua/lang/css.lua) | `less` | `cssls` | none | none |
-| [docker](../nvim/lua/lang/docker.lua) | `dockerfile` | `docker_language_server` | none | `hadolint` |
+| [docker](../nvim/lua/lang/docker.lua) | `dockerfile` | `docker_language_server` | `dockerfmt` | `hadolint` |
 | [fish](../nvim/lua/lang/fish.lua) | `fish` | `fish_lsp` | `fish_indent` | none |
 | [go](../nvim/lua/lang/go.lua) | `go` | `gopls` | `goimports`, `gofumpt` | `golangcilint` |
 | [go](../nvim/lua/lang/go.lua) | `gomod`, `gosum`, `gotmpl`, `gowork` | `gopls` | none | none |
@@ -71,6 +71,7 @@ is used before mise's; CONTRIBUTING.md ("Tools from mise") has the whole order.
 | `clang-format` | `clang-format` | none | none | formatters `clang_format`, `clang-format` | c |
 | `clangd` | `github:clangd/clangd` | none | none | server `clangd` | c |
 | `docker-language-server` | `github:docker/docker-language-server` | none | none | server `docker_language_server` | docker |
+| `dockerfmt` | `aqua:reteps/dockerfmt` | none | none | formatter `dockerfmt` | docker |
 | `fish` | `github:fish-shell/fish-shell`, version 4.1 or later | none | none | formatter `fish_indent`; used by fish_lsp | fish |
 | `fish-lsp` | `npm:fish-lsp` | none | node | server `fish_lsp`; calls `fish` | fish |
 | `gersemi` | `pypi:gersemi` | `.venv/bin` | none | formatter `gersemi` | cmake |

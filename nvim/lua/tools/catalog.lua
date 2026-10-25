@@ -116,6 +116,7 @@ M.tools = {
   -- Dockerfile
   ["docker-language-server"] = { spec = "github:docker/docker-language-server", servers = { docker_language_server = { "start", "--stdio" } } },
   hadolint = { spec = "hadolint", linters = { "hadolint" } },
+  dockerfmt = { spec = "aqua:reteps/dockerfmt", formatters = { "dockerfmt" } },
 
   -- Make
   checkmake = { spec = "checkmake", linters = { "checkmake" } },

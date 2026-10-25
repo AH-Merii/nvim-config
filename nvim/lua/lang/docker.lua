@@ -2,6 +2,9 @@
 return {
   filetypes = { "dockerfile" },
   servers = { docker_language_server = {} },
+  -- docker-language-server formats only Compose and Bake files (its README's feature list). The variants below are
+  -- yaml and hcl, so their formatters come from those bases (lang/init.lua): dockerfmt runs on Dockerfiles only (D161)
+  formatters = { "dockerfmt" },
   linters = { hadolint = {} },
   variants = {
     ["yaml.docker-compose"] = {
