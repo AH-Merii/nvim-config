@@ -21,13 +21,10 @@ local specs = {
               module = "lazydev.integrations.blink",
               -- make lazydev completions top priority (see `:h blink.cmp`)
               score_offset = 100,
-              -- path completion from cwd instead of current buffer’s directory
             },
-            path = {
-              opts = {
-                get_cwd = function(_) return vim.fn.getcwd() end,
-              },
-            },
+            -- Path completion: `./` and `../` from the file's folder (blink's default get_cwd), any other relative path
+            -- (`src/`, `docs/`) from the project root; absolute ones as typed (D163)
+            path = { module = "features.completion_path" },
             cmdline = {
               min_keyword_length = 2,
             },
