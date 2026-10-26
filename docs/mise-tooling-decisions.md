@@ -844,3 +844,54 @@ deliberate and visible, with `git init` or an empty `mise.toml`.
 **Rejected.** Counting loose folders: the install writes `mise.local.toml` (and the tool may add a `.venv` or
 `node_modules`) into whatever folder a file was opened from, such as Downloads or a mounted drive, where it is easy to
 forget.
+
+### D164: the missing-tool prompt asks again; a project-only install keeps the project's answer (2026-10-26)
+
+**Context.** Two problems in the user's `~/Projects/llm-api` (a uv project: `pyproject.toml`, `.venv`, git, no mise
+config).
+
+1. Every answer to the missing-tool prompt but Esc, "Not now" included, saved the offer in
+   `stdpath("state")/tools/offered.json` (`remember(keys, item ~= nil)`, `nvim/lua/tools/ux.lua:555` before this
+   change), and a saved offer was never made again, in any project (`ux.lua:27`, `ux.lua:578`). The user's file held
+   `"global:ruff@latest"` and `"global:pypi:pyrefly@latest"` though neither was in a global config, so llm-api had no
+   Python servers and no prompt said so.
+2. After installing ruff and pyrefly "for this project only" from `:Tools`, one after the other, the project prompt
+   asked about the `mise.local.toml` those installs wrote. Reproduced with real mise 2026.10.19 in throwaway mise and
+   XDG dirs, through `tools.apply` as `:Tools` calls it: after ruff, `choice=installed`; after pyrefly, `choice=nil`.
+   The cause: `install_local` carries the answer over only if `state.get(before.configs) == before.choice`, a check
+   that the answer didn't change during the install. `state.get` hashes the configs as they are now, and the second
+   install had just rewritten `mise.local.toml`, one of `before.configs`, so the lookup missed and the answer was
+   dropped. The other candidates were ruled out by the same run: the scans listed only `mise.local.toml`, never
+   untrusted, before and after (no `.python-version`, no `.gitignore` effect, no race). The user's answer for llm-api in
+   `~/.local/state/nvim/tools/projects.json` is `"use"`, for the file's current hash: the answer they gave that prompt.
+
+**Decision (approved by the user).**
+
+- The prompt's options are the installs, then *Later (ask again next session)* and *Not for this project (don't ask
+  here again)*; "Not now" is gone. Later and Esc only skip the offer for this session, everywhere. Not for this project
+  saves the tools' names under the project root in `stdpath("state")/tools/declined.json` (`tools.state.decline`,
+  `root -> binary -> date`), a file of its own beside `projects.json`, since those answers are keyed by a config file
+  and its hash and a project without a config has neither. Other projects are still asked, in the same session too.
+- Nothing about an offer is saved any more, and `offered.json` is no longer read or written. A global install puts the
+  tool on the global layer, which every root resolves (`tools/init.lua`, `compute`), and only missing tools are offered
+  (`offer_tools`), so a saved record could only hide a tool that went missing again (removed from the global file, or
+  an install that failed), which is when asking again is wanted.
+- `install_local` checks the answer against the hash the configs had before the install
+  (`state.get(configs, hash)`), and checks separately that the configs other than `mise.local.toml` didn't change, so
+  a `git pull` during the install still drops the answer.
+
+**Migration.** None needed: the code ignores `offered.json`, so every tool the old "Not now" saved is offered again.
+The file is left in place; nothing reads it, and deleting it is harmless.
+
+**Rejected.** Keeping `offered.json` for global installs only: nothing it would hold changes what is offered.
+Migrating old entries by whether the tool is installed: the file can't tell "Not now" from an install, and dropping it
+whole has the same result. Saving "Not for this project" in `projects.json`: its entries go with a config's hash.
+
+Tests: `tests/unit/tools_test.lua`, "a project-only install into an existing mise.local.toml keeps the answer for it"
+(failed before the fix: `after the install: want { "installed", "project-mise" }, got { [2] = "missing" }`);
+`tests/regress/checks/tools_prompt_answers.lua` (Later asks again next session; Not for this project stays quiet in that
+project, next session too, and asks in another; a global install isn't asked again; an old `offered.json` entry no
+longer silences a tool; before the change, the old file's entry hid the prompt and six of its checks failed). Sibling
+wrong versions each fail one: the other configs' check dropped (`a changed config during the install`), the lookup
+without the old hash (the new unit case), Not for this project also skipping the tool for the session, or saved for
+every project (`still asked in another project`), Later saved (`asked again next session`), `offered.json` still read.

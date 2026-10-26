@@ -1,4 +1,4 @@
--- @desc     with a UI: a project mise config that pins tools asks once with three choices (two when it is untrusted), one that pins none never asks, a missing tool is offered once and only on files it runs on (in a project also for the project only), no prompt shows a command, and library code, git files and install_tools = "off" never ask; nothing installs
+-- @desc     with a UI: a project mise config that pins tools asks once with three choices (two when it is untrusted), one that pins none never asks, a missing tool is offered once a session and only on files it runs on (in a project also for the project only), no prompt shows a command, and library code, git files and install_tools = "off" never ask; nothing installs
 -- @areas    tools ui
 -- @budget   40
 -- @needs    jactionlint yaml-language-server
@@ -13,8 +13,8 @@ local prompts = {}
 vim.ui.select = function(items, opts, on_choice)
   local texts = vim.tbl_map(function(i) return opts.format_item and opts.format_item(i) or i end, items)
   table.insert(prompts, { kind = opts.kind, prompt = opts.prompt, items = texts })
-  -- "Not now"; the project prompt is dismissed
-  local decline = opts.kind == "tools.install" and vim.iter(ipairs(texts)):find(function(_, t) return vim.startswith(t, "Not now") end) or nil
+  -- "Later"; the project prompt is dismissed
+  local decline = opts.kind == "tools.install" and vim.iter(ipairs(texts)):find(function(_, t) return vim.startswith(t, "Later") end) or nil
   vim.schedule(function() on_choice(decline and items[decline], decline) end)
 end
 local ran = {}

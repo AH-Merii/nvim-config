@@ -1,5 +1,5 @@
 -- The answers to the project prompt and to "which copy" questions, per project config file, kept until the project's
--- configs change.
+-- configs change; and the tools the user said not to ask about again in a project, per project root.
 
 local M = {}
 
@@ -76,6 +76,33 @@ function M.set_prefer(configs, tool, prefer)
     entry.prefer = entry.prefer or {}
     entry.prefer[tool] = prefer
   end)
+end
+
+-- Tools not to offer again in a project ("Not for this project"): root -> catalog binary -> the date it was said
+M.declined_file = vim.fs.joinpath(vim.fn.stdpath("state"), "tools", "declined.json")
+
+---@return table<string, table<string, string>>
+local function read_declined()
+  local ok, data = pcall(function() return vim.json.decode(table.concat(vim.fn.readfile(M.declined_file), "\n")) end)
+  return ok and type(data) == "table" and data or {}
+end
+
+--- The tools the user said not to offer again in root's project: catalog binary -> the date it was said.
+---@param root string
+---@return table<string, string>
+function M.declined(root) return read_declined()[root] or {} end
+
+--- Remembers not to offer tools again in root's project.
+---@param root string
+---@param names string[] catalog binaries
+function M.decline(root, names)
+  local data = read_declined() -- re-read, another session may have written since
+  data[root] = data[root] or {}
+  for _, name in ipairs(names) do
+    data[root][name] = os.date("!%Y-%m-%d")
+  end
+  vim.fn.mkdir(vim.fs.dirname(M.declined_file), "p")
+  vim.fn.writefile({ vim.json.encode(data) }, M.declined_file)
 end
 
 return M
