@@ -360,7 +360,11 @@ keys.language("python")({ "]]", label = "Next top-level def/class" })  -- a labe
   (`features/git.lua`'s git needs). A new row with a need is classified in `keys_act_here`'s table (cursor, buffer
   by decision, or server), which fails until it is.
 - Where the need fails the key does what it did before: the global map it took over, or Vim's own key. A `<leader>`
-  key, or a row with `echo = true` (Neovim's `gr*` and `gO`), echoes the need it lacks instead. A label-only row
+  key, or a row with `echo = true` (Neovim's `gr*` and `gO`), echoes the need it lacks instead. `echo` can be a
+  function of the buffer instead: it returns what to echo, or nil for what the key did before. It runs on the press,
+  so it must be a lookup, like a need's test. `K` has one (D165 in `docs/hover-decisions.md`): in a buffer whose
+  language names servers it says why none hovers (not installed, starting, not running, no hover), from `ui.facts`
+  and the buffer's clients; elsewhere it is Vim's `K` and its `'keywordprg'`. A label-only row
   with a need over another's global map (Neovim's `]d` and `gx`) only hides the key where the need fails.
 - Rows are global maps; only `keys.language(ft)` rows are buffer-local, and a buffer's own map (an ftplugin's) wins.
 - `keys.holds(need, buf)` and `keys.menu(buf, mode)` say where a key acts and what the popup lists; `keys.list()` gives

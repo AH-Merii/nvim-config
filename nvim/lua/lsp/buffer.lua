@@ -31,6 +31,62 @@ local function rename_quickfix()
   vim.lsp.buf.rename()
 end
 
+--- "a", "a and b", "a, b and c"
+---@param names string[]
+local function join(names) return #names <= 1 and (names[1] or "") or table.concat(names, ", ", 1, #names - 1) .. " and " .. names[#names] end
+
+--- Why K does not hover in buf, where no attached server supports hover (D165 in docs/hover-decisions.md). In a buffer
+--- whose language names servers, Vim's K would run 'keywordprg' (pydoc in Python, $VIMRUNTIME/ftplugin/python.vim),
+--- which those servers stand in for, so K says what each server is doing instead: not installed, starting, not
+--- running, or attached without hover. Nil elsewhere, where K stays Vim's K: a filetype whose language names no
+--- servers, one no language declares, and a buffer vim.lsp never attaches servers to. A lookup, run on the press: the
+--- language's cached answer, the buffer's cached facts (ui.facts) and its clients.
+---@param buf integer
+---@return string?
+local function no_hover(buf)
+  -- vim.lsp's enable handler attaches only to file and help buffers ($VIMRUNTIME/lua/vim/lsp.lua, lsp_enable_callback)
+  local buftype = vim.bo[buf].buftype
+  local found = (buftype == "" or buftype == "help") and require("lang").of(vim.bo[buf].filetype)
+  if not found or #found.servers == 0 then
+    return nil
+  end
+  local tools = require("tools")
+  local facts = require("ui.facts").get(buf)
+  local missing, starting, stopped, attached = {}, {}, {}, {}
+  for _, name in ipairs(found.servers) do
+    local bin = tools.catalog.binary("server", name)
+    -- an uninitialized client is attached already, but get_clients leaves it out unless asked ($VIMRUNTIME/lua/vim/lsp.lua)
+    local live = vim.tbl_filter(function(client) return not client:is_stopped() end, vim.lsp.get_clients({ bufnr = buf, name = name, _uninitialized = true }))
+    if vim.iter(live):any(function(client) return client.initialized end) then
+      table.insert(attached, name)
+    elseif #live > 0 then
+      table.insert(starting, name)
+    elseif vim.list_contains(facts.missing, bin) then
+      table.insert(missing, name)
+    elseif bin and not tools.get(bin, facts.root) then
+      -- still being looked up: once found, its root_dir starts it
+      table.insert(starting, name)
+    else
+      table.insert(stopped, name)
+    end
+  end
+  local function verb(list, one, more) return #list == 1 and one or more end
+  local parts = {}
+  if #starting > 0 then
+    table.insert(parts, ("%s %s starting"):format(join(starting), verb(starting, "is", "are")))
+  end
+  if #missing > 0 then
+    table.insert(parts, ("%s %s not installed (:Tools install)"):format(join(missing), verb(missing, "is", "are")))
+  end
+  if #stopped > 0 then
+    table.insert(parts, ("%s %s not running (:Tools restart)"):format(join(stopped), verb(stopped, "is", "are")))
+  end
+  if #attached > 0 then
+    table.insert(parts, ("%s %s no hover"):format(join(attached), verb(attached, "has", "have")))
+  end
+  return table.concat(parts, ", ")
+end
+
 local key = keys.feature("lsp")
 local PURPLE = "purple"
 ---@param icon string
@@ -51,8 +107,9 @@ key({
   { "gCo", function() Snacks.picker.lsp_outgoing_calls() end, "Outgoing Calls", need = "prepareCallHierarchy", icon = { icon = "󰃷", color = "orange" } },
   { "]]", function() Snacks.words.jump(vim.v.count1) end, "Reference (word)", need = "documentHighlight" },
   { "[[", function() Snacks.words.jump(-vim.v.count1) end, "Reference (word)", need = "documentHighlight" },
-  -- A global K also keeps Neovim from mapping K in each buffer a hover server attaches to (runtime lua/vim/lsp.lua)
-  { "K", function() vim.lsp.buf.hover() end, "Hover", need = "hover" },
+  -- A global K also keeps Neovim from mapping K in each buffer a hover server attaches to (runtime lua/vim/lsp.lua).
+  -- Where none can hover it says why, in a buffer whose language names servers; elsewhere it is Vim's K (D165)
+  { "K", function() vim.lsp.buf.hover() end, "Hover", need = "hover", echo = no_hover },
   { "<leader>lr", function() vim.lsp.buf.rename() end, "LSP Rename", need = "rename" },
   { "grN", rename_quickfix, "Rename, edits to quickfix", need = "rename", echo = true },
   { "<leader>cs", "<cmd>Trouble symbols toggle focus=false<cr>", "Symbols (Trouble)", need = "documentSymbol" },
