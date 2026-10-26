@@ -209,6 +209,7 @@ Verified = installed in an isolated mise dir and the binary ran (LSPs also answe
 | docker_language_server | `github:docker/docker-language-server` (static binary) | yes |
 | zizmor | `zizmor` (registry; exits non-zero when it has findings) | yes |
 | gofumpt | `gofumpt` (registry, static binary) | yes |
+| dockerfmt | `aqua:reteps/dockerfmt` (not in the registry by name; static binary; v0.5.4, the latest on 2026-10-25) | yes |
 
 Caveats from the check pass:
 
@@ -309,6 +310,28 @@ Still open:
 - The neocmakelsp shutdown caveat above is still unverified.
 
 Decided since:
+
+- **D161: dockerfmt formats Dockerfiles** (2026-10-25). Dockerfiles had no formatter: `lang/docker.lua` named none,
+  and docker-language-server formats only Compose and Bake files (its README's "Features" list names formatting under
+  those two, not under Dockerfile; github.com/docker/docker-language-server). The user picked reteps/dockerfmt.
+  Evidence and choices:
+  - conform ships it as `dockerfmt` (`conform.nvim/lua/conform/formatters/dockerfmt.lua`: `command = "dockerfmt"`, no
+    args, so conform pipes the buffer through stdin; `meta.url` is github.com/reteps/dockerfmt). No definition of the
+    config's own.
+  - Spec: `mise registry dockerfmt` printed `tool not found in registry: dockerfmt`; `mise latest aqua:reteps/dockerfmt`
+    printed `0.5.4` (as did `github:reteps/dockerfmt`). aqua comes first in the skill's order, and
+    `mise use -g aqua:reteps/dockerfmt@latest` installed `dockerfmt-v0.5.4-linux-amd64.tar.gz` in an isolated mise.
+  - The run: `from alpine:3.20` / `run apk add --no-cache curl &&    echo hi` / `copy . /app` through
+    `dockerfmt` on stdin printed `FROM alpine:3.20` / `RUN apk add --no-cache curl && echo hi` / `COPY . /app`
+    (`checks/format_dockerfmt.lua` uses that output).
+  - Scoping: the language's `formatters`, so `dockerfile` only. The Compose and Bake variants are `yaml.docker-compose`
+    and `hcl.docker-bake`, whose formatters come from their base, yaml and hcl (`nvim/lua/lang/init.lua`, the variant
+    rule): Compose keeps prettierd, Bake keeps docker-language-server's LSP formatting. The check asserts neither plans
+    dockerfmt.
+  - Its defaults are kept, with no args of the config's own: 4-space continuation lines (`-i`, default 4) and no
+    trailing newline added (`-n`; Neovim's 'fixeol' writes one). Rejected: `-i 2` to match this repo's
+    `tests/image/Dockerfile`, which dockerfmt reindents from 2 to 4 spaces; a project that wants 2 can't say so
+    without an args change here, since dockerfmt reads no config file (its `--help` lists only flags).
 
 - **actionlint → jactionlint** (2026-10-12). mise's registry marks actionlint deprecated: `mise WARN actionlint is
   deprecated: jactionlint is an actively maintained fork of actionlint with upstream fixes merged`. jactionlint is
