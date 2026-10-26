@@ -1,6 +1,6 @@
 -- The install prompts, the :Tools view and the statusline indicator for the tool resolver (tools).
--- Asks once per project mise config that pins tools (use + install / installed only / global only), then once per missing tool
--- that this file's filetype would run. Never asks for library code, git files, special buffers, or when installs
+-- Asks once per project mise config that pins tools (use + install / installed only / global only), then about each
+-- missing tool that this file's filetype would run, once a session, unless the user said not to in this project. Never asks for library code, git files, special buffers, or when installs
 -- are off (vim.g.install_tools = "off", or no UI: headless runs and tests). After that, only the indicator and :Tools.
 
 local tools = require("tools")
@@ -11,39 +11,10 @@ local M = {}
 
 local title = "Tools"
 
--- Install offers already made, so each is asked only once: "global:<spec>" or "component:<name>"
-M.file = vim.fs.joinpath(vim.fn.stdpath("state"), "tools", "offered.json")
-
-local asked = {} ---@type table<string, true> offers and project prompts made this session, answered or dismissed
+-- Missing-tool offers made this session ("global:<spec>", "component:<name>", ...), answered or dismissed, and project
+-- prompts. Nothing about an offer is saved: an installed tool is found, so it is not offered again (D164)
+local asked = {} ---@type table<string, true>
 local checked = {} ---@type table<integer, string> buf -> filetype its prompts ran for
-
----@return table<string, string>
-local function read_offered()
-  local ok, data = pcall(function() return vim.json.decode(table.concat(vim.fn.readfile(M.file), "\n")) end)
-  return ok and type(data) == "table" and data or {}
-end
-
----@param key string
-local function offered(key) return asked[key] or read_offered()[key] ~= nil end
-
----@param keys string[]
----@param persist boolean false for a dismissed prompt: not asked again this session only
-local function remember(keys, persist)
-  for _, key in ipairs(keys) do
-    asked[key] = true
-  end
-  -- A project's own installs are covered by its project prompt, which asks again when its config changes
-  keys = vim.tbl_filter(function(key) return not vim.startswith(key, "project:") end, keys)
-  if not persist or #keys == 0 then
-    return
-  end
-  local data = read_offered() -- re-read, another session may have written since
-  for _, key in ipairs(keys) do
-    data[key] = os.date("!%Y-%m-%d")
-  end
-  vim.fn.mkdir(vim.fs.dirname(M.file), "p")
-  vim.fn.writefile({ vim.json.encode(data) }, M.file)
-end
 
 ---@param path string
 local function short(path) return vim.fn.fnamemodify(path, ":~") end
@@ -284,7 +255,9 @@ local function install_text(inst, subject, names)
   return ""
 end
 
-local not_now = "Not now (won't ask again; install later from :Tools)"
+-- D164: Later asks again next session; Not for this project never asks about these tools in this project again
+local later = "Later (ask again next session)"
+local not_here = "Not for this project (don't ask here again)"
 
 --------------------------------------------------------------------------------
 -- Pickers
@@ -549,10 +522,18 @@ local function offer_group(ft, offers, root, done)
     local here = vim.tbl_map(function(r) return { name = r.name, install = r.install.project_only } end, results)
     table.insert(options, { items = here, text = install_text(first.project_only, subject) })
   end
-  table.insert(options, { text = not_now })
-  local keys = vim.tbl_map(function(o) return o.key end, offers)
+  table.insert(options, { text = later })
+  table.insert(options, { decline = true, text = not_here })
   select(options, { prompt = prompt, kind = "tools.install" }, function(item)
-    remember(keys, item ~= nil)
+    if item and item.decline then
+      -- Only this project: the same tools are still offered in another one this session
+      state.decline(root, names)
+    else
+      -- Answered or dismissed: not offered again this session
+      for _, o in ipairs(offers) do
+        asked[o.key] = true
+      end
+    end
     if item and item.items then
       install(item.items, root)
     end
@@ -560,8 +541,8 @@ local function offer_group(ft, offers, root, done)
   end)
 end
 
---- The missing-tool prompts: what buf's filetype runs that is missing and not offered before, grouped by how it is
---- installed; first, which copy to use where the project env and a mise pin differ.
+--- The missing-tool prompts: what buf's filetype runs that is missing, not offered this session and not declined for
+--- root's project, grouped by how it is installed; first, which copy to use where the project env and a mise pin differ.
 ---@param buf integer
 ---@param root string
 ---@param done fun()
@@ -570,12 +551,13 @@ local function offer_tools(buf, root, done)
   tools.resolve_all(names, root, function(results)
     ask_conflicts(vim.tbl_map(function(name) return results[name] end, names), root, function()
       local groups, order, keys = {}, {}, {}
+      local declined = state.declined(root)
       for _, name in ipairs(names) do
         local result = results[name]
         local inst = result and not result.path and result.install
         if inst and inst.kind ~= "none" then
           local key = offer_key(inst, root)
-          if not offered(key) and not keys[key] then
+          if not asked[key] and not keys[key] and not declined[name] then
             keys[key] = true
             local group = group_of(inst)
             if not groups[group] then

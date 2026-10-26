@@ -294,6 +294,26 @@ h.case("a project-only install carries the prompt's answer over only to the conf
   h.eq({ choice(root), found("ruff", root).source }, { "installed", "project-mise" }, "a removed config")
 end)
 
+-- D164: the install rewrites the mise.local.toml the answer was saved for, so the answer must survive that rewrite, or
+-- the project prompt asks about the file the install itself wrote
+h.case("a project-only install into an existing mise.local.toml keeps the answer for it", function()
+  for _, before in ipairs({ "an earlier project-only install", "installed", "use" }) do
+    local earlier = before == "an earlier project-only install"
+    local root = setup({ project = earlier and {} or { stylua = { version = "2.0.0", config = "mise.local.toml" } } })
+    git(root, "init", "-q")
+    if earlier then
+      install_here(root, nil, "stylua")
+    else
+      require("tools.state").set(h.await(function(done) tools.project(root, done) end).configs, before)
+      tools.refresh()
+    end
+    local want = earlier and "installed" or before
+    h.eq(choice(root), want, before .. ": the answer before the install")
+    install_here(root)
+    h.eq({ choice(root), found("ruff", root).source }, { want, "project-mise" }, before .. ": after the install")
+  end
+end)
+
 h.case("with a global pin that isn't installed, a project also gets the project-only offer", function()
   local root = setup({ global_pins = { shfmt = "3.10.0" } })
   git(root, "init", "-q")

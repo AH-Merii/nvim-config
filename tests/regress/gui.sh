@@ -181,7 +181,7 @@ scenes() {
     shot "$out/$ver-1-second-start.png"
     fi
 
-  # 2. a filetype whose tools are missing asks first (lua/tools/ux.lua): Install / Not now
+  # 2. a filetype whose tools are missing asks first (lua/tools/ux.lua): Install / Later / Not for this project
   rkeys '<C-\><C-n>:e main.lua<CR>'
   sleep 4
   shot "$out/$ver-2-ask-install.png"
