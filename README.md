@@ -9,7 +9,8 @@ through [mise](https://mise.jdx.dev). It supports Go, Rust, Python, Lua, TypeScr
 - **Language tools from mise.** Servers, formatters and linters are found per project (its `.venv`/`node_modules`,
   its mise config, then your global tools) and offered for install when missing. `:Tools` shows where each comes
   from.
-- **Completion and LSP** with blink.cmp; formatting with conform.nvim on save, linting with nvim-lint.
+- **Completion and LSP** with blink.cmp; hover docs (`K`) rendered by render-markdown.nvim; formatting with conform.nvim
+  on save, linting with nvim-lint.
 - **Neovim's own UI for messages and the command line** (ui2), with noice.nvim's look from
   [neoblocks.nvim](https://github.com/AH-Merii/neoblocks.nvim)'s messages module: `:` in a popup near the top,
   messages as toasts, long output in a split and a message history (`<leader>n`).

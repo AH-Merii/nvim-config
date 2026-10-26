@@ -4,7 +4,8 @@
 --   startup   in the plugins phase, before the first file opens
 --   buffer    when the first file is read or created (BufReadPre, BufNewFile)
 --   deferred  after the first screen, at VeryLazy (the default)
---   on_demand at the first of its `cmd`, for a plugin whose setup changes what loading it at VeryLazy would
+--   on_demand at the first of its `cmd`, for a plugin whose setup changes what loading it at VeryLazy would; or
+--             when a module of it is first required, for one only some event needs (features/hover.lua)
 --
 -- A plugin in a later phase that is required earlier (a picker action that requires trouble, blink's lazydev
 -- source) loads then, from a package loader below. Update plugins with :packupdate (:h :packupdate).

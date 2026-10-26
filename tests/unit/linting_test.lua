@@ -222,6 +222,26 @@ h.case("ToolsChanged lints the root's buffers again with the linter that appeare
   h.eq(runs, { { buf = buf, ran = { { name = "yamllint", cmd = system .. "/yamllint", cwd = root } }, linters = runs[1] and runs[1].linters } })
 end)
 
+h.case("a nofile buffer is never linted: not on entering it, by an explicit lint or by ToolsChanged; it plans and needs no linter", function()
+  local file, root, system = setup({ ruff = "1.0.0" }, "fixone")
+  resolved(root)
+  -- what vim.lsp.util.open_floating_preview makes for a hover: a scratch buffer (buftype nofile) given a filetype, whose
+  -- root is the cwd
+  vim.cmd.cd(root)
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].filetype = "fixone"
+  runs = {}
+  vim.api.nvim_set_current_buf(buf)
+  linting.buffer(buf)
+  h.bin(system .. "/yamllint", "1.0.0")
+  changing(function() tools.refresh(root) end)
+  local function linted(b) return vim.iter(runs):any(function(r) return r.buf == b end) end
+  h.ok(linted(file), "ToolsChanged did not lint the file of the same filetype in the same root: " .. vim.inspect(runs))
+  h.ok(not linted(buf), "the nofile buffer was linted: " .. vim.inspect(runs))
+  h.eq({ linting.plan(buf), linting.has(buf) }, { { linters = {}, run = {}, covered = {} }, false }, "its plan and the linter need")
+  vim.cmd.cd(tmp)
+end)
+
 h.case("a lint whose nvim-lint call raises passes the error on and leaves vim.uv.spawn as it was", function()
   local buf, root = setup({ ruff = "1.0.0" }, "fixone")
   resolved(root)
