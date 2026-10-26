@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.13.0](https://github.com/AH-Merii/nvim-config/compare/v1.12.0...v1.13.0) (2026-10-26)
+
+
+### Features
+
+* **hover:** pyrefly's Python docstrings show as markdown in K's float ([#116](https://github.com/AH-Merii/nvim-config/issues/116)) ([b486db3](https://github.com/AH-Merii/nvim-config/commit/b486db3776a10962396319163ca8e3d5b3c6b294))
+* **lsp:** K says why no server hovers where the language has servers ([#115](https://github.com/AH-Merii/nvim-config/issues/115)) ([5ed2488](https://github.com/AH-Merii/nvim-config/commit/5ed24883f9f2cdd3d14169d9b757136514d813b6))
+
+
+### Bug Fixes
+
+* **tools:** missing-tool prompts ask again in new projects and after a project-only install ([#114](https://github.com/AH-Merii/nvim-config/issues/114)) ([4de6997](https://github.com/AH-Merii/nvim-config/commit/4de6997bd268de7d40bbe7e805be0b6825714519))
+
 ## [1.12.0](https://github.com/AH-Merii/nvim-config/compare/v1.11.0...v1.12.0) (2026-10-26)
 
 
