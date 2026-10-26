@@ -16,7 +16,8 @@ through [mise](https://mise.jdx.dev). It supports Go, Rust, Python, Lua, TypeScr
   messages as toasts, long output in a split and a message history (`<leader>n`).
 - **Keys that act where they work.** which-key lists a key only where it would act at the cursor: a hunk key on a
   hunk's line, a fold key on a fold, `grx` on a code lens. An LSP key is listed where a server supports its method.
-  Elsewhere a leader key or an LSP gr* key says what is missing.
+  Elsewhere a leader key or an LSP gr* key says what is missing, and so does `K` in a language with servers: not
+  installed, starting, or no hover, instead of running `'keywordprg'`.
 - **snacks.nvim** for pickers, notifications, indent guides and smooth scrolling; the statusline from neoblocks.nvim;
   which-key, gitsigns, diffview, trouble, flash and treesitter.
 - **Treesitter parsers on demand.** Nothing installs at startup: opening a file installs its language's parser and

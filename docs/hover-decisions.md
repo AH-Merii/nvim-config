@@ -1,6 +1,7 @@
 # Hover: decisions
 
-Living record of the decisions for the LSP hover float (`K`): what the config does to it, and how it is rendered.
+Living record of the decisions for the LSP hover float (`K`): what the config does to it, how it is rendered, and
+what `K` does where no server can hover.
 Dates are when the decision was made.
 
 ## Status
@@ -8,13 +9,14 @@ Dates are when the decision was made.
 - Decided by the user (2026-10-22): D158 and D159, with the plugins below rejected.
 - Built (2026-10-22) on branch `hover-rendering`. The four checks under "Tests" pass, and each fails on main's config
   or on a wrong implementation of the rule it checks.
+- Decided by the user (2026-10-26): D165. Built the same day on branch `hover-no-server`.
 
 ## Context
 
 Runtime refs: `R` = nightly runtime (NVIM v0.13.0-dev-1895+g0851e7dabe), `RM` = render-markdown.nvim at 8e87953,
 `S` = snacks.nvim's `lua/snacks`.
 
-- `K` calls `vim.lsp.buf.hover()` (`nvim/lua/lsp/buffer.lua:37`), which opens its float with
+- `K` calls `vim.lsp.buf.hover()` (`nvim/lua/lsp/buffer.lua:112`), which opens its float with
   `vim.lsp.util.open_floating_preview`: a scratch buffer, so `buftype=nofile` (`R/lua/vim/lsp/util.lua:1628`), given
   filetype markdown and treesitter (`util.lua:1717-1718`). The float is then shrunk by the code fence lines the
   highlighter conceals (`util.lua:1719-1726`). Signature help (`vim.lsp.buf.signature_help`, `<C-s>` in insert mode)
@@ -143,6 +145,55 @@ Pooled medians. Startup is unchanged: nothing loads. The first float of a sessio
 (30 ms with a cold cache); requiring the plugin is 2.2 to 2.5 ms of it with a warm cache (10 ms cold), and the rest is
 its first render. Later floats cost nothing measurable, well under a frame.
 
+## D165: K says why it can't hover where the language has servers (2026-10-26)
+
+**Context.** `K` is a key row with `need = "hover"` (`nvim/lua/lsp/buffer.lua:112`). Where no attached server
+supports hover, the key's global map fell back to Vim's `K` (`keys/init.lua`, `fallback`), which runs
+`'keywordprg'`. Python's ftplugin sets that to `python3 -m pydoc` (`$VIMRUNTIME/ftplugin/python.vim:135`), so in a
+project whose servers weren't installed yet (`~/Projects/llm-api` before ruff and pyrefly were) `K` printed pydoc's
+"No Python documentation found for 'StringConstraints'. Use help() to get the interactive help utility…". The config
+manages the servers, so that output pointed away from the fix.
+
+**Decision.** In a buffer whose language names servers (`lang.of(ft).servers`), `K` never runs `'keywordprg'`.
+Where no attached server can hover it echoes why, through the keys' echo mechanism, one part per state, in this
+order:
+
+| state of a server the language names | message part |
+| --- | --- |
+| an attached client that hasn't initialized, or a binary the resolver is still looking up | `pyrefly is starting` |
+| its binary is in the buffer's missing tools (`ui.facts`) | `pyrefly and ruff are not installed (:Tools install)` |
+| found, but no client is attached (exited, `:LspStop`, no root for it) | `pyrefly is not running (:Tools restart)` |
+| attached and initialized, without hover | `ruff has no hover` |
+
+For example `Hover (K): pyrefly is starting, ruff has no hover`. The prefix is the one every echo row has (`Hover
+(K): `). In a buffer of a language with no servers, a filetype no language declares, or a buffer vim.lsp never
+attaches servers to (a `buftype` other than empty or `help`, `$VIMRUNTIME/lua/vim/lsp.lua:527`, such as the hover
+float itself), `K` stays Vim's `K`: `:help` in Vim files, `man` in shell.
+
+- `keys` takes a function for a row's `echo`: it gets the buffer and returns what to echo, or nil for what the key did
+  before. It runs on the press inside the expr map, like a need's test, so it must be a lookup; `_echo` echoes what
+  it returned, after the expr map.
+- `K` is still listed only where a server can hover, as the `gr*` echo rows are only where they act (D49).
+- A found binary with no client says "not running", not "starting": a server that exited, was stopped or has no root
+  (`workspace_required`, `tsc` in a Deno project) never gets a client, so "starting" would stay wrong. The moment
+  between the binary being found and its root_dir calling back says "not running" too.
+- An uninitialized client is found through `vim.lsp.get_clients`' `_uninitialized` filter, a package field
+  (`$VIMRUNTIME/lua/vim/lsp.lua:1137`): no public call lists a client before it initializes.
+
+**Rejected.**
+
+- Keeping Vim's `K` (today): runs a documentation tool the config's servers replace, with output that doesn't say the
+  servers are missing.
+- Echoing the need, as `echo = true` does ("no attached server supports textDocument/hover"): true, but it doesn't
+  say whether to install, wait or restart.
+- Saying "starting" for a found binary with no client, as first proposed: wrong for good after a crash or a stop.
+
+**Cost.** Only on a press of `K` where no server hovers; nothing per keystroke elsewhere, at startup or in the popup.
+Measured on the unit test's setup (fake tool backend, Python with both servers missing), 10000 calls of the echo
+function: 5.2 µs a press on cached facts. A press right after an event that made the facts stale, before anything
+reread them (the statusline usually has), computes them: median 478 µs, at most 1.26 ms over 200 calls. Both well
+inside a frame. The script is not kept: it timed `keys._slot("n", "K").entries[1].row.echo(buf)` in a loop.
+
 ## Tests
 
 - `checks/hover_spell.lua`: a hover float has spell off; a markdown file and an oil buffer (`acwrite`) keep it.
@@ -155,6 +206,11 @@ its first render. Later floats cost nothing measurable, well under a frame.
   files stay unrendered.
 - `checks/hover_render_file.lua`: loaded while a markdown file is current, as snacks' preview loads it, it leaves the
   file unrendered and renders an LSP float.
+- `tests/unit/lsp_buffer_test.lua` (D165): in a Python buffer `K` names the servers that aren't installed and
+  `:Tools`, says a server is starting, says which aren't running, says the attached ones have no hover, and runs no
+  `'keywordprg'` in any of them; where a server hovers it asks it; in a shell buffer, an undeclared filetype and a
+  nofile Python buffer it runs `'keywordprg'`.
+- `tests/unit/keys_test.lua`, "an echo function says what it returns…": the keys rule under it.
 
 Each check fails on main's config. Sibling wrong versions, each with one change, fail the check named:
 `setup()` from the spec instead of `init` (`hover_render_file`), no `ignore` (`hover_render`, `hover_render_file`), no
