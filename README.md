@@ -21,6 +21,7 @@ through [mise](https://mise.jdx.dev). It supports Go, Rust, Python, Lua, TypeScr
   which-key, gitsigns, diffview, trouble, flash and treesitter.
 - **Treesitter parsers on demand.** Nothing installs at startup: opening a file installs its language's parser and
   the languages its injections name, nvim-treesitter's copy even where Neovim bundles one. `:Tools` lists them.
+- **Inlay hints and code lenses** wherever a server has them; `<leader>Th` and `<leader>Tc` hide them in a buffer.
 
 ## Requirements
 
