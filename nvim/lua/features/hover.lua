@@ -1,6 +1,38 @@
 -- Hover: render-markdown.nvim draws the markdown of the LSP floats (K's hover, signature help), and only of nofile
 -- buffers, never of the markdown files you edit (docs/hover-decisions.md, D159). It loads with the first such float.
+-- Its docstring clean-up for pyrefly's hover is features/hover_docstring/ (D166, docs/hover-docstrings-decisions.md).
 local M = {}
+
+-- The servers whose hover markdown is cleaned before Neovim draws it, and the clean-up for each: the module undoes
+-- what pyrefly's own docstring formatter does (D166 in docs/hover-docstrings-decisions.md)
+local CLEAN = { pyrefly = "features.hover_docstring" }
+
+--- Cleans client's hover results before the handler that asked for them sees them: vim.lsp.buf.hover's (runtime
+--- lua/vim/lsp/buf.lua, M.hover), which converts them with convert_input_to_markdown_lines and opens the float, or
+--- any other. hover() takes no handler and no middleware, so the client's request method is wrapped, once per client
+---@param client vim.lsp.Client
+---@param module string
+local function clean_hovers(client, module)
+  if client._hover_cleaned then
+    return
+  end
+  client._hover_cleaned = true
+  local request = client.request
+  ---@diagnostic disable-next-line: duplicate-set-field
+  client.request = function(self, method, params, handler, bufnr)
+    if method == "textDocument/hover" and handler then
+      local inner = handler
+      handler = function(err, result, ...)
+        local contents = type(result) == "table" and result.contents
+        if type(contents) == "table" and contents.kind == "markdown" and type(contents.value) == "string" then
+          contents.value = require(module).clean(contents.value)
+        end
+        return inner(err, result, ...)
+      end
+    end
+    return request(self, method, params, handler, bufnr)
+  end
+end
 
 --- Whether render-markdown renders buf: a nofile buffer, as every float vim.lsp.util.open_floating_preview opens is
 --- (runtime lua/vim/lsp/util.lua: nvim_create_buf(false, true), then filetype markdown). Exactly nofile, as for spell
@@ -68,6 +100,15 @@ function M.setup()
       end
       pcall(require, "render-markdown")
       return true
+    end,
+  })
+  vim.api.nvim_create_autocmd("LspAttach", {
+    group = group,
+    callback = function(ev)
+      local client = vim.lsp.get_client_by_id(ev.data.client_id)
+      if client and CLEAN[client.name] then
+        clean_hovers(client, CLEAN[client.name])
+      end
     end,
   })
 end

@@ -10,6 +10,8 @@ Dates are when the decision was made.
 - Built (2026-10-22) on branch `hover-rendering`. The four checks under "Tests" pass, and each fails on main's config
   or on a wrong implementation of the rule it checks.
 - Decided by the user (2026-10-26): D165. Built the same day on branch `hover-no-server`.
+- Decided by the user (2026-10-26): D166, cleaning pyrefly's docstrings before the float draws them, in
+  [hover-docstrings-decisions.md](hover-docstrings-decisions.md). Built the same day on branch `hover-docstrings`.
 
 ## Context
 
