@@ -107,6 +107,18 @@ h.case("an echo row where its need fails says so and leaves the text alone (D49)
   h.ok(msg:find("textDocument/rename", 1, true), "a message naming the need, got " .. msg)
 end)
 
+h.case("an echo function says what it returns where the need fails, and gives way to Vim's key where it returns nil", function()
+  lsp({ "gD", counter("gD"), "Declaration", need = "declaration", echo = function(buf) return vim.b[buf].no_declaration end })
+  local buf = scratch()
+  vim.b[buf].no_declaration = "nothing declares it here"
+  local msg = echoed(function() press("gD") end)
+  h.eq({ ran.gD, cursor() }, { nil, { 3, 6 } }, "action and cursor where it says why")
+  h.ok(msg:find("Declaration (gD): nothing declares it here", 1, true), "the row's label, key and reason, got " .. msg)
+  vim.b[buf].no_declaration = nil
+  msg = echoed(function() press("gD") end)
+  h.eq({ ran.gD, cursor(), msg }, { nil, { 1, 6 }, "" }, "Vim's gD (the global declaration), with no message")
+end)
+
 h.case("a leader key whose need fails only says which need it lacks", function()
   local buf = scratch()
   local msg = echoed(function() press("<leader>sS") end)

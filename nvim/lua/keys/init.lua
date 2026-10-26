@@ -18,7 +18,8 @@
 --
 -- A row with a need is one global expr map: a press tests the need in the current buffer; where it holds the action
 -- runs, elsewhere the key does what it did before (the map it took over, or Vim's own key). A leader key, or a row
--- with `echo`, says which need failed instead. A label-only row with a need lists the key, whoever maps it, only
+-- with `echo`, says which need failed instead; an `echo` function says what it returns, or lets the key do what it
+-- did before where it returns nil. A label-only row with a need lists the key, whoever maps it, only
 -- where the need holds. Only language rows are buffer-local, and a buffer's own map always wins. Needs are read when
 -- used, so nothing here runs on attach, FileType or registration.
 local M = {}
@@ -42,7 +43,9 @@ local M = {}
 ---@field group? string a prefix's name in the popup
 ---@field native? boolean Vim's own key, with no map: listed wherever its need holds
 ---@field hidden? boolean left out of the popup
----@field echo? boolean where the need fails, say so instead of doing Vim's own key (D49)
+---@field echo? boolean|fun(buf: integer): string? where the need fails, say so instead of doing Vim's own key (D49);
+---   a function says what it returns instead, and where it returns nil the key does what it did before (D165). It runs
+---   on the press, inside the expr map, so it must be a lookup like a need's test
 ---@field listed? fun(mode: string, lhs: string): boolean a label-only row over another module's map: where the
 ---   popup lists the key, whoever maps it
 ---@field remap? boolean
@@ -319,15 +322,20 @@ local function describe(need)
   return ("%q does not hold here"):format(need)
 end
 
---- Echoes which need the first action row of slot lacks, for a key with nothing to fall back to.
+local reasons = {} ---@type table<string, { e: keys.Entry, why: string }> slot key -> what an echo function gave on the press
+
+--- Echoes why the key does nothing here: what its row's echo function gave on the press, else which need the first
+--- action row of slot lacks.
 ---@param key string
 function M._echo(key)
-  local slot = slots[key]
+  local slot, given = slots[key], reasons[key]
+  reasons[key] = nil
   for _, e in ipairs(slot and slot.entries or {}) do
-    if e.action then
-      local why = vim.tbl_map(describe, e.needs)
+    if given or e.action then
+      e = given and given.e or e
+      local why = given and given.why or table.concat(vim.tbl_map(describe, e.needs), ", or ")
       local name = static_label(e) or label_of(e) or e.lhs
-      vim.api.nvim_echo({ { ("%s (%s): %s"):format(name, vim.fn.keytrans(e.raw), table.concat(why, ", or ")), "WarningMsg" } }, true, {})
+      vim.api.nvim_echo({ { ("%s (%s): %s"):format(name, vim.fn.keytrans(e.raw), why), "WarningMsg" } }, true, {})
       return
     end
   end
@@ -362,11 +370,33 @@ local function run_keys(e)
   return ("<Cmd>lua require('keys')._run(%d)<CR>"):format(e.id)
 end
 
+--- What a row's echo function says in buf, nil for nothing. A failing one is reported once and says nothing.
+---@param e keys.Entry
+---@param buf integer
+---@return string?
+local function reason(e, buf)
+  local ok, why = pcall(e.row.echo, buf)
+  if not ok and not warned[e.origin] then
+    warned[e.origin] = true
+    vim.notify(("keys: %s's echo at %s failed: %s"):format(e.lhs, e.at, why), vim.log.levels.ERROR)
+  end
+  return ok and type(why) == "string" and why or nil
+end
+
 --- What a key does where none of its rows acts: say why, or the map it took over, or Vim's own key.
 ---@param slot keys.Slot
-local function fallback(slot)
+---@param buf integer
+local function fallback(slot, buf)
   local echo = is_leader(slot.raw)
   for _, e in ipairs(slot.entries) do
+    if type(e.row.echo) == "function" then
+      local why = reason(e, buf)
+      if why then
+        reasons[slot.key] = { e = e, why = why }
+        echo = true
+        break
+      end
+    end
     echo = echo or e.row.echo == true
   end
   if echo then
@@ -410,7 +440,7 @@ local function place(slot)
           return run_keys(e)
         end
       end
-      return fallback(slot)
+      return fallback(slot, buf)
     end, opts)
   end
   slot.mapped = true
@@ -457,7 +487,7 @@ local function place_in(e, buf)
     vim.keymap.set(e.mode, e.lhs, e.action, opts)
   else
     opts.expr = true
-    vim.keymap.set(e.mode, e.lhs, function() return acts(e, buf) and run_keys(e) or fallback(slot) end, opts)
+    vim.keymap.set(e.mode, e.lhs, function() return acts(e, buf) and run_keys(e) or fallback(slot, buf) end, opts)
   end
   slot.placed = buf_maps(buf, e.mode)[e.raw]
 end
