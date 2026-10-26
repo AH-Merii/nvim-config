@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.12.0](https://github.com/AH-Merii/nvim-config/compare/v1.11.0...v1.12.0) (2026-10-26)
+
+
+### Features
+
+* **completion:** paths resolve from the file's folder or the project root ([#112](https://github.com/AH-Merii/nvim-config/issues/112)) ([deb79e9](https://github.com/AH-Merii/nvim-config/commit/deb79e9d85a3447cc268489f831c76f71499cfa2))
+* **hover:** render-markdown draws LSP floats, which get no spell or linting ([#108](https://github.com/AH-Merii/nvim-config/issues/108)) ([e71a68f](https://github.com/AH-Merii/nvim-config/commit/e71a68fc2a28e0c9227e52b4d3ff05d0a89019b8))
+* **lang:** dockerfmt formats Dockerfiles ([#110](https://github.com/AH-Merii/nvim-config/issues/110)) ([8426df1](https://github.com/AH-Merii/nvim-config/commit/8426df1c1c8c65f581d6389300d3170efeef383e))
+* **lsp:** inlay hints show by default where a server has them ([#111](https://github.com/AH-Merii/nvim-config/issues/111)) ([0f942de](https://github.com/AH-Merii/nvim-config/commit/0f942de3e8f1bcdba9a6571be724f19d3d7957d3))
+* **ui:** error toasts time out like every other toast ([#109](https://github.com/AH-Merii/nvim-config/issues/109)) ([1885408](https://github.com/AH-Merii/nvim-config/commit/1885408377fef2f17dfdc7772c30483706e91986))
+
 ## [1.11.0](https://github.com/AH-Merii/nvim-config/compare/v1.10.0...v1.11.0) (2026-10-22)
 
 
