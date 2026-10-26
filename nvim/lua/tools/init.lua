@@ -929,8 +929,9 @@ end
 --- Tools for root's project only (D100): installed, then added to root's mise.local.toml (tools.mise.use_local, which
 --- trusts nothing), then refresh. The answer to the project prompt carries over so the tools are used at once ("installed"
 --- when there was no config), but only when the configs are the ones a fresh scan saw before the install, unchanged, plus
---- mise.local.toml: one a terminal `git pull` added or changed meanwhile is asked about. In a git repo the file goes into
---- the repo's .gitignore (ignore_local), with a toast.
+--- mise.local.toml: one a terminal `git pull` added or changed meanwhile is asked about. mise.local.toml itself is the
+--- file the install writes, so its change is no reason to ask (D164). In a git repo the file goes into the repo's
+--- .gitignore (ignore_local), with a toast.
 ---@param specs string[]
 ---@param root string
 ---@param cb? fun(ok: boolean, err?: string)
@@ -947,8 +948,16 @@ function M.install_local(specs, root, cb)
     table.sort(real)
     return table.concat(vim.fn.uniq(real), "\0")
   end
+  local file = vim.fs.joinpath(root, "mise.local.toml")
+  ---@param files string[]
+  local function others(files)
+    local real = vim.uv.fs_realpath(file) or file
+    return vim.tbl_filter(function(path) return (vim.uv.fs_realpath(path) or path) ~= real end, files)
+  end
   projects[root] = nil
   scan(root, function(before)
+    -- The answer is saved for the configs' contents, which the install changes when mise.local.toml was among them
+    local answered, unchanged = state.hash(before.configs), state.hash(others(before.configs))
     install_run(function(done) backend.use_local(root, specs, done) end, function(ok, err)
       if not ok then
         return report(false, err)
@@ -957,11 +966,12 @@ function M.install_local(specs, root, cb)
       scan(root, function(project)
         local same = not before.untrusted
           and not project.untrusted
-          and key(project.files) == key(vim.list_extend({ vim.fs.joinpath(root, "mise.local.toml") }, before.files))
+          and key(project.files) == key(vim.list_extend({ file }, before.files))
+          and state.hash(others(before.configs)) == unchanged
         if same and #project.configs > 0 then
           if #before.configs == 0 then
             state.set(project.configs, "installed")
-          elseif before.active and state.get(before.configs) == before.choice then
+          elseif before.active and state.get(before.configs, answered) == before.choice then
             state.set(project.configs, before.choice)
           end
         end

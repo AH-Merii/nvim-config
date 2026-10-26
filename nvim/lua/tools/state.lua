@@ -31,10 +31,11 @@ end
 
 --- The remembered choice for configs (nearest first), or nil if never answered or the configs changed since.
 ---@param configs string[]
+---@param hash? string the configs' hash to look up the answer for, default their hash now
 ---@return tools.Choice?
-function M.get(configs)
+function M.get(configs, hash)
   local saved = configs[1] and read()[configs[1]]
-  return saved and saved.hash == M.hash(configs) and saved.choice or nil
+  return saved and saved.hash == (hash or M.hash(configs)) and saved.choice or nil
 end
 
 --- The remembered copy of tool to use in the project of configs, or nil if never answered or the configs changed since.
